@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAgentStore } from '../../store/agentStore'
 import { useMCPStore } from '../../store/mcpStore'
 import { useSettingsStore } from '../../store/settingsStore'
-import { useSecretsStore } from '../../store/secretsStore'
+import { useSecretsStore, PROVIDER_MODELS } from '../../store/secretsStore'
+import type { Provider } from '../../store/secretsStore'
 import type { Agent, AgentPersonality } from '../../types'
 
 interface CreateAgentModalProps {
@@ -23,7 +24,7 @@ export default function CreateAgentModal({ onClose, onCreate, personalities: pro
   const [model, setModel] = useState(modelDefaults.model)
   const [temperature, setTemperature] = useState(modelDefaults.temperature)
 
-  const availableModels = providers[activeProvider as keyof typeof providers]?.models || []
+  const availableModels = providers[activeProvider as keyof typeof providers]?.models || PROVIDER_MODELS[activeProvider as Provider] || []
 
   const personalities = propPersonalities || []
 

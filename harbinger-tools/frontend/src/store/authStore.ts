@@ -11,6 +11,14 @@ interface User {
 
 type GitHubAuthData = { authUrl: string; state: string }
 
+type DeviceFlowData = {
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  expiresIn: number
+  interval: number
+}
+
 interface AuthState {
   token: string | null
   user: User | null
@@ -27,10 +35,13 @@ interface AuthState {
   clearError: () => void
 
   initiateGitHubAuth: () => Promise<APIResponse<GitHubAuthData> | null>
+  startDeviceFlow: () => Promise<DeviceFlowData | null>
+  pollDeviceFlow: (deviceCode: string) => Promise<boolean>
+  loginWithGHToken: (token?: string) => Promise<{ ok: boolean; jwt?: string; error?: string } | null>
 }
 
-// API Base URL - use env or default to backend port
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8081'
+// Use relative URL so Vite proxy (dev) and nginx (prod) both route /api correctly
+const API_BASE = (import.meta as any).env?.VITE_API_URL || ''
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined'
@@ -109,6 +120,72 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: false })
         }
       },
+
+      startDeviceFlow: async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/github/device/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          const json = await response.json().catch(() => null)
+          if (!json?.ok) return null
+          return {
+            deviceCode: json.device_code,
+            userCode: json.user_code,
+            verificationUri: json.verification_uri,
+            expiresIn: json.expires_in,
+            interval: json.interval,
+          }
+        } catch {
+          return null
+        }
+      },
+
+      pollDeviceFlow: async (deviceCode: string) => {
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/github/device/poll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_code: deviceCode }),
+          })
+          const json = await response.json().catch(() => null)
+          if (!json?.ok || !json.jwt) return false
+          // Device flow authorized — parse the JWT and log in
+          const parsed = parseJWT(json.jwt)
+          if (parsed?.success && parsed.data) {
+            useAuthStore.getState().login(json.jwt, parsed.data)
+            return true
+          }
+          return false
+        } catch {
+          return false
+        }
+      },
+
+      loginWithGHToken: async (token?: string) => {
+        try {
+          let response: Response
+          if (token) {
+            // Validate provided PAT against GitHub API, get Harbinger JWT
+            response = await fetch(`${API_BASE}/api/auth/github/token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token }),
+            })
+          } else {
+            // Use GH_TOKEN env var configured on the server
+            response = await fetch(`${API_BASE}/api/auth/github/token/env`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }
+          const json = await response.json().catch(() => null)
+          if (!json) return null
+          return { ok: !!json.ok, jwt: json.jwt, error: json.error }
+        } catch {
+          return null
+        }
+      },
     }),
     {
       name: 'harbinger-auth',
@@ -145,19 +222,17 @@ export function parseJWT(token: string): APIResponse<User> | null {
   }
 }
 
-// Check if token is expired
-export function isTokenExpired(token: string): APIResponse<boolean> {
+// Check if token is expired — returns true if expired or invalid
+export function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split('.')
-    if (parts.length !== 3) {
-      return { success: false, error: { code: 'invalid_token', message: 'Invalid token' } }
-    }
+    if (parts.length !== 3) return true
 
     const claimsJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
     const claims = JSON.parse(claimsJson)
 
-    return { success: true, data: claims.exp * 1000 < Date.now() }
+    return claims.exp * 1000 < Date.now()
   } catch {
-    return { success: false, error: { code: 'invalid_token', message: 'Invalid token' } }
+    return true
   }
 }

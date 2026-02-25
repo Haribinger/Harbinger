@@ -2,15 +2,19 @@
 # Stage 1: Build the React/Vite app
 FROM node:20-alpine AS builder
 
-ARG VITE_API_URL=http://localhost:8080/api/v1
-ARG VITE_WS_URL=ws://localhost:8080/ws
-ARG VITE_MCP_URL=http://localhost:3001
+# Empty string = relative URLs, so nginx proxies /api/ to backend correctly
+ARG VITE_API_URL=
+ARG VITE_WS_URL=
+ARG VITE_MCP_URL=
 
 WORKDIR /app
 
+# pnpm is required — project uses pnpm-lock.yaml
+RUN npm install -g pnpm@10
+
 # Install dependencies first (better layer caching)
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN rm -f package-lock.json && pnpm install --shamefully-hoist
 
 # Copy source and build
 COPY . .
@@ -19,7 +23,7 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_MCP_URL=$VITE_MCP_URL
 
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine

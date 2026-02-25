@@ -72,7 +72,7 @@ function Agents() {
         <div className="flex gap-3">
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>Spawn Agent</span>
@@ -116,7 +116,7 @@ function Agents() {
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => setActiveAgent(agent)}
-                  className="p-2 hover:bg-indigo-600/20 text-indigo-400 rounded-lg"
+                  className="p-2 hover:bg-[#f0c040]/10 text-[#f0c040] rounded-lg"
                   title="Activate"
                 >
                   <Play className="w-4 h-4" />

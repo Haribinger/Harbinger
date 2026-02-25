@@ -16,9 +16,9 @@ RUN go mod download 2>/dev/null || true
 # Copy source
 COPY . .
 
-# Build the binary - use only stdlib if dependencies aren't available
-RUN go build -ldflags="-s -w -X main.version=${VERSION}" -o /app/harbinger-api ./cmd/main.go 2>/dev/null || \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/harbinger-api ./cmd/main.go
+# Build the binary - compile the entire cmd package (includes skills, handlers, etc.)
+RUN go build -ldflags="-s -w -X main.version=${VERSION}" -o /app/harbinger-api ./cmd 2>/dev/null || \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/harbinger-api ./cmd
 
 # ---- Runtime image ----
 FROM alpine:3.21

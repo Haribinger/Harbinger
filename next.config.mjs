@@ -3,14 +3,13 @@ const isDev = process.env.NODE_ENV !== "production";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   pageExtensions: ['js', 'jsx'],
-  // Disable source maps in dev to prevent 404s for internal files
   productionBrowserSourceMaps: false,
+  // Reduce memory during build by outputting standalone bundle
+  output: 'standalone',
   webpack: (config, { dev }) => {
     config.resolve.extensions.push('.jsx');
-    // Disable source maps in dev mode to avoid 404s
-    if (dev) {
-      config.devtool = false;
-    }
+    // No source maps in any mode — saves ~2 GB of heap during build
+    config.devtool = false;
     return config;
   },
   turbopack: {

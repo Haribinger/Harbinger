@@ -1,5 +1,6 @@
 packages:
   - frontend
+  - harbinger-tools/frontend
 
 ignoredBuiltDependencies:
   - better-sqlite3
