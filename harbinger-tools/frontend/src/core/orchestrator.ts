@@ -1,4 +1,37 @@
-import EventEmitter from 'events';
+type EventHandler = (...args: any[]) => void;
+
+class SimpleEventEmitter {
+  private listeners: Map<string, Set<EventHandler>> = new Map();
+
+  on(event: string, handler: EventHandler): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(handler);
+  }
+
+  off(event: string, handler: EventHandler): void {
+    this.listeners.get(event)?.delete(handler);
+  }
+
+  emit(event: string, ...args: any[]): void {
+    this.listeners.get(event)?.forEach((handler) => {
+      try {
+        handler(...args);
+      } catch (err) {
+        console.error(`[Orchestrator] Event handler error for "${event}":`, err);
+      }
+    });
+  }
+
+  removeAllListeners(event?: string): void {
+    if (event) {
+      this.listeners.delete(event);
+    } else {
+      this.listeners.clear();
+    }
+  }
+}
 
 interface AgentConfig {
   id: string;
@@ -11,7 +44,7 @@ interface AgentConfig {
   findingsCount: number;
 }
 
-class AgentOrchestrator extends EventEmitter {
+class AgentOrchestrator extends SimpleEventEmitter {
   private agents: Map<string, AgentConfig> = new Map();
 
   constructor() {
