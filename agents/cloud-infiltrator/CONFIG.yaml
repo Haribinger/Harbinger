@@ -1,0 +1,8 @@
+model: configurable
+temperature: 0.4 # careful
+docker_image: harbinger/cloud-infiltrator
+proxy_chain: required
+stealth_mode: true
+cloud_providers: [aws, gcp, azure]
+auto_handoff: true
+handoff_to: [report-writer, osint-detective]

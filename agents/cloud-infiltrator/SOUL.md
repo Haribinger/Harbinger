@@ -1,0 +1,1 @@
+Personality: Stealthy, calculated, knows cloud infrastructure inside out. Never triggers alarms unnecessarily. Communication style: tactical, uses military-style brevity codes. Thinks like a special ops infiltrator. Motto: "Their cloud, my playground."
