@@ -27,7 +27,8 @@ import {
   EyeOff,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
-import { useSecretsStore } from '../../store/secretsStore'
+import { useSecretsStore, PROVIDER_MODELS } from '../../store/secretsStore'
+import type { Provider } from '../../store/secretsStore'
 import { useBugBountyStore } from '../../store/bugBountyStore'
 import { providersApi } from '../../api/providers'
 import toast from 'react-hot-toast'
@@ -410,7 +411,7 @@ function Settings() {
                       ) : activeProvider === 'ollama' ? (
                         <option value="">No models found</option>
                       ) : (
-                        providers[activeProvider as keyof typeof providers]?.models?.map((model: string) => (
+                        (providers[activeProvider as keyof typeof providers]?.models || PROVIDER_MODELS[activeProvider as Provider] || []).map((model: string) => (
                           <option key={model} value={model}>{model}</option>
                         ))
                       )}

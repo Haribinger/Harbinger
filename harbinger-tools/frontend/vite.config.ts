@@ -31,7 +31,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/mcp\/pentagi/, ''),
       },
-      '../mcp-plugins/mcp-ui': {
+      '/mcp/ui': {
         target: 'http://localhost:3003',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/mcp\/ui/, ''),

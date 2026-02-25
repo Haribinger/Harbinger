@@ -206,7 +206,8 @@ type Config struct {
 	GitHubSecret    string
 	AppURL          string
 	GitHubClientSecret string
-	GitHubRedirectURL string
+	GitHubRedirectURL  string
+	GitHubToken        string // GH_TOKEN — preloaded gh CLI token for direct auth
 }
 
 func loadConfig() Config {
@@ -237,6 +238,7 @@ func loadConfig() Config {
 		GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		AppURL:             appURL,
 		GitHubRedirectURL:  getEnv("GITHUB_REDIRECT_URL", appURL+"/api/auth/github/callback"),
+		GitHubToken:        getEnv("GH_TOKEN", ""),
 	}
 }
 
@@ -270,11 +272,81 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func handleGitHubLogin(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "GitHub OAuth not implemented yet", http.StatusNotImplemented)
+	// Ensure GitHub OAuth is configured
+	if cfg.GitHubClientID == "" || cfg.GitHubClientSecret == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":     false,
+			"error":  "not_configured",
+			"reason": "GitHub OAuth is not configured on the server",
+			"fix":    "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables",
+		})
+		return
+	}
+
+	// Generate a random state value (stored in JWT later; no server-side session needed for now)
+	state := generateRandomString(32)
+
+	// Build the GitHub authorization URL
+	params := url.Values{}
+	params.Set("client_id", cfg.GitHubClientID)
+	params.Set("redirect_uri", cfg.GitHubRedirectURL)
+	params.Set("scope", "read:user user:email")
+	params.Set("state", state)
+
+	authURL := "https://github.com/login/oauth/authorize?" + params.Encode()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"auth_url": authURL,
+		"state":    state,
+	})
 }
 
 func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "GitHub OAuth callback not implemented yet", http.StatusNotImplemented)
+	// If user denied access, GitHub sends ?error=access_denied
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		redirectURL := fmt.Sprintf("%s/login?error=%s", cfg.AppURL, url.QueryEscape(errParam))
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		redirectURL := fmt.Sprintf("%s/login?error=no_code", cfg.AppURL)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Exchange code for access token
+	tokenResp, err := exchangeGitHubCode(code)
+	if err != nil {
+		log.Printf("GitHub token exchange failed: %v", err)
+		redirectURL := fmt.Sprintf("%s/login?error=token_exchange_failed", cfg.AppURL)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Fetch GitHub user profile
+	user, err := getGitHubUser(tokenResp.AccessToken)
+	if err != nil {
+		log.Printf("GitHub user fetch failed: %v", err)
+		redirectURL := fmt.Sprintf("%s/login?error=user_fetch_failed", cfg.AppURL)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Generate JWT for Harbinger session
+	token, err := generateJWT(fmt.Sprintf("%d", user.ID), user.Login, user.Email, "github")
+	if err != nil {
+		log.Printf("JWT generation failed: %v", err)
+		redirectURL := fmt.Sprintf("%s/login?error=token_generation_failed", cfg.AppURL)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Redirect back to frontend login with token in query string
+	redirectURL := fmt.Sprintf("%s/login?token=%s", cfg.AppURL, url.QueryEscape(token))
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // ---- JWT Token Functions ----
@@ -448,6 +520,171 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 	return &user, nil
 }
 
+// ---- GitHub Device Flow + Token Auth ----
+
+type DeviceFlowStartResponse struct {
+	DeviceCode      string `json:"device_code"`
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	ExpiresIn       int    `json:"expires_in"`
+	Interval        int    `json:"interval"`
+}
+
+type DeviceFlowPollRequest struct {
+	DeviceCode string `json:"device_code"`
+}
+
+// issueJWTFromGitHubToken validates an access token with GitHub and returns a signed Harbinger JWT.
+func issueJWTFromGitHubToken(accessToken string) (string, error) {
+	user, err := getGitHubUser(accessToken)
+	if err != nil {
+		return "", fmt.Errorf("github user fetch: %w", err)
+	}
+	return generateJWT(fmt.Sprintf("%d", user.ID), user.Login, user.Email, "github")
+}
+
+// handleDeviceFlowStart initiates GitHub Device Flow and returns the user_code + verification_uri.
+// The client displays the code and polls /api/auth/github/device/poll until authorized.
+func handleDeviceFlowStart(w http.ResponseWriter, r *http.Request) {
+	if cfg.GitHubClientID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":     false,
+			"error":  "not_configured",
+			"reason": "GITHUB_CLIENT_ID not set on server",
+		})
+		return
+	}
+
+	data := url.Values{}
+	data.Set("client_id", cfg.GitHubClientID)
+	data.Set("scope", "read:user,user:email")
+
+	req, err := http.NewRequest("POST", "https://github.com/login/device/code", strings.NewReader(data.Encode()))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "GitHub unreachable: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	var flow DeviceFlowStartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "bad response from GitHub"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"device_code":      flow.DeviceCode,
+		"user_code":        flow.UserCode,
+		"verification_uri": flow.VerificationURI,
+		"expires_in":       flow.ExpiresIn,
+		"interval":         flow.Interval,
+	})
+}
+
+// handleDeviceFlowPoll polls GitHub for a token after the user has entered their code.
+// Returns {"ok":true,"jwt":"..."} on success or {"ok":false,"pending":true} while waiting.
+func handleDeviceFlowPoll(w http.ResponseWriter, r *http.Request) {
+	var req DeviceFlowPollRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DeviceCode == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "device_code required"})
+		return
+	}
+
+	data := url.Values{}
+	data.Set("client_id", cfg.GitHubClientID)
+	data.Set("device_code", req.DeviceCode)
+	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+
+	httpReq, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", strings.NewReader(data.Encode()))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "GitHub unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "bad response from GitHub"})
+		return
+	}
+
+	// authorization_pending and slow_down are expected while user hasn't approved yet
+	if tokenResp.Error != "" {
+		pending := tokenResp.Error == "authorization_pending" || tokenResp.Error == "slow_down"
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "pending": pending, "error": tokenResp.Error})
+		return
+	}
+
+	jwt, err := issueJWTFromGitHubToken(tokenResp.AccessToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jwt": jwt})
+}
+
+// handleGitHubTokenAuth accepts a GitHub PAT or OAuth token and issues a Harbinger JWT.
+func handleGitHubTokenAuth(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Token == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "token required"})
+		return
+	}
+
+	jwt, err := issueJWTFromGitHubToken(body.Token)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jwt": jwt})
+}
+
+// handleGitHubTokenFromEnv uses the GH_TOKEN env var as a shortcut for local dev.
+func handleGitHubTokenFromEnv(w http.ResponseWriter, r *http.Request) {
+	if cfg.GitHubToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": "GH_TOKEN not set on server",
+			"fix":   "Set GH_TOKEN environment variable",
+		})
+		return
+	}
+
+	jwt, err := issueJWTFromGitHubToken(cfg.GitHubToken)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jwt": jwt})
+}
+
 // ---- Auth Middleware ----
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -500,7 +737,47 @@ func getUserIDFromContext(ctx context.Context) (string, error) {
 
 var cfg Config
 
+// loadDotEnv parses a .env file and sets env vars that aren't already set.
+// Existing process env vars (e.g., from Docker) always win.
+func loadDotEnv(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		// Docker-injected vars always take precedence
+		if os.Getenv(key) == "" {
+			os.Setenv(key, val)
+		}
+	}
+}
+
+func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"needsSetup": false,
+		"configured": map[string]any{
+			"github":   cfg.GitHubClientID != "",
+			"database": cfg.DBHost != "",
+			"jwt":      cfg.JWTSecret != "change-me-in-production",
+		},
+	})
+}
+
 func main() {
+	// Load .env for local dev (Docker passes env vars directly, so these are no-ops in Docker)
+	loadDotEnv(".env")
+	loadDotEnv("../../.env")
+
 	cfg = loadConfig()
 
 	mux := http.NewServeMux()
@@ -508,8 +785,16 @@ func main() {
 	// Public routes
 	mux.HandleFunc("GET /", handleHome)
 	mux.HandleFunc("GET /health", handleHealthCheck)
+	mux.HandleFunc("GET /api/v1/health", handleHealthCheck)
+	mux.HandleFunc("GET /api/setup/status", handleSetupStatus)
+	// GitHub OAuth endpoints
+	mux.HandleFunc("GET /api/auth/github", handleGitHubLogin)
 	mux.HandleFunc("GET /api/auth/github/login", handleGitHubLogin)
 	mux.HandleFunc("GET /api/auth/github/callback", handleGitHubCallback)
+	mux.HandleFunc("POST /api/auth/github/device/start", handleDeviceFlowStart)
+	mux.HandleFunc("POST /api/auth/github/device/poll", handleDeviceFlowPoll)
+	mux.HandleFunc("POST /api/auth/github/token", handleGitHubTokenAuth)
+	mux.HandleFunc("GET /api/auth/github/token/env", handleGitHubTokenFromEnv)
 
 	// Auth & Security Endpoints (some public, some protected)
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", authMiddleware(handleMfaSetup))

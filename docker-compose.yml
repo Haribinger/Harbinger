@@ -89,6 +89,11 @@ services:
       - REDTEAM_URL=${REDTEAM_URL:-http://redteam:3004}
       - BROWSER_SERVICE_URL=${BROWSER_SERVICE_URL:-}
       - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - APP_URL=${APP_URL:-http://localhost}
+      - GITHUB_REDIRECT_URL=${GITHUB_REDIRECT_URL:-http://localhost/api/auth/github/callback}
+      - GH_TOKEN=${GH_TOKEN:-}
     ports:
       - "${APP_PORT:-8080}:8080"
       - "${METRICS_PORT:-9090}:9090"
@@ -113,8 +118,10 @@ services:
   # ==== REACT FRONTEND ====
   frontend:
     build:
-      context: ./frontend
+      context: ./harbinger-tools/frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
     container_name: harbinger-frontend
     restart: unless-stopped
     ports:
