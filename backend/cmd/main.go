@@ -269,6 +269,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func handleGitHubLogin(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "GitHub OAuth not implemented yet", http.StatusNotImplemented)
+}
+
+func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "GitHub OAuth callback not implemented yet", http.StatusNotImplemented)
+}
+
 // ---- JWT Token Functions ----
 
 type Claims struct {
@@ -626,7 +634,7 @@ func handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mfaSecret, ok := mfaSecrets[userID]
+	_, ok := mfaSecrets[userID]
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "MFA not set up for this user"})
 		return
@@ -1155,38 +1163,74 @@ func handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleContainerAction(w http.ResponseWriter, r *http.Request, id, action string) {
+func handleContainerAction(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	action := r.PathValue("action")
+
+	if id == "" || action == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "missing id or action",
+		})
+		return
+	}
+
 	if !dockerAvailable() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"ok": false, "reason": "not_configured",
 		})
 		return
 	}
+
 	endpoint := fmt.Sprintf("/v1.41/containers/%s/%s", id, action)
 	resp, err := dockerAPIRequest("POST", endpoint, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "id": id, "action": action})
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": string(body)})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "action": action})
 }
 
-func handleContainerLogs(w http.ResponseWriter, r *http.Request, id string) {
+func handleContainerLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "missing id",
+		})
+		return
+	}
+
 	if !dockerAvailable() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"ok": false, "reason": "not_configured",
 		})
 		return
 	}
+
 	endpoint := fmt.Sprintf("/v1.41/containers/%s/logs?stdout=true&stderr=true&tail=100", id)
 	resp, err := dockerAPIRequest("GET", endpoint, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": string(body)})
+		return
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -1336,7 +1380,7 @@ func handleCreateImplant(w http.ResponseWriter, r *http.Request) {
 	var implant Implant
 	json.NewDecoder(r.Body).Decode(&implant)
 	implant.ID = fmt.Sprintf("implant-%d", time.Now().UnixMilli())
-	implants = append(implant, implant)
+	implants = append(implants, implant)
 	writeJSON(w, http.StatusCreated, implant)
 }
 
