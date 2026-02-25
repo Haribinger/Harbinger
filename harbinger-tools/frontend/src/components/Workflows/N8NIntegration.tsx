@@ -97,7 +97,7 @@ const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
                 <span>{workflow.name}</span>
                 <button
                   onClick={() => handleTriggerWorkflow(workflow.id)}
-                  className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
+                  className="bg-transparent border border-[#f0c040] text-[#f0c040] px-3 py-1 rounded text-sm hover:bg-[#f0c040]/10"
                 >
                   Trigger
                 </button>

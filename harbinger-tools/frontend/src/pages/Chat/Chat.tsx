@@ -163,7 +163,7 @@ function Chat() {
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-lg transition-colors ${
-                showSettings ? 'bg-indigo-600/20 text-indigo-400' : 'hover:bg-surface-light text-text-secondary'
+                showSettings ? 'bg-[#f0c040]/10 text-[#f0c040]' : 'hover:bg-surface-light text-text-secondary'
               }`}
             >
               <Settings className="w-5 h-5" />
@@ -271,7 +271,7 @@ function Chat() {
             <button
               onClick={handleSend}
               disabled={!input.trim() || !activeAgent}
-              className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              className="p-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -354,7 +354,7 @@ function MessageBubble({
     >
       <div
         className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${
-          isUser ? 'bg-indigo-600 text-white' : ''
+          isUser ? 'bg-[#f0c040]/20 border border-[#f0c040]/30 text-[#f0c040]' : ''
         }`}
         style={{ backgroundColor: isUser ? undefined : agentColor }}
       >
@@ -365,7 +365,7 @@ function MessageBubble({
         <div
           className={`inline-block text-left px-4 py-3 rounded-2xl ${
             isUser
-              ? 'bg-indigo-600 text-white rounded-tr-sm'
+              ? 'bg-[#f0c040]/10 border border-[#f0c040]/20 text-white rounded-tr-sm'
               : 'bg-surface-light text-white border border-border rounded-tl-sm'
           }`}
         >

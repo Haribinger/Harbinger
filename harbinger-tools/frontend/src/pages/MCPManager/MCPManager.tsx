@@ -24,10 +24,10 @@ const CATEGORIES: Record<string, { icon: React.ReactNode; color: string; bg: str
   'Web Application':   { icon: <Shield className="w-4 h-4" />,        color: 'text-orange-400',  bg: 'bg-orange-600/20' },
   'Subdomain & OSINT': { icon: <Target className="w-4 h-4" />,        color: 'text-pink-400',    bg: 'bg-pink-600/20' },
   'Enumeration':       { icon: <Database className="w-4 h-4" />,      color: 'text-teal-400',    bg: 'bg-teal-600/20' },
-  'Cloud Security':    { icon: <Cloud className="w-4 h-4" />,         color: 'text-indigo-400',  bg: 'bg-indigo-600/20' },
+  'Cloud Security':    { icon: <Cloud className="w-4 h-4" />,         color: 'text-sky-400',     bg: 'bg-sky-600/20' },
   'Credential Testing':{ icon: <Lock className="w-4 h-4" />,          color: 'text-red-400',     bg: 'bg-red-600/20' },
   'Exploitation':      { icon: <Zap className="w-4 h-4" />,           color: 'text-red-500',     bg: 'bg-red-700/20' },
-  'Binary Analysis':   { icon: <FlaskConical className="w-4 h-4" />, color: 'text-purple-400',  bg: 'bg-purple-600/20' },
+  'Binary Analysis':   { icon: <FlaskConical className="w-4 h-4" />, color: 'text-violet-400',  bg: 'bg-violet-600/20' },
   'Forensics & CTF':   { icon: <FileText className="w-4 h-4" />,      color: 'text-lime-400',    bg: 'bg-lime-600/20' },
   'AI Analysis':       { icon: <BrainCircuit className="w-4 h-4" />, color: 'text-fuchsia-400', bg: 'bg-fuchsia-600/20' },
   'Bug Bounty':        { icon: <Bug className="w-4 h-4" />,           color: 'text-yellow-400',  bg: 'bg-yellow-600/20' },
@@ -35,7 +35,7 @@ const CATEGORIES: Record<string, { icon: React.ReactNode; color: string; bg: str
 }
 
 function getCategoryMeta(cat?: string) {
-  return CATEGORIES[cat ?? ''] ?? { icon: <Terminal className="w-4 h-4" />, color: 'text-indigo-400', bg: 'bg-indigo-600/20' }
+  return CATEGORIES[cat ?? ''] ?? { icon: <Terminal className="w-4 h-4" />, color: 'text-[#f0c040]', bg: 'bg-[#f0c040]/10' }
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ function MCPManager() {
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors text-sm"
         >
           <Plus className="w-4 h-4" />
           Add MCP Server
@@ -115,7 +115,7 @@ function MCPManager() {
             onClick={() => setTab(t)}
             className={`py-3 text-sm font-medium border-b-2 transition-colors ${
               tab === t
-                ? 'border-indigo-500 text-indigo-400'
+                ? 'border-[#f0c040] text-[#f0c040]'
                 : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -372,7 +372,7 @@ function ServersTab({ mcps, onAdd, onRemove, onConnect, onDisconnect }: ServersT
         <Plug className="w-16 h-16 mb-4 opacity-50" />
         <p className="text-lg font-medium">No MCP servers</p>
         <p className="text-text-secondary mb-4">No MCP servers configured</p>
-        <button onClick={onAdd} className="text-indigo-400 hover:text-indigo-300">
+        <button onClick={onAdd} className="text-[#f0c040] hover:text-[#f0c040]/80">
           Add your first MCP server
         </button>
       </div>
@@ -588,7 +588,7 @@ function AddMCPModal({ onClose, onAdd }: AddMCPModalProps) {
           <button
             onClick={handleSubmit}
             disabled={!name || !url}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+            className="px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 rounded-lg transition-colors"
           >
             Add Server
           </button>

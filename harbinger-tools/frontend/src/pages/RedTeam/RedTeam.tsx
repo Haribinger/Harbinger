@@ -234,7 +234,7 @@ function StatusBadge({ status }: { status: string }) {
     failed: 'bg-red-500/20 text-red-400 border-red-500/30',
     sleeping: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     pending: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    running: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+    running: 'bg-[#f0c040]/20 text-[#f0c040] border-[#f0c040]/30',
     paused: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     draft: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
   }
@@ -475,7 +475,7 @@ function C2Tab({ servers, sessions, setServers, setSessions }: { servers: C2Serv
                     className="overflow-hidden"
                   >
                     <div className="mt-3 pt-3 border-t border-border flex gap-2 flex-wrap">
-                      <button className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs hover:bg-indigo-600/30 transition-colors">
+                      <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-xs hover:bg-[#f0c040]/20 transition-colors">
                         <Terminal className="w-3 h-3" />
                         Shell
                       </button>
@@ -730,10 +730,10 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
       <div className="bg-surface rounded-xl border border-border p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold flex items-center gap-2">
-            <Layers className="w-4 h-4 text-indigo-400" />
+            <Layers className="w-4 h-4 text-[#f0c040]" />
             Playbooks
           </h3>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-lg text-sm transition-colors">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0c040]/10 hover:bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-sm transition-colors">
             <Plus className="w-3.5 h-3.5" />
             New
           </button>
@@ -744,7 +744,7 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
             <div
               key={pb.id}
               className={`bg-surface-light rounded-lg p-3 border cursor-pointer transition-colors ${
-                selected?.id === pb.id ? 'border-indigo-500/50' : 'border-border hover:border-border-hover'
+                selected?.id === pb.id ? 'border-[#f0c040]/50' : 'border-border hover:border-border-hover'
               }`}
               onClick={() => setSelected(selected?.id === pb.id ? null : pb)}
             >
@@ -773,7 +773,7 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
                   </div>
                   <div className="h-1.5 bg-surface rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-indigo-500 rounded-full"
+                      className="h-full bg-[#f0c040] rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${((pb.currentStep ?? 0) / pb.steps.length) * 100}%` }}
                       transition={{ duration: 0.5 }}
@@ -821,7 +821,7 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
                   <div
                     key={step.id}
                     className={`rounded-lg border p-3 transition-colors ${
-                      isActive ? 'border-indigo-500/50 bg-indigo-600/5' :
+                      isActive ? 'border-[#f0c040]/50 bg-[#f0c040]/5' :
                       isDone ? 'border-green-500/30 bg-green-600/5' :
                       'border-border bg-surface-light'
                     }`}
@@ -829,7 +829,7 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
                     <div className="flex items-center gap-3">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                         isDone ? 'bg-green-500/20 text-green-400' :
-                        isActive ? 'bg-indigo-500/20 text-indigo-400' :
+                        isActive ? 'bg-[#f0c040]/20 text-[#f0c040]' :
                         'bg-surface text-text-secondary'
                       }`}>
                         {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : isActive ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : idx + 1}
@@ -884,7 +884,7 @@ function Neo4jTab() {
       <div className="bg-surface rounded-xl border border-border p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold flex items-center gap-2">
-            <Database className="w-4 h-4 text-purple-400" />
+            <Database className="w-4 h-4 text-[#f0c040]" />
             Neo4j Query Library
           </h3>
         </div>
@@ -897,7 +897,7 @@ function Neo4jTab() {
               onClick={() => setActiveCategory(c)}
               className={`px-3 py-1 rounded-lg text-xs transition-colors ${
                 activeCategory === c
-                  ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
+                  ? 'bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30'
                   : 'bg-surface-light text-text-secondary border border-border hover:text-text-primary'
               }`}
             >
@@ -911,7 +911,7 @@ function Neo4jTab() {
             <div
               key={q.id}
               className={`bg-surface-light rounded-lg p-3 border cursor-pointer transition-colors ${
-                selected?.id === q.id ? 'border-purple-500/50' : 'border-border hover:border-border-hover'
+                selected?.id === q.id ? 'border-[#f0c040]/50' : 'border-border hover:border-border-hover'
               }`}
               onClick={() => { setSelected(q); setCustomQuery(q.query) }}
             >
@@ -920,7 +920,7 @@ function Neo4jTab() {
                   <span className="font-medium text-sm">{q.name}</span>
                   <p className="text-xs text-text-secondary mt-0.5">{q.description}</p>
                 </div>
-                <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded flex-shrink-0">{q.category}</span>
+                <span className="text-xs bg-[#f0c040]/10 text-[#f0c040] px-2 py-0.5 rounded flex-shrink-0">{q.category}</span>
               </div>
               <div className="font-mono text-xs text-text-secondary bg-black/20 rounded p-2 mt-2 truncate">
                 {q.query.substring(0, 80)}…
@@ -933,13 +933,13 @@ function Neo4jTab() {
       {/* Query editor & results */}
       <div className="bg-surface rounded-xl border border-border p-4 flex flex-col gap-4">
         <h3 className="font-semibold flex items-center gap-2">
-          <Code className="w-4 h-4 text-purple-400" />
+          <Code className="w-4 h-4 text-[#f0c040]" />
           Query Editor
         </h3>
 
         <textarea
           rows={6}
-          className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono resize-none text-purple-300"
+          className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono resize-none text-green-400"
           placeholder="MATCH (n) RETURN n LIMIT 25"
           value={customQuery}
           onChange={e => setCustomQuery(e.target.value)}
@@ -948,7 +948,7 @@ function Neo4jTab() {
         <button
           onClick={() => runQuery(customQuery)}
           disabled={!customQuery || running}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
         >
           {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
           {running ? 'Running...' : 'Run Query'}
@@ -1060,7 +1060,7 @@ function ParsersTab({ parsers, setParsers }: { parsers: LogParser[]; setParsers:
                   <div className="text-sm font-medium text-green-400">{f.findings} findings</div>
                 )}
                 {f.status === 'running' && (
-                  <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />
+                  <RefreshCw className="w-4 h-4 text-[#f0c040] animate-spin" />
                 )}
                 <button
                   onClick={() => setFiles(prev => prev.filter(x => x.id !== f.id))}

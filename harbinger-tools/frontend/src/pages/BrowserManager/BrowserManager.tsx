@@ -186,7 +186,7 @@ function BrowserManager() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            className="p-2 bg-[#f0c040]/10 border border-[#f0c040]/30 text-[#f0c040] hover:bg-[#f0c040]/20 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -199,7 +199,7 @@ function BrowserManager() {
               <p className="text-sm">No browser sessions</p>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="mt-3 text-indigo-400 text-sm hover:text-indigo-300"
+                className="mt-3 text-[#f0c040] text-sm hover:text-[#f0c040]/80"
               >
                 Launch a browser
               </button>
@@ -211,7 +211,7 @@ function BrowserManager() {
                 onClick={() => setSelectedSession(session)}
                 className={`w-full text-left p-3 rounded-lg transition-all ${
                   selectedSession?.id === session.id
-                    ? 'bg-indigo-600/20 border border-indigo-500/30'
+                    ? 'bg-[#f0c040]/10 border border-[#f0c040]/30'
                     : 'hover:bg-surface-light border border-transparent'
                 }`}
               >
@@ -315,7 +315,7 @@ function BrowserManager() {
                       key={tab}
                       onClick={() => setActiveTab(tab)}
                       className={`py-2 text-sm font-medium capitalize relative transition-colors ${
-                        activeTab === tab ? 'text-indigo-400' : 'text-text-secondary hover:text-white'
+                        activeTab === tab ? 'text-[#f0c040]' : 'text-text-secondary hover:text-white'
                       }`}
                     >
                       {tab}
@@ -330,7 +330,7 @@ function BrowserManager() {
                         </span>
                       )}
                       {activeTab === tab && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400" />
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#f0c040]" />
                       )}
                     </button>
                   ))}
@@ -487,7 +487,7 @@ function BrowserManager() {
               <p className="text-sm mt-1">or launch a new browser to get started</p>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors mx-auto"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors mx-auto"
               >
                 <Plus className="w-4 h-4" />
                 Launch Browser
@@ -563,7 +563,7 @@ function CreateSessionModal({
                   onClick={() => { setWidth(p.width); setHeight(p.height) }}
                   className={`p-2 text-xs rounded-lg border transition-colors text-center ${
                     width === p.width && height === p.height
-                      ? 'border-indigo-500 bg-indigo-600/20'
+                      ? 'border-[#f0c040] bg-[#f0c040]/10'
                       : 'border-border hover:border-primary/50'
                   }`}
                 >
@@ -598,7 +598,7 @@ function CreateSessionModal({
           <button
             onClick={() => onCreate({ name, url, width, height })}
             disabled={!name || !url}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+            className="px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 rounded-lg transition-colors"
           >
             Launch Browser
           </button>

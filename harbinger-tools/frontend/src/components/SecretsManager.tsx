@@ -181,7 +181,7 @@ export function SecretsManager() {
               whileTap={{ scale: 0.98 }}
               className={`relative p-4 rounded-xl border text-left transition-all ${
                 isActive
-                  ? 'border-indigo-500 bg-indigo-500/10'
+                  ? 'border-[#f0c040] bg-[#f0c040]/10'
                   : 'border-surface-light hover:border-surface-light/80 bg-surface'
               }`}
             >
@@ -191,9 +191,9 @@ export function SecretsManager() {
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center"
+                    className="w-5 h-5 rounded-full bg-[#f0c040] flex items-center justify-center"
                   >
-                    <Check className="w-3 h-3 text-white" />
+                    <Check className="w-3 h-3 text-[#0a0a0f]" />
                   </motion.div>
                 )}
                 {hasKey && !isActive && (
@@ -225,7 +225,7 @@ export function SecretsManager() {
             </p>
           </div>
           <div className="ml-auto">
-            <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">
+            <span className="text-xs px-2 py-1 rounded-full bg-[#f0c040]/10 text-[#f0c040]">
               Active Provider
             </span>
           </div>
@@ -394,7 +394,7 @@ export function SecretsManager() {
                   key={key}
                   className={`flex items-center justify-between p-3 rounded-lg border ${
                     isActive
-                      ? 'border-indigo-500/50 bg-indigo-500/5'
+                      ? 'border-[#f0c040]/50 bg-[#f0c040]/5'
                       : 'border-border bg-surface-light'
                   }`}
                 >
@@ -403,7 +403,7 @@ export function SecretsManager() {
                     <div>
                       <span className="font-medium text-sm">{info.name}</span>
                       {isActive && (
-                        <span className="ml-2 text-xs text-indigo-400">(active)</span>
+                        <span className="ml-2 text-xs text-[#f0c040]">(active)</span>
                       )}
                     </div>
                   </div>
@@ -446,7 +446,7 @@ export function SecretsManager() {
           </button>
           <button
             onClick={downloadEnvFile}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg text-sm transition-colors"
           >
             <Download className="w-4 h-4" />
             Download .env

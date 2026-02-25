@@ -20,7 +20,7 @@ import { useWorkflowStore } from '../../store/workflowStore'
 import type { Workflow as WorkflowType } from '../../types'
 
 const nodeTypes = [
-  { type: 'agent', label: 'Agent Task', icon: Bot, color: 'from-indigo-500 to-blue-500' },
+  { type: 'agent', label: 'Agent Task', icon: Bot, color: 'from-[#f0c040] to-amber-400' },
   { type: 'docker', label: 'Docker Exec', icon: Container, color: 'from-green-500 to-emerald-500' },
   { type: 'browser', label: 'Browser Action', icon: Globe, color: 'from-purple-500 to-pink-500' },
   { type: 'script', label: 'Script', icon: Terminal, color: 'from-orange-500 to-red-500' },
@@ -95,7 +95,7 @@ function Workflows() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            className="p-2 bg-[#f0c040]/10 border border-[#f0c040]/30 text-[#f0c040] hover:bg-[#f0c040]/20 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -108,7 +108,7 @@ function Workflows() {
               <p className="text-sm">No workflows yet</p>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="mt-3 text-indigo-400 text-sm hover:text-indigo-300"
+                className="mt-3 text-[#f0c040] text-sm hover:text-[#f0c040]/80"
               >
                 Create your first workflow
               </button>
@@ -120,7 +120,7 @@ function Workflows() {
                 onClick={() => setSelectedWorkflow(wf)}
                 className={`w-full text-left p-3 rounded-lg transition-all ${
                   selectedWorkflow?.id === wf.id
-                    ? 'bg-indigo-600/20 border border-indigo-500/30'
+                    ? 'bg-[#f0c040]/10 border border-[#f0c040]/30'
                     : 'hover:bg-surface-light border border-transparent'
                 }`}
               >
@@ -162,7 +162,7 @@ function Workflows() {
                   <button
                     onClick={() => setViewMode('list')}
                     className={`px-3 py-1.5 text-sm transition-colors ${
-                      viewMode === 'list' ? 'bg-indigo-600 text-white' : 'hover:bg-surface-light text-text-secondary'
+                      viewMode === 'list' ? 'bg-[#f0c040] text-[#0a0a0f]' : 'hover:bg-surface-light text-text-secondary'
                     }`}
                   >
                     List
@@ -170,7 +170,7 @@ function Workflows() {
                   <button
                     onClick={() => setViewMode('canvas')}
                     className={`px-3 py-1.5 text-sm transition-colors ${
-                      viewMode === 'canvas' ? 'bg-indigo-600 text-white' : 'hover:bg-surface-light text-text-secondary'
+                      viewMode === 'canvas' ? 'bg-[#f0c040] text-[#0a0a0f]' : 'hover:bg-surface-light text-text-secondary'
                     }`}
                   >
                     Canvas
@@ -284,7 +284,7 @@ function Workflows() {
               </div>
             ) : (
               /* Canvas view placeholder */
-              <div className="flex-1 relative bg-[radial-gradient(circle_at_1px_1px,rgba(99,102,241,0.15)_1px,transparent_0)] [background-size:32px_32px] flex items-center justify-center">
+              <div className="flex-1 relative bg-[radial-gradient(circle_at_1px_1px,rgba(240,192,64,0.1)_1px,transparent_0)] [background-size:32px_32px] flex items-center justify-center">
                 <div className="text-center text-text-secondary">
                   <Workflow className="w-16 h-16 mx-auto mb-4 opacity-30" />
                   <p className="text-lg font-medium">Visual Canvas</p>
@@ -302,7 +302,7 @@ function Workflows() {
               <p className="text-sm mt-1">or create a new one to get started</p>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors mx-auto"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors mx-auto"
               >
                 <Plus className="w-4 h-4" />
                 Create Workflow
@@ -392,7 +392,7 @@ function CreateWorkflowModal({
           <button
             onClick={() => onCreate({ name, description, config: { autoStart, parallelExecution, retryOnError: true, maxRetries: 3, timeout: 3600 } })}
             disabled={!name}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+            className="px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 rounded-lg transition-colors"
           >
             Create Workflow
           </button>

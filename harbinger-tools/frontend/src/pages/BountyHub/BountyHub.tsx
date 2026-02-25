@@ -74,7 +74,7 @@ function BountyHub() {
   const platformColors = {
     HackerOne: 'bg-red-500',
     Bugcrowd: 'bg-blue-500',
-    Intigriti: 'bg-purple-500',
+    Intigriti: 'bg-[#6d3fcf]',
     YesWeHack: 'bg-green-500',
     Federacy: 'bg-orange-500',
   };
@@ -96,7 +96,7 @@ function BountyHub() {
           <button
             onClick={handleSync}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Syncing...' : 'Sync Targets'}</span>
@@ -148,7 +148,7 @@ function BountyHub() {
               }}
               className={`px-3 py-1 rounded-full text-sm transition-colors ${
                 filters.platform?.includes(platform as any)
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-[#f0c040] text-[#0a0a0f]'
                   : 'bg-surface border border-border text-text-secondary hover:bg-surface-light'
               }`}
             >
@@ -213,7 +213,7 @@ function BountyHub() {
             </div>
 
             <div className="flex gap-2 pt-4 border-t border-border">
-              <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-sm">
+              <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors text-sm">
                 <Target className="w-4 h-4" />
                 <span>View Scope</span>
               </button>

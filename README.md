@@ -1,193 +1,330 @@
 
 ```
- _   _                      _           _             
-| | | | __ _ _ __ _ __ ___ (_)_ __   __| | ___ _ __ 
-| |_| |/ _` | '__| '_ ` _ \| | '_ \ / _` |/ _ \ '__|
-|  _  | (_| | |  | | | | | | | | | | (_| |  __/ |   
-|_| |_|\__,_|_|  |_| |_| |_|_|_| |_|\__,_|\___|_|   
+ _   _    _    ____  ____ ___ _   _  ____ _____ ____
+| | | |  / \  |  _ \| __ )_ _| \ | |/ ___| ____|  _ \
+| |_| | / _ \ | |_) |  _ \| ||  \| | |  _|  _| | |_) |
+|  _  |/ ___ \|  _ <| |_) | || |\  | |_| | |___|  _ <
+|_| |_/_/   \_\_| \_\____/___|_| \_|\____|_____|_| \_\
 ```
 
-Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Intelligence
+**Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Intelligence**
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Haribinger/Harbinger)](https://github.com/Haribinger/Harbinger/releases)
-[![GitHub stars](https://img.shields.io/github/stars/Haribinger/Harbinger?style=social)](https://github.com/Haribinger/Harbinger/stargazers)
-[![Docker Pulls](https://img.shields.io/docker/pulls/haribinger/harbinger)](https://hub.docker.com/r/haribinger/harbinger)
-[![CI Status](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml/badge.svg)](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8.svg)](https://go.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose)
 
-## Preview
+---
 
-![Attack Surface Map](workflows/stitch/bug_bounty_attack_surface_map_1/screen.png)
-*Real-time attack surface mapping with interactive node graph*
+## What Is Harbinger?
 
-![P1 Vulnerability Deep-Dive](workflows/stitch/p1_vulnerability_deep-dive_view/screen.png)
-*P1 vulnerability analysis with evidence vault, triage controls, and auto-reporting*
+Harbinger is a **command center for autonomous offensive security agents**. It is not a scanner, not a chatbot, and not a demo. It is a production framework where specialized AI agents — PATHFINDER, BREACH, PHANTOM, SPECTER, CIPHER, and SCRIBE — work as a swarm to discover vulnerabilities, map attack surfaces, and write reports.
 
-## 🌟 Overview
+Six agents. 150+ tools. One command center.
 
-Harbinger is an advanced, autonomous offensive security framework designed for comprehensive vulnerability discovery and management. Leveraging a local-first approach and powered by the Model Context Protocol (MCP), Harbinger orchestrates a swarm of specialized agents to mimic real-world adversary tactics, providing unparalleled depth in security assessments.
+---
 
-## 🧠 Architecture
+## Architecture
 
-```mermaid
-graph TB
-  User[Command Center UI] --> Orchestrator[Agent Orchestrator]
-  Orchestrator --> Pathfinder[PATHFINDER<br/>Recon Scout]
-  Orchestrator --> Breach[BREACH<br/>Web Hacker]
-  Orchestrator --> Phantom[PHANTOM<br/>Cloud Infiltrator]
-  Orchestrator --> Specter[SPECTER<br/>OSINT Detective]
-  Orchestrator --> Cipher[CIPHER<br/>Binary RE]
-  Orchestrator --> Scribe[SCRIBE<br/>Report Writer]
-  Pathfinder --> MCP[MCP Tool Servers]
-  Breach --> MCP
-  Phantom --> MCP
-  Specter --> MCP
-  Cipher --> MCP
-  Scribe --> MCP
-  MCP --> HexStrike[HexStrike<br/>150+ Tools]
-  MCP --> Custom[Custom MCP<br/>Servers]
-  Orchestrator --> Docker[Docker Containers]
-  Orchestrator --> KG[Knowledge Graph<br/>Neo4j]
-  Orchestrator --> Memory[Git Memory]
-  Orchestrator --> N8N[n8n Workflows]
-  User --> BountyHub[Bounty Hub<br/>Target Sync]
-  User --> RedTeam[Red Team<br/>C2 + VPS]
-  User --> Browser[Browser Agent]
+```
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│PATHFINDER│ │  BREACH  │ │ PHANTOM  │ │ SPECTER  │ │  CIPHER  │ │  SCRIBE  │
+│  Recon   │ │ Web Hack │ │  Cloud   │ │  OSINT   │ │Binary RE │ │ Reports  │
+└────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+     └──────────────────── AGENT ORCHESTRATOR ────────────────────────────┘
+              │                │               │               │
+         MCP Servers      Docker          Knowledge       Git Memory
+       (150+ tools)     Containers         Graph
 ```
 
-## 🚀 Data Flow Example
+**Stack:** React 19 + Vite · Go 1.24 · PostgreSQL 17 · Redis 7.4 · Neo4j 2025 · Docker Compose · n8n
 
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant O as Orchestrator
-  participant P as PATHFINDER
-  participant B as BREACH
-  participant S as SCRIBE
-  U->>O: Hunt target.com
-  O->>P: Recon target.com
-  P->>P: subfinder, httpx, naabu
-  P->>O: Found 47 subdomains, 12 live
-  O->>B: Test live targets
-  B->>B: nuclei, sqlmap, dalfox
-  B->>O: Found SQLi on api.target.com
-  O->>S: Write report for SQLi
-  S->>U: Report ready - submit to HackerOne?
-```
+---
 
-## ✨ Features
+## Requirements
 
-- 🤖 **Autonomous Agent Swarm**: Intelligent, self-orchestrating agents for comprehensive security assessments.
-- 🌐 **Local-First Design**: Ensures data privacy and operational control, with optional cloud integration.
-- 🔌 **MCP-Powered Tooling**: Seamless integration with 150+ security tools via Model Context Protocol.
-- 🧠 **Swarm Intelligence**: Agents collaborate and adapt, sharing insights through a central Knowledge Graph.
-- 📊 **Real-time Visualization**: Interactive dashboards and attack graphs for live operational oversight.
-- 🚀 **Rapid Deployment**: Docker-based setup for quick and consistent environment provisioning.
-- 🛡️ **Red Team Capabilities**: Integrated C2, VPS management, and advanced adversary emulation.
-- 🔄 **Automated Workflows**: n8n integration for customizable security automation playbooks.
-- 📝 **Automated Reporting**: SCRIBE agent generates platform-specific, high-quality vulnerability reports.
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Docker | 24+ | With Docker Compose v2 |
+| Go | 1.24+ | For local backend dev only |
+| Node.js | 20+ | For local frontend dev only |
+| pnpm | 9+ | `npm i -g pnpm` |
+| Git | any | |
+| GitHub OAuth App | — | Required for login |
 
-## ⚡ Quick Start
+**Minimum hardware:** 4 CPU cores, 8 GB RAM, 20 GB disk
 
-Get Harbinger up and running in three simple commands:
+---
+
+## Quick Start (Docker)
+
+### 1. Clone
 
 ```bash
-gh repo clone Haribinger/Harbinger harbinger-big && cd harbinger-big
-./install.sh # (Hypothetical installer script)
-docker compose up -d
+git clone https://github.com/kdairatchi/harbinger.git
+cd harbinger
 ```
 
-## 📁 Project Structure
+### 2. Configure environment
+
+```bash
+cp .env.example .env   # if .env.example exists, otherwise create .env
+```
+
+Edit `.env`:
+
+```env
+# Required — create at https://github.com/settings/developers
+GITHUB_CLIENT_ID=your_github_oauth_app_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_app_client_secret
+
+# Required — generate with: openssl rand -base64 32
+JWT_SECRET=your_jwt_secret_here
+
+# App URL — use http://localhost for Docker, http://localhost:3000 for dev
+APP_URL=http://localhost
+
+# Optional — GitHub PAT for Device Flow auth bypass
+GH_TOKEN=ghp_your_personal_access_token
+
+# Database (defaults work for Docker)
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=harbinger
+POSTGRES_USER=harbinger
+POSTGRES_PASSWORD=harbinger_secret
+REDIS_HOST=redis
+REDIS_PORT=6379
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=harbinger_neo4j
+
+# AI provider keys (add whichever you use)
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+### 3. Set up GitHub OAuth App
+
+Go to **GitHub → Settings → Developer settings → OAuth Apps → New OAuth App**:
+
+| Field | Value |
+|-------|-------|
+| Application name | Harbinger |
+| Homepage URL | `http://localhost` |
+| Authorization callback URL | `http://localhost/api/auth/github/callback` |
+
+Copy the **Client ID** and **Client Secret** into `.env`.
+
+### 4. Deploy
+
+```bash
+# Build and start core services
+docker compose up --build -d postgres redis neo4j backend frontend nginx
+
+# Check everything is running
+docker compose ps
+
+# Tail logs
+docker compose logs -f backend
+```
+
+### 5. Open
+
+Navigate to **http://localhost** and sign in with GitHub.
+
+---
+
+## Local Development
+
+For live reload and faster iteration without Docker:
+
+### Backend
+
+```bash
+cd backend
+go run ./cmd/
+# Runs on :8080
+# Auto-loads root .env file
+```
+
+### Frontend
+
+```bash
+# From project root
+pnpm install
+pnpm dev
+# Runs Vite SPA on :3000
+# Proxies /api → :8080
+```
+
+### Build frontend for production
+
+```bash
+pnpm build:ui
+# Output: harbinger-tools/frontend/dist/
+# Use pnpm build:ui, NOT pnpm build (which runs Next.js and OOMs)
+```
+
+---
+
+## Authentication Methods
+
+Harbinger supports three login methods — pick whichever fits your setup:
+
+### OAuth (recommended)
+Standard GitHub OAuth flow. Requires `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in env. Click **"Continue with GitHub"** on the login screen.
+
+### Device Flow
+No callback URL required. Click **"Device Flow"** tab on login, scan the QR / copy the code, visit `github.com/login/device`. Requires `GITHUB_CLIENT_ID` only.
+
+### Token
+Paste a GitHub PAT (`ghp_...` or `github_pat_...`) directly into the **"Token"** tab. Or set `GH_TOKEN` in your `.env` and click **"Use Server Token"** for one-click login.
+
+---
+
+## Project Structure
 
 ```
-harbinger-big/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       └── auto-changelog.yml
-├── agents/
-│   ├── breach/
-│   │   └── SYSTEM_PROMPT.md
-│   ├── cipher/
-│   │   └── SYSTEM_PROMPT.md
-│   ├── phantom/
-│   │   └── SYSTEM_PROMPT.md
-│   ├── pathfinder/
-│   │   └── SYSTEM_PROMPT.md
-│   ├── scribe/
-│   │   └── SYSTEM_PROMPT.md
-│   └── specter/
-│       └── SYSTEM_PROMPT.md
-├── docs/
-│   ├── TOOL_INTEGRATIONS.md
-│   ├── getting-started.md
-│   ├── api-reference.md
-│   ├── plugin-development.md
-│   ├── deployment-guide.md
-│   └── troubleshooting.md
-├── skills/
-│   └── scripts/
-│       ├── recon-full.sh
-│       ├── web-scan.sh
-│       ├── cloud-audit.sh
-│       ├── osint-person.sh
-│       └── generate-report.sh
-├── CHANGELOG.md
-├── README.md
+/
+├── CLAUDE.md                     # AI assistant context (read before editing)
+├── docker-compose.yml            # 9-service stack
+├── .env                          # Environment variables (git-ignored)
+│
+├── agents/                       # Agent system prompts
+│   ├── pathfinder/SYSTEM_PROMPT.md
+│   ├── breach/SYSTEM_PROMPT.md
+│   ├── phantom/SYSTEM_PROMPT.md
+│   ├── specter/SYSTEM_PROMPT.md
+│   ├── cipher/SYSTEM_PROMPT.md
+│   └── scribe/SYSTEM_PROMPT.md
+│
 ├── backend/
-├── frontend/
-└── install.sh # (Hypothetical installer script)
+│   └── cmd/
+│       ├── main.go               # Go API server (1500+ lines, 44+ routes)
+│       └── skills.go             # Skills execution handlers
+│
+├── harbinger-tools/
+│   └── frontend/                 # React 19 + Vite 6 SPA
+│       └── src/
+│           ├── pages/            # 14 pages (Dashboard, Chat, Agents, etc.)
+│           ├── components/       # Reusable UI components
+│           ├── store/            # 13 Zustand stores
+│           └── api/              # API client functions
+│
+├── mcp-plugins/                  # MCP server containers
+│   ├── hexstrike-ai/             # 150+ security tools
+│   └── idor-mcp/                 # IDOR testing MCP
+│
+├── skills/                       # Skill definitions (mounted at /app/skills)
+├── workflows/                    # n8n + stitch workflows
+├── memory/                       # Agent persistent memory
+├── knowledge-graph/              # Neo4j entity/relation data
+└── docs/                         # Documentation
 ```
 
-## 🤖 Agent Roster
+---
 
-| Agent Name | Role | Core Directive | Key Tools/Focus |
-|:-----------|:-----|:---------------|:----------------|
-| **PATHFINDER** | Recon Scout | Map the entire attack surface. | subfinder, httpx, naabu, dnsx, nuclei (info) |
-| **BREACH** | Web Hacker | Exploit web vulnerabilities. | nuclei, sqlmap, dalfox, burpsuite, OWASP ZAP |
-| **PHANTOM** | Cloud Infiltrator | Identify and exploit cloud misconfigurations. | Cloud-specific enumeration tools, IAM assessment |
-| **SPECTER** | OSINT Detective | Gather and analyze open-source intelligence. | Social media analysis, email patterns, breach data |
-| **CIPHER** | Binary RE | Reverse engineer binaries and firmware. | Disassemblers, debuggers, vulnerability analysis tools |
-| **SCRIBE** | Report Writer | Generate clear, actionable vulnerability reports. | Markdown, platform-specific templates, CVSS scoring |
+## Agent Roster
 
-## 🛠️ Tech Stack
+| Agent | Role | Tools |
+|-------|------|-------|
+| **PATHFINDER** | Recon Scout | subfinder, httpx, naabu, dnsx, shef, ceye |
+| **BREACH** | Web Hacker | nuclei, sqlmap, dalfox, ffuf, recx |
+| **PHANTOM** | Cloud Infiltrator | ScoutSuite, Prowler, Pacu |
+| **SPECTER** | OSINT Detective | theHarvester, Sherlock, SpiderFoot |
+| **CIPHER** | Binary RE | Ghidra, radare2, pwntools |
+| **SCRIBE** | Report Writer | Markdown, PDF, platform APIs |
 
-| Category | Technology | Description |
-|:---------|:-----------|:------------|
-| **Backend** | Go, Gin | High-performance API and agent orchestration. |
-| **Frontend** | React, TypeScript, Vite | Modern, responsive Command Center UI. |
-| **Database** | PostgreSQL, Neo4j, Redis | Primary data store, knowledge graph, caching. |
-| **Containerization** | Docker, Docker Compose | Isolated environments for agents and services. |
-| **Automation** | n8n | Workflow automation and integration. |
-| **Security Tools** | HexStrike, ProjectDiscovery | 150+ integrated offensive security tools. |
-| **AI/ML** | OpenAI, Anthropic, Google AI | AI-powered analysis and decision-making. |
+---
 
-## 🆚 Harbinger vs. Competitors
+## Pages
 
-| Feature | Harbinger | Traditional Scanners | Manual Pentesting | Other AI Platforms |
-|:--------|:---------|:---------------------|:------------------|:------------------|
-| **Autonomy** | High (Swarm Intelligence) | Low (Scripted) | Low (Human-driven) | Medium (Single Agent) |
-| **Tool Integration** | 150+ (MCP-Powered) | Limited (Built-in) | Manual (Human-selected) | Moderate (API-based) |
-| **Contextual Awareness** | High (Knowledge Graph) | Low | High | Medium |
-| **Report Generation** | Automated, Platform-specific | Basic | Manual | Basic |
-| **Red Team Ops** | Integrated C2, VPS | None | High | Limited |
-| **Cost Efficiency** | High | Medium | Low | Medium |
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard — live agent status, system metrics |
+| `/agents` | Agent roster, personalities, chat |
+| `/chat` | Direct agent conversation |
+| `/bounty-hub` | Bug bounty programs from H1, Bugcrowd, etc. |
+| `/docker` | Container management — start, stop, exec |
+| `/mcp` | MCP server management — tools, call history |
+| `/red-team` | C2, VPS management, Neo4j knowledge graph |
+| `/browser` | Browser agent sessions (Caido proxy) |
+| `/workflows` | n8n workflow canvas + editor |
+| `/skills` | Skill library — view, run, manage |
+| `/settings` | AI providers, API keys, theme, Docker defaults |
+| `/setup` | Initial configuration wizard |
 
-## 🤝 Contributing
+---
 
-We welcome contributions from the community! Whether it's bug reports, feature requests, or code contributions, your input helps make Harbinger better. Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get involved.
+## Troubleshooting
 
-## 📄 License
+### Login shows "not configured" error
+OAuth is not set up. Either:
+1. Add `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` to `.env` and restart, OR
+2. Use the **Device Flow** tab (no callback URL needed), OR
+3. Use the **Token** tab with a GitHub PAT
 
-Harbinger is open-source and licensed under the MIT License. See the [LICENSE.md](LICENSE.md) file for more details.
+### Frontend changes not showing
+After editing source files, restart the dev server:
+```bash
+# Development
+pnpm dev
 
-## 📚 Documentation & Support
+# Docker — rebuild frontend
+docker compose up --build -d frontend nginx
+```
 
-- [Getting Started Guide](docs/getting-started.md)
-- [API Reference](docs/api-reference.md)
-- [Plugin Development](docs/plugin-development.md)
-- [Deployment Guide](docs/deployment-guide.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Tool Integrations](docs/TOOL_INTEGRATIONS.md)
-- [GitHub Issues](https://github.com/Haribinger/Harbinger/issues)
-- [Discord Community](https://discord.gg/harbinger) (Hypothetical link)
+### Backend won't start — "port already in use"
+```bash
+# Kill whatever is on :8080
+fuser -k 8080/tcp
+```
+
+### Database connection errors
+```bash
+# Check Postgres is healthy
+docker compose ps postgres
+docker compose logs postgres
+
+# Reset databases
+docker compose down -v
+docker compose up -d postgres redis neo4j
+```
+
+### pnpm: command not found
+```bash
+npm install -g pnpm@9
+```
+
+---
+
+## Design System
+
+Harbinger uses the **Obsidian Command** design language — dark, dense, terminal-native.
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| Background | `#0a0a0f` | Page background |
+| Surface | `#0d0d15` | Cards, panels |
+| Border | `#1a1a2e` | All borders |
+| Accent | `#f0c040` | Gold — buttons, active states, highlights |
+| Danger | `#ef4444` | Errors, destructive actions |
+| Success | `#22c55e` | Running, confirmed |
+| Font | JetBrains Mono / Fira Code | All monospace |
+
+---
+
+## Contributing
+
+Security researchers, tool authors, and Go/React engineers welcome.
+
+- Bug reports: [GitHub Issues](https://github.com/kdairatchi/harbinger/issues)
+- Read `CLAUDE.md` before touching any code — it defines rules that must not be broken
+- No light themes. No npm. No chat bubbles. No placeholder code.
+
+---
+
+## License
+
+MIT — see [LICENSE.md](LICENSE.md)

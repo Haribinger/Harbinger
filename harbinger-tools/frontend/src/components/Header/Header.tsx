@@ -34,8 +34,7 @@ function Header() {
           {/* Create New */}
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500
-                       text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>New Agent</span>

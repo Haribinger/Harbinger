@@ -92,7 +92,7 @@ function Header() {
         </div>
 
         {/* New Chat Button */}
-        <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+        <button className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
           <span className="text-sm font-medium">New Chat</span>
@@ -104,7 +104,7 @@ function Header() {
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center gap-2 p-2 hover:bg-surface-light rounded-lg transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium"
+            <div className="w-8 h-8 rounded-full bg-[#f0c040]/20 border border-[#f0c040]/50 flex items-center justify-center text-[#f0c040] text-sm font-medium"
             >
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
@@ -115,7 +115,7 @@ function Header() {
             <div className="absolute right-0 top-full mt-2 w-56 bg-surface border border-border rounded-lg shadow-xl z-50">
               <div className="p-4 border-b border-border">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium"
+                  <div className="w-10 h-10 rounded-full bg-[#f0c040]/20 border border-[#f0c040]/50 flex items-center justify-center text-[#f0c040] font-medium"
                   >
                     {user?.username?.charAt(0).toUpperCase() || 'U'}
                   </div>

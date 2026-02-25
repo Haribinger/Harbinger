@@ -247,7 +247,7 @@ function DockerManager() {
           <button
             onClick={() => setShowCreateModal(true)}
             disabled={!isConnected || connectionStatus === 'not_configured'}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>New Container</span>
@@ -322,12 +322,12 @@ function DockerManager() {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`pb-2 text-sm font-medium capitalize transition-colors relative ${
-                    activeTab === tab ? 'text-indigo-400' : 'text-text-secondary hover:text-white'
+                    activeTab === tab ? 'text-[#f0c040]' : 'text-text-secondary hover:text-white'
                   }`}
                 >
                   {tab}
                   {activeTab === tab && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400" />
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#f0c040]" />
                   )}
                 </button>
               ))}
@@ -379,7 +379,7 @@ function DockerManager() {
                         {isConnected && (
                           <button
                             onClick={() => setShowCreateModal(true)}
-                            className="mt-3 text-indigo-400 text-sm hover:text-indigo-300"
+                            className="mt-3 text-[#f0c040] text-sm hover:text-[#f0c040]/80"
                           >
                             Create a container
                           </button>
@@ -396,7 +396,7 @@ function DockerManager() {
                       transition={{ delay: i * 0.04 }}
                       className={`bg-surface rounded-xl border transition-all cursor-pointer ${
                         selectedContainer?.id === container.id
-                          ? 'border-indigo-500/50 bg-indigo-600/5'
+                          ? 'border-[#f0c040]/50 bg-[#f0c040]/5'
                           : 'border-border hover:border-primary/30'
                       }`}
                       onClick={() => setSelectedContainer(container)}
@@ -454,7 +454,7 @@ function DockerManager() {
                           <button
                             onClick={() => handleTerminal(container)}
                             disabled={!isConnected}
-                            className="p-2 hover:bg-indigo-600/20 text-indigo-400 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 hover:bg-[#f0c040]/10 text-[#f0c040] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Terminal"
                           >
                             <Terminal className="w-4 h-4" />
@@ -578,7 +578,7 @@ function DockerManager() {
                       </div>
                       <div className="h-2 bg-surface-light rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-indigo-500 rounded-full"
+                          className="h-full bg-[#f0c040] rounded-full"
                           style={{ width: `${Math.min(selectedContainer.cpuUsage, 100)}%` }}
                         />
                       </div>
@@ -595,7 +595,7 @@ function DockerManager() {
                       </div>
                       <div className="h-2 bg-surface-light rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-purple-500 rounded-full"
+                          className="h-full bg-[#f0c040]/60 rounded-full"
                           style={{
                             width: selectedContainer.memoryLimit
                               ? `${(selectedContainer.memoryUsage / selectedContainer.memoryLimit) * 100}%`
@@ -657,7 +657,7 @@ function DockerManager() {
                 <button
                   onClick={() => selectedContainer && handleTerminal(selectedContainer)}
                   disabled={!isConnected}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm"
+                  className="w-full flex items-center gap-2 px-4 py-2 bg-[#f0c040]/10 text-[#f0c040] hover:bg-[#f0c040]/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm"
                 >
                   <Terminal className="w-4 h-4" />
                   Open Terminal
@@ -731,7 +731,7 @@ function CreateContainerModal({
                   onClick={() => setImage(img.name)}
                   className={`text-left p-2 rounded-lg border text-xs transition-colors ${
                     image === img.name
-                      ? 'border-indigo-500 bg-indigo-600/20'
+                      ? 'border-[#f0c040] bg-[#f0c040]/10'
                       : 'border-border hover:border-primary/50'
                   }`}
                 >
@@ -772,7 +772,7 @@ function CreateContainerModal({
           <button
             onClick={() => onCreate({ name, image, command, env })}
             disabled={!name || !image}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+            className="px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 rounded-lg transition-colors"
           >
             Create Container
           </button>

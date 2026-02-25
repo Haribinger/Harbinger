@@ -45,8 +45,8 @@ function Sidebar() {
       {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-border">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-[#f0c040]/10 border border-[#f0c040]/50 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-5 h-5 text-[#f0c040]" />
           </div>
           <AnimatePresence mode="wait">
             {!sidebarCollapsed && (
@@ -74,7 +74,7 @@ function Sidebar() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${
                     isActive
-                      ? 'bg-indigo-600 text-white'
+                      ? 'text-[#f0c040] bg-[#f0c040]/10'
                       : 'text-text-secondary hover:bg-surface-light hover:text-white'
                   }`
                 }

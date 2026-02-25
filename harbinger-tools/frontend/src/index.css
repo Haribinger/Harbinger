@@ -191,7 +191,7 @@ code {
 }
 
 .btn-primary {
-  @apply btn bg-indigo-600 hover:bg-indigo-500 text-white;
+  @apply btn bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10;
 }
 
 .btn-secondary {

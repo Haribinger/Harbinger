@@ -135,7 +135,7 @@ function SetupWizard() {
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+            className="px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
           >
             Go to Login
           </button>
@@ -157,7 +157,7 @@ function SetupWizard() {
                     index < currentStep
                       ? 'bg-green-500 text-white'
                       : index === currentStep
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#f0c040] text-[#0a0a0f]'
                         : 'bg-surface-light text-text-secondary'
                   }`}
                 >
@@ -204,8 +204,8 @@ function SetupWizard() {
           {/* Step Content */}
           {currentStep === 0 && (
             <div className="text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                <Sparkles className="w-10 h-10 text-white" />
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#f0c040]/10 border border-[#f0c040]/30 flex items-center justify-center">
+                <Sparkles className="w-10 h-10 text-[#f0c040]" />
               </div>
               <h1 className="text-3xl font-bold text-white mb-4">Welcome to Harbinger</h1>
               <p className="text-text-secondary mb-6 max-w-md mx-auto">
@@ -458,7 +458,7 @@ function SetupWizard() {
             {currentStep === totalSteps - 1 ? (
               <button
                 onClick={handleSubmit}
-                className="flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+                className="flex items-center gap-2 px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
               >
                 Complete Setup
                 <Check className="w-5 h-5" />
@@ -466,7 +466,7 @@ function SetupWizard() {
             ) : (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+                className="flex items-center gap-2 px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
               >
                 Continue
                 <ChevronRight className="w-5 h-5" />

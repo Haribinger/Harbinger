@@ -233,7 +233,7 @@ function Settings() {
               onClick={() => setActiveSection(section.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 activeSection === section.id
-                  ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                  ? 'bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30'
                   : 'text-text-secondary hover:bg-surface-light hover:text-white'
               }`}
             >
@@ -263,7 +263,7 @@ function Settings() {
                       onClick={() => setTheme(t.value)}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
                         theme === t.value
-                          ? 'border-indigo-500 bg-indigo-600/20 text-indigo-400'
+                          ? 'border-[#f0c040] bg-[#f0c040]/10 text-[#f0c040]'
                           : 'border-border hover:border-primary/50 text-text-secondary hover:text-white'
                       }`}
                     >
@@ -300,15 +300,15 @@ function Settings() {
                         whileTap={{ scale: 0.98 }}
                         className={`relative p-4 rounded-xl border text-left transition-all ${
                           isActive
-                            ? 'border-indigo-500 bg-indigo-500/10'
+                            ? 'border-[#f0c040] bg-[#f0c040]/10'
                             : 'border-surface-light hover:border-surface-light/80 bg-surface'
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <Icon className={`w-6 h-6 ${info.color}`} />
                           {isActive && (
-                            <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-white" />
+                            <div className="w-5 h-5 rounded-full bg-[#f0c040] flex items-center justify-center">
+                              <Check className="w-3 h-3 text-[#0a0a0f]" />
                             </div>
                           )}
                           {hasKey && !isActive && <div className="w-2 h-2 rounded-full bg-green-500" />}
@@ -461,7 +461,7 @@ function Settings() {
                   </button>
                   <button
                     onClick={downloadEnvFile}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg text-sm transition-colors"
                   >
                     <Download className="w-4 h-4" />
                     Download .env
@@ -690,14 +690,14 @@ function Settings() {
                       <div
                         key={key}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
-                          isActive ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-border bg-surface-light'
+                          isActive ? 'border-[#f0c040]/50 bg-[#f0c040]/5' : 'border-border bg-surface-light'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <Icon className={`w-5 h-5 ${info.color}`} />
                           <div>
                             <span className="font-medium text-sm">{info.name}</span>
-                            {isActive && <span className="ml-2 text-xs text-indigo-400">(active)</span>}
+                            {isActive && <span className="ml-2 text-xs text-[#f0c040]">(active)</span>}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -817,7 +817,7 @@ function Settings() {
           <button
             onClick={handleSave}
             className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm transition-all ${
-              saved ? 'bg-green-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              saved ? 'bg-green-600 text-white' : 'bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10'
             }`}
           >
             <Save className="w-4 h-4" />
@@ -874,7 +874,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   return (
     <button
       onClick={() => onChange(!value)}
-      className={`relative w-11 h-6 rounded-full transition-colors ${value ? 'bg-indigo-600' : 'bg-surface-light border border-border'}`}
+      className={`relative w-11 h-6 rounded-full transition-colors ${value ? 'bg-[#f0c040]' : 'bg-surface-light border border-border'}`}
     >
       <span
         className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${value ? 'left-6' : 'left-1'}`}
