@@ -1003,6 +1003,163 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("WebSocket endpoint - upgrade required"))
 }
 
+// ---- Agent Orchestrator Handlers ----
+
+func handleAgentSwarm(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agents": []interface{}{},
+		"total":  0,
+		"status": "healthy",
+	})
+}
+
+func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var body map[string]interface{}
+	json.NewDecoder(r.Body).Decode(&body)
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":        fmt.Sprintf("agent-%d", time.Now().UnixMilli()),
+		"type":      body["type"],
+		"status":    "spawned",
+		"created_at": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	agentID := r.URL.Query().Get("agent_id")
+	if agentID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id required"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agent_id": agentID,
+		"status":   "alive",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func handleAgentHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var body map[string]interface{}
+	json.NewDecoder(r.Body).Decode(&body)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"from_agent": body["from_agent"],
+		"to_agent":   body["to_agent"],
+		"task":       body["task"],
+		"status":     "handoff_initiated",
+	})
+}
+
+// ---- Bounty Hub Handlers ----
+
+func handleBountyPrograms(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"programs": []interface{}{},
+		"total":    0,
+	})
+}
+
+func handleBountySync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":          "syncing",
+		"last_sync_time":  time.Now().UTC().Format(time.RFC3339),
+		"next_sync_time":  time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339),
+		"total_programs":  0,
+	})
+}
+
+func handleBountyHunt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var body map[string]interface{}
+	json.NewDecoder(r.Body).Decode(&body)
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"program_id": body["program_id"],
+		"status":     "added_to_hunt_queue",
+		"created_at": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+// ---- MCP Tool Execution Handlers ----
+
+func handleMCPExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var body map[string]interface{}
+	json.NewDecoder(r.Body).Decode(&body)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"execution_id": fmt.Sprintf("exec-%d", time.Now().UnixMilli()),
+		"tool":         body["tool"],
+		"status":       "executing",
+		"result":       nil,
+	})
+}
+
+func handleMCPTools(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tools": []interface{}{},
+		"total": 0,
+	})
+}
+
+// ---- Docker Agent Spawning Handlers ----
+
+func handleDockerAgentSpawn(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var body map[string]interface{}
+	json.NewDecoder(r.Body).Decode(&body)
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"container_id": fmt.Sprintf("agent-%d", time.Now().UnixMilli()),
+		"agent_type":   body["agent_type"],
+		"status":       "running",
+		"created_at":   time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func handleDockerAgents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"containers": []interface{}{},
+		"total":      0,
+	})
+}
+
 // ---- Router ----
 
 func setupRoutes() http.Handler {
@@ -1082,6 +1239,8 @@ func setupRoutes() http.Handler {
 	// MCP
 	mux.HandleFunc("/api/mcp/servers", handleMCPServers)
 	mux.HandleFunc("/api/v1/mcp/servers", handleMCPServers)
+	mux.HandleFunc("/api/v1/mcp/execute", handleMCPExecute)
+	mux.HandleFunc("/api/v1/mcp/tools", handleMCPTools)
 
 	// Browsers
 	mux.HandleFunc("/api/browsers/sessions", handleBrowserSessions)
@@ -1092,6 +1251,10 @@ func setupRoutes() http.Handler {
 	// Agents & Workflows (both versioned and unversioned)
 	mux.HandleFunc("/api/v1/agents", handleAgents)
 	mux.HandleFunc("/api/agents", handleAgents)
+	mux.HandleFunc("/api/v1/agents/swarm", handleAgentSwarm)
+	mux.HandleFunc("/api/v1/agents/spawn", handleSpawnAgent)
+	mux.HandleFunc("/api/v1/agents/heartbeat", handleAgentHeartbeat)
+	mux.HandleFunc("/api/v1/agents/handoff", handleAgentHandoff)
 	mux.HandleFunc("/api/v1/workflows", handleWorkflows)
 	mux.HandleFunc("/api/workflows", handleWorkflows)
 
@@ -1103,8 +1266,19 @@ func setupRoutes() http.Handler {
 			handleTargets(w, r)
 		}
 	})
+	mux.HandleFunc("/api/v1/bounty/programs", handleBountyPrograms)
+	mux.HandleFunc("/api/v1/bounty/sync", handleBountySync)
+	mux.HandleFunc("/api/v1/bounty/hunt", handleBountyHunt)
 	mux.HandleFunc("/api/v1/scans", handleScans)
 	mux.HandleFunc("/api/v1/vulnerabilities", handleVulnerabilities)
+
+	// MCP Tool Execution
+	mux.HandleFunc("/api/v1/mcp/execute", handleMCPExecute)
+	mux.HandleFunc("/api/v1/mcp/tools", handleMCPTools)
+
+	// Docker Agent Spawning
+	mux.HandleFunc("/api/v1/docker/agents/spawn", handleDockerAgentSpawn)
+	mux.HandleFunc("/api/v1/docker/agents", handleDockerAgents)
 
 	// WebSocket
 	mux.HandleFunc("/ws", handleWebSocket)

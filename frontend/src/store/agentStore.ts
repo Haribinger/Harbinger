@@ -31,6 +31,11 @@ interface AgentState {
 
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+
+  spawnAgent: (agentType: string, personality: string, codename: string) => Promise<void>
+  stopAgent: (agentId: string) => Promise<void>
+  getAgentHeartbeat: (agentId: string) => Promise<boolean>
+  handoffTask: (fromAgentId: string, toAgentId: string, task: string) => Promise<void>
 }
 
 export const useAgentStore = create<AgentState>()(
@@ -133,6 +138,58 @@ Provide specific line numbers and actionable suggestions.`,
 
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
+
+      spawnAgent: async (agentType, personality, codename) => {
+        // This will interact with the orchestrator and potentially the backend
+        console.log(`Spawning agent of type ${agentType} with personality ${personality} and codename ${codename}`);
+        // For now, we'll just add a dummy agent to the store
+        const newAgent = {
+          id: `agent-${Date.now()}`,
+          type: agentType,
+          status: 'spawned',
+          personality,
+          codename,
+          currentTask: 'Initializing',
+          toolsCount: 0,
+          findingsCount: 0,
+        };
+        set((state) => ({ agents: [...state.agents, newAgent] }));
+      },
+      stopAgent: async (agentId) => {
+        console.log(`Stopping agent ${agentId}`);
+        set((state) => ({
+          agents: state.agents.map((a) =>
+            a.id === agentId ? { ...a, status: 'stopped' } : a
+          ),
+        }));
+      },
+      getAgentHeartbeat: async (agentId) => {
+        console.log(`Checking heartbeat for agent ${agentId}`);
+        // Simulate heartbeat check
+        const agent = useAgentStore.getState().agents.find(a => a.id === agentId);
+        if (agent) {
+          set((state) => ({
+            agents: state.agents.map((a) =>
+              a.id === agentId ? { ...a, status: 'heartbeat' } : a
+            ),
+          }));
+          return true;
+        }
+        return false;
+      },
+      handoffTask: async (fromAgentId, toAgentId, task) => {
+        console.log(`Handoff task from ${fromAgentId} to ${toAgentId}: ${task}`);
+        set((state) => ({
+          agents: state.agents.map((a) => {
+            if (a.id === fromAgentId) {
+              return { ...a, status: 'handoff', currentTask: `Handoff to ${toAgentId}` };
+            } else if (a.id === toAgentId) {
+              return { ...a, status: 'working', currentTask: task };
+            }
+            return a;
+          }),
+        }));
+      },
     }),
     {
       name: 'harbinger-agents',

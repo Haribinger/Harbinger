@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Plus,
@@ -9,23 +9,27 @@ import {
   Palette,
 } from 'lucide-react'
 import { useAgentStore } from '../../store/agentStore'
+import { agentOrchestrator } from '../../core/orchestrator'
 import { useMCPStore } from '../../store/mcpStore'
 import CreateAgentModal from '../../components/Agents/CreateAgentModal'
 import type { Agent } from '../../types'
 
 function Agents() {
-  const { agents, personalities, addAgent, removeAgent, setActiveAgent } = useAgentStore()
+  const { agents, personalities, addAgent, removeAgent, setActiveAgent, spawnAgent, stopAgent, handoffTask } = useAgentStore()
   const { builtinTools } = useMCPStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  const handleCreateAgent = (agentData: Partial<Agent>) => {
-    const newAgent: Agent = {
-      id: Date.now().toString(),
+  const handleCreateAgent = async (agentData: Partial<Agent>) => {
+    const newAgent = agentOrchestrator.spawnAgent(
+      agentData.type || 'default',
+      (typeof agentData.personality === 'object' ? agentData.personality.id : agentData.personality) || 'default',
+      agentData.codename || `Agent-${Date.now().toString().slice(-4)}`
+    );
+    addAgent({
+      ...newAgent,
       name: agentData.name || 'New Agent',
       description: agentData.description || '',
       color: agentData.color || '#6366f1',
-      personality: agentData.personality,
-      status: 'offline',
       capabilities: agentData.capabilities || [],
       tools: agentData.tools || builtinTools.filter(t => t.enabled),
       mcps: [],
@@ -36,10 +40,21 @@ function Agents() {
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }
-    addAgent(newAgent)
-    setShowCreateModal(false)
-  }
+    });
+    setShowCreateModal(false);
+  };
+
+  useEffect(() => {
+    const handleStatusChange = (agent) => {
+      useAgentStore.getState().updateAgent(agent.id, agent);
+    };
+
+    agentOrchestrator.on('agentStatusChange', handleStatusChange);
+
+    return () => {
+      agentOrchestrator.off('agentStatusChange', handleStatusChange);
+    };
+  }, []);
 
   return (
     <motion.div
@@ -60,7 +75,7 @@ function Agents() {
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Create Agent</span>
+            <span>Spawn Agent</span>
           </button>
         </div>
       </div>
@@ -81,18 +96,20 @@ function Agents() {
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
                   style={{ backgroundColor: agent.color }}
                 >
-                  {agent.name.charAt(0).toUpperCase()}
+                  {agent.codename.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="font-semibold">{agent.name}</h3>
+                  <h3 className="font-semibold">{agent.name} ({agent.codename})</h3>
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${
-                      agent.status === 'online' ? 'bg-green-500' :
-                      agent.status === 'busy' ? 'bg-yellow-500' :
+                      agent.status === 'heartbeat' ? 'bg-green-500 animate-pulse' :
+                      agent.status === 'working' ? 'bg-yellow-500' :
+                      agent.status === 'stopped' ? 'bg-red-500' :
                       'bg-gray-500'
                     }`}></span>
                     <span className="text-xs text-text-secondary capitalize">{agent.status}</span>
                   </div>
+                  <span className="text-xs text-text-secondary">{agent.currentTask}</span>
                 </div>
               </div>
 
@@ -132,7 +149,11 @@ function Agents() {
             <div className="flex items-center justify-between pt-4 border-t border-border">
               <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <Terminal className="w-4 h-4" />
-                <span>{agent.tools.length} tools</span>
+                <span>{agent.toolsCount} tools</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <Palette className="w-4 h-4" />
+                <span>{agent.findingsCount} findings</span>
               </div>
               <span className="text-xs text-text-secondary">
                 {agent.config.model}

@@ -5,8 +5,12 @@ export interface Agent {
   description: string
   avatar?: string
   color: string
-  personality?: AgentPersonality
-  status: 'online' | 'busy' | 'offline' | 'error'
+  personality?: string
+  status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped' | 'online' | 'busy' | 'offline' | 'error'
+  codename: string
+  currentTask: string
+  toolsCount: number
+  findingsCount: number
   capabilities: string[]
   tools: Tool[]
   mcps: MCP[]
