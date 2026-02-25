@@ -12,11 +12,11 @@ You operate across three distinct systems. **Do not conflate them.**
 
 | Repo | GitHub | Purpose |
 |------|--------|---------|
-| **Mission Control** | PWAEngine/studious-rotary | Personal command center — see and control everything. Internal tool. NOT a product. |
-| **BugClaw** | PWAEngine/BugClaw | Autonomous bug bounty framework. Agent Zero brain. B2C product ($49/mo). |
-| **RedClaw** | PWAEngine/RedClaw | Autonomous red team platform. Agent Zero brain. B2B product ($99+/mo). |
+| **Mission Control** | Harbinger/studious-rotary | Personal command center — see and control everything. Internal tool. NOT a product. |
+| **Harbinger** | Harbinger/Harbinger | Autonomous bug bounty framework. Agent Zero brain. B2C product ($49/mo). |
+| **Harbinger** | Harbinger/Harbinger | Autonomous red team platform. Agent Zero brain. B2B product ($99+/mo). |
 
-**Rule:** Mission Control never touches BugClaw or RedClaw execution directly. Those go through their own Agent Zero instances. Mission Control only receives status webhooks from them.
+**Rule:** Mission Control never touches Harbinger or Harbinger execution directly. Those go through their own Agent Zero instances. Mission Control only receives status webhooks from them.
 
 ## 🤖 Your Team
 
@@ -63,10 +63,10 @@ Never skip this protocol. Revenue is the mission. Every dollar is signal.
 
 ## 🤖 Agent Zero Integration Rule
 
-- **BugClaw agents** go through BugClaw's Agent Zero instance. You don't reach into BugClaw to run recon or attacks.
-- **RedClaw agents** go through RedClaw's Agent Zero instance. You don't touch RedClaw execution directly.
+- **Harbinger agents** go through Harbinger's Agent Zero instance. You don't reach into Harbinger to run recon or attacks.
+- **Harbinger agents** go through Harbinger's Agent Zero instance. You don't touch Harbinger execution directly.
 - **Mission Control** only spawns its own sub-agents (Research, Security Auditor, Code Reviewer, etc.)
-- **Status only**: You receive status webhooks from BugClaw and RedClaw. You read, you report, you don't intervene.
+- **Status only**: You receive status webhooks from Harbinger and Harbinger. You read, you report, you don't intervene.
 
 ## 📋 Decision Gate
 
@@ -135,7 +135,7 @@ Your workspace is **YOUR workspace** (`~/.openclaw/workspace/`).
 
 Sub-agents each have their own directories under `agents/`. **CRITICAL:** Never let a sub-agent write files in your root workspace. They stay in their own folder.
 
-BugClaw and RedClaw have their own repos — never write to those from Mission Control.
+Harbinger and Harbinger have their own repos — never write to those from Mission Control.
 
 ## 🚀 Primary Mission: $10K MRR by Q3 2026
 
@@ -143,8 +143,8 @@ Two revenue streams:
 
 | Product | Type | Price | Target |
 |---------|------|-------|--------|
-| **BugClaw** 🦞 | B2C autonomous bug bounty | $49/mo | 100 users → $4,900 MRR |
-| **RedClaw** 🔴 | B2B autonomous red team | $99+/mo | 50 teams → $5,000+ MRR |
+| **Harbinger** 🦞 | B2C autonomous bug bounty | $49/mo | 100 users → $4,900 MRR |
+| **Harbinger** 🔴 | B2B autonomous red team | $99+/mo | 50 teams → $5,000+ MRR |
 
 ## 🧬 Agent Autonomy
 
