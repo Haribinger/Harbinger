@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bug Bounty Module Marketplace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ffbf00",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#12110a",
+                        "neutral-dark": "#231e0f",
+                        "border-dark": "#3a341c",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .technical-grid {
+            background-size: 20px 20px;
+            background-image: radial-gradient(circle, #3a341c 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-display">
+<!-- Header / Navigation -->
+<header class="border-b border-border-dark bg-background-light dark:bg-neutral-dark/80 backdrop-blur-md sticky top-0 z-50">
+<div class="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center">
+<span class="material-icons text-background-dark text-lg">radar</span>
+</div>
+<div>
+<h1 class="text-lg font-bold tracking-tight uppercase">Recon<span class="text-primary">Registry</span></h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest leading-none">High-Density Module Marketplace</p>
+</div>
+</div>
+<div class="flex-1 max-w-md mx-12">
+<div class="relative group">
+<span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+<input class="w-full bg-slate-100 dark:bg-background-dark/50 border border-slate-200 dark:border-border-dark rounded px-10 py-2 text-sm focus:outline-none focus:border-primary transition-colors" placeholder="Search modules (e.g. nuclei, subfinder)..." type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 border border-slate-300 dark:border-border-dark rounded text-[10px] text-slate-400">CTRL + K</div>
+</div>
+</div>
+<nav class="flex items-center gap-6">
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Marketplace</a>
+<button class="flex items-center gap-2 bg-primary/10 border border-primary/30 px-3 py-1.5 rounded text-primary text-sm font-semibold hover:bg-primary/20 transition-all">
+<span class="material-icons text-sm">inventory_2</span>
+                    My Library
+                </button>
+</nav></div>
+</header>
+<main class="max-w-[1600px] mx-auto px-6 py-8">
+<!-- Filter Toolbar -->
+<div class="flex flex-wrap items-center gap-4 mb-8 p-4 bg-slate-50 dark:bg-neutral-dark border border-slate-200 dark:border-border-dark rounded-lg">
+<div class="flex items-center gap-2">
+<span class="text-[10px] uppercase font-bold text-slate-500">Filter By:</span>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded px-3 py-1.5 pr-8 text-xs font-medium focus:outline-none focus:border-primary">
+<option>Module Type: All</option>
+<option>Reconnaissance</option>
+<option>Scanner</option>
+<option>Fuzzer</option>
+</select>
+<span class="material-icons absolute right-2 top-1/2 -translate-y-1/2 text-xs pointer-events-none">expand_more</span>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded px-3 py-1.5 pr-8 text-xs font-medium focus:outline-none focus:border-primary">
+<option>Min. Speed: Any</option>
+<option>&gt; 100 req/s</option>
+<option>&gt; 500 req/s</option>
+<option>&gt; 1k req/s</option>
+</select>
+<span class="material-icons absolute right-2 top-1/2 -translate-y-1/2 text-xs pointer-events-none">expand_more</span>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded px-3 py-1.5 pr-8 text-xs font-medium focus:outline-none focus:border-primary">
+<option>Tech Stack: All</option>
+<option>Go</option>
+<option>Python</option>
+<option>Rust</option>
+</select>
+<span class="material-icons absolute right-2 top-1/2 -translate-y-1/2 text-xs pointer-events-none">expand_more</span>
+</div>
+<div class="h-6 w-px bg-slate-300 dark:bg-border-dark mx-2"></div>
+<div class="flex items-center gap-2 ml-auto">
+<button class="p-1.5 bg-primary text-background-dark rounded">
+<span class="material-icons text-sm">grid_view</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-primary">
+<span class="material-icons text-sm">list</span>
+</button>
+</div>
+</div>
+<!-- Module Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 technical-grid p-2">
+<!-- Module Card: Subfinder -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">ProjectDiscovery</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Subfinder</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v2.5.8</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Fast passive subdomain enumeration tool that retrieves subdomains from curated sources.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-blue-400">search</span>
+<span class="text-xs font-medium">Recon</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">1,200 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star_half</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.8)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: Nuclei -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">ProjectDiscovery</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Nuclei</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v3.1.2</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Template-based vulnerability scanner targeting various protocols and technologies.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-red-400">security</span>
+<span class="text-xs font-medium">Scanner</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">500 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(5.0)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: FFuF -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">FFUF Team</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">FFuF</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v2.1.0</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Fast web fuzzer written in Go. Ideal for directory discovery and parameter fuzzing.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-yellow-400">dynamic_form</span>
+<span class="text-xs font-medium">Fuzzer</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">2,500 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star_outline</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.1)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: Amass -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">OWASP</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Amass</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v4.0.0</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">In-depth attack surface mapping and asset discovery tool by OWASP.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-blue-400">search</span>
+<span class="text-xs font-medium">Recon</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-orange-400">bolt</span>
+<span class="text-xs font-medium font-mono">150 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star_half</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.5)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Additional Technical Cards with same style -->
+<!-- Module Card: Gitleaks -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">Gitleaks Org</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Gitleaks</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v8.18.1</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Scan git repositories for secrets like passwords, api-keys, and tokens.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-red-400">security</span>
+<span class="text-xs font-medium">Scanner</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">950 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.9)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: Dirsearch -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">Mauro Soria</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Dirsearch</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v0.4.3</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Advanced command-line tool designed to brute force directories and files in webservers.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-yellow-400">dynamic_form</span>
+<span class="text-xs font-medium">Fuzzer</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-orange-400">bolt</span>
+<span class="text-xs font-medium font-mono">400 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star_outline</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.0)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> PY
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: Httpx -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">ProjectDiscovery</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Httpx</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v1.3.7</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">Multi-purpose HTTP toolkit allow running multiple probes using retryablehttp library.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-blue-400">search</span>
+<span class="text-xs font-medium">Recon</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">3,000 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.9)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+<!-- Module Card: Naabu -->
+<div class="bg-white dark:bg-neutral-dark border border-slate-200 dark:border-border-dark p-5 rounded hover:border-primary group transition-all relative overflow-hidden">
+<div class="flex items-start justify-between mb-4">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-tighter mb-1">ProjectDiscovery</span>
+<h3 class="text-lg font-bold leading-none group-hover:text-primary transition-colors">Naabu</h3>
+</div>
+<span class="px-2 py-0.5 bg-slate-100 dark:bg-background-dark border border-slate-200 dark:border-border-dark text-[10px] font-mono rounded">v2.1.6</span>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 h-10 overflow-hidden line-clamp-2">A fast port scanner written in Go with a focus on reliability and simplicity.</p>
+<div class="grid grid-cols-2 gap-4 mb-5 border-y border-slate-100 dark:border-border-dark py-3">
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Type</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-blue-400">search</span>
+<span class="text-xs font-medium">Recon</span>
+</div>
+</div>
+<div>
+<span class="block text-[10px] uppercase text-slate-500 font-bold mb-1">Speed Score</span>
+<div class="flex items-center gap-1.5">
+<span class="material-icons text-sm text-green-400">bolt</span>
+<span class="text-xs font-medium font-mono">5,000 req/s</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-5">
+<div class="flex text-primary">
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star</span>
+<span class="material-icons text-sm">star_half</span>
+<span class="text-[10px] text-slate-500 ml-1 mt-0.5">(4.7)</span>
+</div>
+<div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> GO
+                    </div>
+</div>
+<button class="w-full bg-primary hover:bg-primary/90 text-background-dark font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
+<span class="material-icons text-sm">download</span>
+                    INSTALL MODULE
+                </button>
+</div>
+</div>
+<!-- Pagination / Load More -->
+<div class="mt-12 flex flex-col items-center">
+<button class="px-8 py-3 bg-slate-100 dark:bg-neutral-dark border border-slate-200 dark:border-border-dark rounded font-bold text-sm hover:border-primary transition-all mb-4">
+                LOAD MORE MODULES
+            </button>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Showing 8 of 246 modules available</p>
+</div>
+</main>
+<!-- Footer Stats -->
+<footer class="border-t border-border-dark mt-20 py-8 bg-background-light dark:bg-neutral-dark/30">
+<div class="max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-8">
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500 uppercase font-bold mb-1">Network Status</span>
+<div class="flex items-center gap-2 text-xs font-mono">
+<span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    API CLUSTER: CONNECTED
+                </div>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500 uppercase font-bold mb-1">Total Requests Logged</span>
+<div class="text-xs font-mono">1.2B REQ / LAST 24H</div>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500 uppercase font-bold mb-1">Active Researchers</span>
+<div class="text-xs font-mono">14,204 ONLINE</div>
+</div>
+<div class="flex flex-col items-end">
+<div class="flex gap-4">
+<a class="text-slate-400 hover:text-primary transition-colors" href="#"><span class="material-icons text-lg">code</span></a>
+<a class="text-slate-400 hover:text-primary transition-colors" href="#"><span class="material-icons text-lg">terminal</span></a>
+<a class="text-slate-400 hover:text-primary transition-colors" href="#"><span class="material-icons text-lg">shield</span></a>
+</div>
+<span class="text-[10px] text-slate-600 mt-2">© 2024 RECON-REGISTRY-MARKETPLACE</span>
+</div>
+</div>
+</footer>
+</body></html>

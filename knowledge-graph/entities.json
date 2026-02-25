@@ -1,0 +1,26 @@
+[
+  {
+    "id": "vodafone-oman",
+    "type": "target",
+    "name": "Vodafone Oman",
+    "domain": "vodafone.om",
+    "program": "HackerOne",
+    "createdAt": 1771748779027
+  },
+  {
+    "id": "city-vienna",
+    "type": "target",
+    "name": "City of Vienna",
+    "domain": "wien.gv.at",
+    "program": "Bugcrowd",
+    "createdAt": 1771748779027
+  },
+  {
+    "id": "jora",
+    "type": "target",
+    "name": "Jora",
+    "domain": "jora.com",
+    "program": "Bugcrowd",
+    "createdAt": 1771748779027
+  }
+]
