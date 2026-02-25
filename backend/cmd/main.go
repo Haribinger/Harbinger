@@ -20,6 +20,66 @@ import (
 
 // ---- Config ----
 
+type VPSNode struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+	IP       string `json:"ip"`
+	Status   string `json:"status"`
+	Latency  int64  `json:"latency"`
+	Region   string `json:"region"`
+	OS       string `json:"os"`
+}
+
+type C2Server struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	VPSID  string `json:"vpsId"`
+}
+
+type Implant struct {
+	ID          string `json:"id"`
+	C2ID        string `json:"c2Id"`
+	Hostname    string `json:"hostname"`
+	IP          string `json:"ip"`
+	Status      string `json:"status"`
+	LastCheckIn string `json:"lastCheckIn"`
+}
+
+type Playbook struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Category     string   `json:"category"`
+	Description  string   `json:"description"`
+	MitreAttacks []string `json:"mitreAttacks"`
+	Steps        []string `json:"steps"`
+}
+
+// In-memory storage for demonstration purposes
+var vpsNodes = []VPSNode{}
+var c2Servers = []C2Server{}
+var implants = []Implant{}
+var playbooks = []Playbook{
+	{
+		ID:          "pb-1",
+		Name:        "Initial Access - Phishing",
+		Category:    "Initial Access",
+		Description: "Execute a targeted phishing campaign to gain initial access.",
+		MitreAttacks: []string{"T1566.001 - Spearphishing Attachment"},
+		Steps:       []string{"Craft phishing email", "Send emails", "Monitor clicks", "Deploy implant"},
+	},
+	{
+		ID:          "pb-2",
+		Name:        "Persistence - Scheduled Task",
+		Category:    "Persistence",
+		Description: "Establish persistence using a scheduled task.",
+		MitreAttacks: []string{"T1053.005 - Scheduled Task/Job: Scheduled Task"},
+		Steps:       []string{"Create scheduled task", "Verify execution"},
+	},
+}
+
 type Config struct {
 	AppName           string
 	AppEnv            string
@@ -1162,6 +1222,170 @@ func handleDockerAgents(w http.ResponseWriter, r *http.Request) {
 
 // ---- Router ----
 
+func handleAddVpsNode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	var newNode VPSNode
+	if err := json.NewDecoder(r.Body).Decode(&newNode); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+
+	newNode.ID = fmt.Sprintf("vps-%d", time.Now().UnixNano())
+	newNode.Status = "configuring"
+	vpsNodes = append(vpsNodes, newNode)
+	writeJSON(w, http.StatusCreated, newNode)
+}
+
+func handleGetVpsNodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, vpsNodes)
+}
+
+func handleTestVpsConnection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
+	id = strings.TrimSuffix(id, "/test")
+
+	for i, vps := range vpsNodes {
+		if vps.ID == id {
+			vpsNodes[i].Status = "connected"
+			vpsNodes[i].Latency = 50 // Simulate latency
+			vpsNodes[i].Region = "us-east-1"
+			vpsNodes[i].OS = "Ubuntu"
+			writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "VPS not found"})
+}
+
+func handleSetupVps(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
+	id = strings.TrimSuffix(id, "/setup")
+
+	for i, vps := range vpsNodes {
+		if vps.ID == id {
+			vpsNodes[i].Status = "configured"
+			writeJSON(w, http.StatusOK, map[string]string{"status": "configured"})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "VPS not found"})
+}
+
+func handleConnectC2Server(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	var newC2 C2Server
+	if err := json.NewDecoder(r.Body).Decode(&newC2); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+
+	newC2.ID = fmt.Sprintf("c2-%d", time.Now().UnixNano())
+	newC2.Status = "connected"
+	c2Servers = append(c2Servers, newC2)
+	writeJSON(w, http.StatusCreated, newC2)
+}
+
+func handleGetC2Status(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, c2Servers)
+}
+
+func handleGetImplants(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, implants)
+}
+
+func handleCreateListener(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	var listenerData struct {
+		C2ID string `json:"c2Id"`
+		Type string `json:"type"`
+		Port int    `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&listenerData); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+
+	// Simulate listener creation
+	writeJSON(w, http.StatusOK, map[string]string{"status": "listener created"})
+}
+
+func handleGetInfrastructureGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	// For now, return a dummy graph or derive from existing data
+	graph := map[string]interface{}{
+		"nodes": vpsNodes,
+		"edges": []interface{}{},
+	}
+	writeJSON(w, http.StatusOK, graph)
+}
+
+func handleGetPlaybooks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, playbooks)
+}
+
+func handleRunPlaybook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/playbooks/")
+	id = strings.TrimSuffix(id, "/run")
+
+	for _, pb := range playbooks {
+		if pb.ID == id {
+			// Simulate playbook execution
+			writeJSON(w, http.StatusOK, map[string]string{"status": "playbook started"})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Playbook not found"})
+}
+
 func setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
@@ -1272,7 +1496,92 @@ func setupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/scans", handleScans)
 	mux.HandleFunc("/api/v1/vulnerabilities", handleVulnerabilities)
 
-	// MCP Tool Execution
+
+	// Red Team
+	mux.HandleFunc("/api/v1/redteam/vps", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleAddVpsNode(w, r)
+		} else if r.Method == http.MethodGet {
+			handleGetVpsNodes(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+	mux.HandleFunc("/api/v1/redteam/vps/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 {
+			id := parts[0]
+			action := parts[1]
+			if action == "test" && r.Method == http.MethodPost {
+				handleTestVpsConnection(w, r)
+			} else if action == "setup" && r.Method == http.MethodPost {
+				handleSetupVps(w, r)
+			} else {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
+			}
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
+	})
+tmux.HandleFunc("/api/v1/redteam/c2/connect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleConnectC2Server(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+tmux.HandleFunc("/api/v1/redteam/c2/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetC2Status(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+tmux.HandleFunc("/api/v1/redteam/c2/implants", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetImplants(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+tmux.HandleFunc("/api/v1/redteam/c2/listeners", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleCreateListener(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+tmux.HandleFunc("/api/v1/redteam/infrastructure", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetInfrastructureGraph(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+	mux.HandleFunc("/api/v1/redteam/playbooks", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetPlaybooks(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		}
+	})
+	mux.HandleFunc("/api/v1/redteam/playbooks/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/playbooks/")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 {
+			id := parts[0]
+			action := parts[1]
+			if action == "run" && r.Method == http.MethodPost {
+				handleRunPlaybook(w, r)
+			} else {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
+			}
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
+	})
+// MCP Tool Execution
 	mux.HandleFunc("/api/v1/mcp/execute", handleMCPExecute)
 	mux.HandleFunc("/api/v1/mcp/tools", handleMCPTools)
 
