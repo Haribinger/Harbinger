@@ -15,6 +15,14 @@ Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Inte
 [![Docker Pulls](https://img.shields.io/docker/pulls/haribinger/harbinger)](https://hub.docker.com/r/haribinger/harbinger)
 [![CI Status](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml/badge.svg)](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml)
 
+## Preview
+
+![Attack Surface Map](workflows/stitch/bug_bounty_attack_surface_map_1/screen.png)
+*Real-time attack surface mapping with interactive node graph*
+
+![P1 Vulnerability Deep-Dive](workflows/stitch/p1_vulnerability_deep-dive_view/screen.png)
+*P1 vulnerability analysis with evidence vault, triage controls, and auto-reporting*
+
 ## 🌟 Overview
 
 Harbinger is an advanced, autonomous offensive security framework designed for comprehensive vulnerability discovery and management. Leveraging a local-first approach and powered by the Model Context Protocol (MCP), Harbinger orchestrates a swarm of specialized agents to mimic real-world adversary tactics, providing unparalleled depth in security assessments.
