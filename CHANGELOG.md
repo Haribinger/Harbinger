@@ -1,33 +1,16 @@
-# Changelog
-
-All notable changes to Harbinger are documented here.
-
-## [0.9.0] - 2025-02-25
+## [0.9.1] - 2025-02-25
 
 ### Added
-- Agent Orchestrator with swarm management, heartbeats, handoffs
-- 6 agent profiles: PATHFINDER, BREACH, PHANTOM, SPECTER, CIPHER, SCRIBE
-- Bounty Hub with target sync from bounty-targets-data
-- MCP Tool Execution layer with streaming and tool chaining
-- Docker Agent Spawning with per-agent containers
-- Red Team system: VPS wizard, Sliver C2, Mythic/Adaptix integration
-- Infrastructure Map with visual graph
-- Playbooks with MITRE ATT&CK mapping
-- Security hardening: MFA, JWT rotation, AES-256-GCM, proxy chains
-- Hostinger VPS + Cloudflare integration
-- n8n workflow automation with 4 pre-built templates
-- Skills library: 12 skill files (recon, web, cloud, OSINT, reporting)
-- Agent system prompts and executable skill scripts
-- Beginner-friendly documentation (6 guides)
-- GitHub Actions CI/CD pipeline
-- Sync script and one-command installer
-- ASCII branding and agent banners
-- Knowledge graph, memory system, workflows
-- OpenClaw migration compatibility layer
+- Caido proxy integration (replaces Burp Suite) with GraphQL API
+- 12 Go security tools from 1hehaq: shef, idor-mcp, recx, roq, ceye, faviqon, ppmap, pdsi, conquer, dorq, xssmap, jsus
+- MCPwn MCP security auditing integration
+- IDOR MCP server plugin with Dockerfile
+- Go tools build script (build-all.sh)
+- Caido frontend component with setup wizard
 
-### Infrastructure
-- 35+ backend API endpoints
-- React/Vite frontend with 10+ pages
-- Go backend with health checks and metrics
-- Docker Compose with PostgreSQL, Redis, Neo4j
-- 4 MCP plugin containers
+### Removed
+- Old Mandiant Harbinger subfolder (fully absorbed into main architecture)
+
+### Changed
+- Updated tool inventory with Caido, Go tools, MCPwn
+
