@@ -1,6 +1,6 @@
 # Harbinger Go Backend API
 # Multi-stage build: compile with full Go toolchain, run on minimal image
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 ARG VERSION=1.0.0
 
@@ -21,7 +21,7 @@ RUN go build -ldflags="-s -w -X main.version=${VERSION}" -o /app/harbinger-api .
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/harbinger-api ./cmd/main.go
 
 # ---- Runtime image ----
-FROM alpine:3.18
+FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates curl tzdata
 
