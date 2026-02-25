@@ -45,7 +45,7 @@
 Everything runs behind nginx on port 80. Single URL for everything.
 
 ```bash
-git clone https://github.com/kdairatchi/harbinger.git
+git clone https://github.com/Haribinger/harbinger.git
 cd harbinger
 cp .env.example .env
 # Edit .env — set DB_PASSWORD, JWT_SECRET, and optional service URLs
