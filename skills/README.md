@@ -1,16 +1,78 @@
-# Skills System Overview
+# Harbinger Skills System
 
-This document outlines the Harbinger skills system, how agents learn, and how to add custom skills.
+Each skill is a self-contained package mapped to an agent. Every skill directory contains:
+- `SKILL.md` — frontmatter metadata + workflow instructions
+- `references/` — detailed technique docs loaded on demand
+- `scripts/` — executable automation scripts
 
-## How Agents Learn
+## Skill → Agent Mapping
 
-Harbinger agents learn through a combination of pre-defined skills and continuous learning mechanisms. Each skill provides a structured approach to performing specific tasks, such as reconnaissance or vulnerability exploitation. Agents can adapt and improve their performance by applying these skills in various scenarios and learning from the outcomes.
+| Skill | Agent | Focus |
+|-------|-------|-------|
+| `recon/` | PATHFINDER | Subdomain enum, port scanning, asset discovery |
+| `web/` | BREACH | XSS, SQLi, SSRF, API testing, nuclei |
+| `cloud/` | PHANTOM | AWS/Azure/GCP audits, IAM escalation, metadata |
+| `osint/` | SPECTER | Email enum, person lookup, social footprinting |
+| `reporting/` | SCRIBE | Report structure, CVSS, impact statements |
+| `binary-re/` | CIPHER | Ghidra/r2 analysis, pwntools exploit dev |
 
-## Adding Custom Skills
+## Directory Structure
 
-Custom skills can be added to the Harbinger system to extend its capabilities. Follow these steps to integrate new skills:
+```
+skills/
+├── recon/
+│   ├── SKILL.md
+│   ├── references/
+│   │   ├── subdomain-enumeration.md
+│   │   └── port-scanning.md
+│   └── scripts/
+│       └── recon-full.sh
+├── web/
+│   ├── SKILL.md
+│   ├── references/
+│   │   ├── xss.md
+│   │   ├── sql-injection.md
+│   │   ├── ssrf.md
+│   │   └── api-testing.md
+│   └── scripts/
+│       └── web-scan.sh
+├── cloud/
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── aws-misconfig.md
+│   └── scripts/
+│       └── cloud-audit.sh
+├── osint/
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── email-enumeration.md
+│   └── scripts/
+│       └── osint-person.sh
+├── reporting/
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── writing-winning-reports.md
+│   └── scripts/
+│       └── generate-report.sh
+└── binary-re/
+    ├── SKILL.md
+    ├── references/
+    │   ├── ghidra.md
+    │   └── exploit-patterns.md
+    └── scripts/
+        └── analyze-binary.sh
+```
 
-1.  **Define the Skill:** Create a new Markdown file in the `skills/` directory, detailing the methodology, tools, and commands associated with the skill.
-2.  **Structure the Content:** Organize the skill content with clear headings, examples, and explanations. Use code blocks for commands and configurations.
-3.  **Integrate with Agents:** Ensure the new skill is properly referenced and accessible by the agent framework. This may involve updating configuration files or skill manifests.
-4.  **Test the Skill:** Thoroughly test the custom skill to verify its functionality and effectiveness in different scenarios.
+## Adding a Custom Skill
+
+1. Create `skills/<skill-name>/SKILL.md` with YAML frontmatter:
+   ```yaml
+   ---
+   name: skill-name
+   description: >
+     What this skill does and when it triggers.
+   ---
+   ```
+2. Add `references/` for methodology docs
+3. Add `scripts/` for automation — make executable with `chmod +x`
+4. Reference scripts/references from SKILL.md body

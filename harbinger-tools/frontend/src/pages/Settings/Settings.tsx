@@ -404,7 +404,7 @@ function Settings() {
                       className="w-full bg-background border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary"
                     >
                       {activeProvider === 'ollama' && ollamaModels.length > 0 ? (
-                        ollamaModels.map((model) => (
+                        ollamaModels.map((model: string) => (
                           <option key={model} value={model}>{model}</option>
                         ))
                       ) : activeProvider === 'ollama' ? (

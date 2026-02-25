@@ -7,7 +7,7 @@ echo "🦞 Starting Harbinger Setup..."
 
 # 1. Install dependencies
 echo "[*] Installing project dependencies..."
-npm install
+pnpm install
 
 # 2. Initialize the agent infrastructure (if needed)
 echo "[*] Initializing agent infrastructure..."

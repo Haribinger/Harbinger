@@ -40,6 +40,24 @@ const PROVIDER_INFO: Record<Provider, { name: string; icon: React.ElementType; d
     description: 'Gemini models - Fast and efficient',
     color: 'text-blue-400',
   },
+  gemini: {
+    name: 'Gemini',
+    icon: Database,
+    description: 'Google Gemini models - Multimodal',
+    color: 'text-blue-300',
+  },
+  groq: {
+    name: 'Groq',
+    icon: Cpu,
+    description: 'Ultra-fast LLM inference via Groq',
+    color: 'text-yellow-400',
+  },
+  mistral: {
+    name: 'Mistral',
+    icon: Server,
+    description: 'Mistral AI - European frontier models',
+    color: 'text-pink-400',
+  },
   ollama: {
     name: 'Ollama',
     icon: Cpu,
@@ -301,7 +319,7 @@ export function SecretsManager() {
             >
               {activeProvider === 'ollama' ? (
                 ollamaModels.length > 0 ? (
-                  ollamaModels.map((model) => (
+                  ollamaModels.map((model: string) => (
                     <option key={model} value={model}>
                       {model}
                     </option>
@@ -310,7 +328,7 @@ export function SecretsManager() {
                   <option value="">No models found</option>
                 )
               ) : (
-                PROVIDER_MODELS[activeProvider].map((model) => (
+                PROVIDER_MODELS[activeProvider].map((model: string) => (
                   <option key={model} value={model}>
                     {model}
                   </option>

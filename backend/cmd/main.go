@@ -556,6 +556,14 @@ func main() {
 	mux.HandleFunc("GET /api/v1/dashboard/activity", authMiddleware(handleDashboardActivity))
 	mux.HandleFunc("GET /api/v1/dashboard/health", authMiddleware(handleDashboardHealth))
 
+	// Skills — reads from SKILLS_DIR (defaults to /app/skills in Docker)
+	mux.HandleFunc("GET /api/v1/skills", authMiddleware(handleListSkills))
+	mux.HandleFunc("GET /api/v1/skills/{id}", authMiddleware(handleGetSkill))
+
+	// Also mount under /api/skills for direct frontend calls (no v1 prefix)
+	mux.HandleFunc("GET /api/skills", authMiddleware(handleListSkills))
+	mux.HandleFunc("GET /api/skills/{id}", authMiddleware(handleGetSkill))
+
 	log.Printf("Server starting on :%s\n", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, corsMiddleware(mux)))
 }

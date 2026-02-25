@@ -1,14 +1,15 @@
 import { Edge, Node } from '@xyflow/react';
 
-export interface ToolNodeData {
+// @xyflow/react requires node data types to satisfy Record<string, unknown>
+export interface ToolNodeData extends Record<string, unknown> {
   toolName: string;
   category: 'Recon' | 'Web' | 'Cloud' | 'OSINT' | 'Binary' | 'Reporting';
   status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
   outputPreview: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 
-export interface AgentNodeData {
+export interface AgentNodeData extends Record<string, unknown> {
   agentAvatar: string;
   codename: string;
   assignedToolsCount: number;
@@ -16,7 +17,7 @@ export interface AgentNodeData {
   agentId: string;
 }
 
-export interface DecisionNodeData {
+export interface DecisionNodeData extends Record<string, unknown> {
   condition: string;
 }
 
