@@ -1,10 +1,10 @@
-# harbinger - AI Agent NPM Package
+# harbinger - AI Agent PNPM Package
 
 This document explains the harbinger codebase for AI assistants working on this package.
 
 ## What is harbinger?
 
-harbinger is an **NPM package** for creating custom autonomous AI agents. Users install it via `npx harbinger init`, which scaffolds a Next.js project. It features a two-layer architecture: a Next.js Event Handler for orchestration (webhooks, Telegram chat, cron scheduling) and a Docker Agent for autonomous task execution via the Pi coding agent.
+harbinger is an **PNPM package** for creating custom autonomous AI agents. Users install it via `pnpx harbinger init`, which scaffolds a Next.js project. It features a two-layer architecture: a Next.js Event Handler for orchestration (webhooks, Telegram chat, cron scheduling) and a Docker Agent for autonomous task execution via the Pi coding agent.
 
 ## Package vs. Templates — Where Code Goes
 
