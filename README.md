@@ -9,6 +9,8 @@
 
 Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Intelligence
 
+**[harbinger.manus.space](https://harbinger.manus.space/)**
+
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Haribinger/Harbinger)](https://github.com/Haribinger/Harbinger/releases)
 [![GitHub stars](https://img.shields.io/github/stars/Haribinger/Harbinger?style=social)](https://github.com/Haribinger/Harbinger/stargazers)

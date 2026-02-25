@@ -25,7 +25,7 @@ import { useBrowserStore } from '../../store/browserStore'
 import { useWorkflowStore } from '../../store/workflowStore'
 import { dashboardApi, type ActivityItem, type ServiceHealth } from '../../api/dashboard'
 
-// Design tokens — Obsidian Command / REDCLAW aesthetic
+// Design tokens — Obsidian Command
 const C = {
   bg: '#0a0a0f',
   surface: '#0d0d15',
