@@ -48,6 +48,94 @@ type Implant struct {
 	LastCheckIn string `json:"lastCheckIn"`
 }
 
+type MFASecret struct {
+	UserID string `json:"user_id"`
+	Secret string `json:"secret"`
+}
+
+type Session struct {
+	ID           string `json:"id"`
+	UserID       string `json:"user_id"`
+	Device       string `json:"device"`
+	IPAddress    string `json:"ip_address"`
+	Location     string `json:"location"`
+	LastActivity int64  `json:"last_activity"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
+type APIKey struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Name      string `json:"name"`
+	Key       string `json:"key"` // Hashed or encrypted in real scenarios
+	CreatedAt int64  `json:"created_at"`
+	LastUsed  int64  `json:"last_used"`
+}
+
+type AuditLogEntry struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Action    string `json:"action"`
+	Details   string `json:"details"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type HostingerConfig struct {
+	UserID    string `json:"user_id"`
+	APIKey    string `json:"api_key"`
+	Connected bool   `json:"connected"`
+}
+
+type CloudflareConfig struct {
+	UserID    string `json:"user_id"`
+	APIToken  string `json:"api_token"`
+	Connected bool   `json:"connected"`
+}
+
+type HostingerVPS struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Status    string  `json:"status"`
+	IPAddress string  `json:"ip_address"`
+	Plan      string  `json:"plan"`
+	Region    string  `json:"region"`
+	Price     float64 `json:"price"`
+	CPU       int     `json:"cpu"`
+	RAM       int     `json:"ram"`
+	Disk      int     `json:"disk"`
+}
+
+type CloudflareZone struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type CloudflareDNSRecord struct {
+	ID      string `json:"id"`
+	ZoneID  string `json:"zone_id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+	Proxied bool   `json:"proxied"`
+}
+
+type Proxy struct {
+	ID       string `json:"id"`
+	UserID   string `json:"user_id"`
+	Type     string `json:"type"`
+	Address  string `json:"address"`
+	Port     int    `json:"port"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Health   string `json:"health"`
+}
+
+type ProxyChainConfig struct {
+	UserID         string `json:"user_id"`
+	Order          string `json:"order"`
+	TorIntegration bool   `json:"tor_integration"`
+}
+
 type Playbook struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
@@ -61,6 +149,18 @@ type Playbook struct {
 var vpsNodes = []VPSNode{}
 var c2Servers = []C2Server{}
 var implants = []Implant{}
+var mfaSecrets = make(map[string]MFASecret)
+var sessions = make(map[string]Session)
+var apiKeys = make(map[string]APIKey)
+var auditLog = []AuditLogEntry{}
+var hostingerConfigs = make(map[string]HostingerConfig)
+var cloudflareConfigs = make(map[string]CloudflareConfig)
+var hostingerVpsList = make(map[string][]HostingerVPS)
+var cloudflareZonesList = make(map[string][]CloudflareZone)
+var cloudflareDnsRecordsList = make(map[string][]CloudflareDNSRecord)
+var proxies = make(map[string][]Proxy)
+var proxyChainConfigs = make(map[string]ProxyChainConfig)
+
 var playbooks = []Playbook{
 	{
 		ID:          "pb-1",
@@ -354,157 +454,617 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		if len(parts) != 2 || parts[0] != "Bearer" {
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok":    false,
-				"error": "Invalid authorization header format",
+				"error": "Invalid Authorization header format",
 			})
 			return
 		}
 
-		claims, err := validateJWT(parts[1])
+		token := parts[1]
+		claims, err := validateJWT(token)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok":    false,
-				"error": "Invalid or expired token",
+				"error": err.Error(),
 			})
 			return
 		}
 
 		// Add claims to context
-		ctx := context.WithValue(r.Context(), "user", claims)
+		ctx := context.WithValue(r.Context(), "userID", claims.UserID)
+		ctx = context.WithValue(ctx, "username", claims.Username)
+		ctx = context.WithValue(ctx, "email", claims.Email)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
-// ---- Service probe ----
-
-func probeService(url string) (status string, latencyMs int64) {
-	if url == "" {
-		return "not_configured", 0
+func getUserIDFromContext(ctx context.Context) (string, error) {
+	userID, ok := ctx.Value("userID").(string)
+	if !ok || userID == "" {
+		return "", fmt.Errorf("user ID not found in context")
 	}
-	start := time.Now()
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(url + "/health")
-	if err != nil {
-		return "disconnected", 0
-	}
-	defer resp.Body.Close()
-	latencyMs = time.Since(start).Milliseconds()
-	if resp.StatusCode < 500 {
-		return "connected", latencyMs
-	}
-	return "error", latencyMs
+	return userID, nil
 }
 
-// ---- Docker socket client ----
-
-func newDockerClient() *http.Client {
-	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", cfg.DockerSocket)
-			},
-		},
-	}
-}
-
-func dockerAPIRequest(method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, "http://docker"+path, body)
-	if err != nil {
-		return nil, err
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return newDockerClient().Do(req)
-}
-
-func dockerAvailable() bool {
-	_, err := os.Stat(cfg.DockerSocket)
-	return err == nil
-}
-
-// ---- Global config ----
+// ---- Handlers ----
 
 var cfg Config
 
-// ---- Health ----
+func main() {
+	cfg = loadConfig()
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":        true,
-		"status":    "healthy",
-		"service":   "harbinger-backend",
-		"version":   getEnv("VERSION", "1.0.0"),
-		"env":       cfg.AppEnv,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
+	mux := http.NewServeMux()
+
+	// Public routes
+	mux.HandleFunc("GET /", handleHome)
+	mux.HandleFunc("GET /health", handleHealthCheck)
+	mux.HandleFunc("GET /api/auth/github/login", handleGitHubLogin)
+	mux.HandleFunc("GET /api/auth/github/callback", handleGitHubCallback)
+
+	// Auth & Security Endpoints (some public, some protected)
+	mux.HandleFunc("POST /api/v1/auth/mfa/setup", authMiddleware(handleMfaSetup))
+	mux.HandleFunc("POST /api/v1/auth/mfa/verify", authMiddleware(handleMfaVerify))
+	mux.HandleFunc("GET /api/v1/auth/sessions", authMiddleware(handleListSessions))
+	mux.HandleFunc("DELETE /api/v1/auth/sessions/{id}", authMiddleware(handleRevokeSession))
+	mux.HandleFunc("GET /api/v1/auth/audit", authMiddleware(handleGetAuditLog))
+	mux.HandleFunc("POST /api/v1/auth/apikeys", authMiddleware(handleCreateApiKey))
+	mux.HandleFunc("DELETE /api/v1/auth/apikeys/{id}", authMiddleware(handleRevokeApiKey))
+	mux.HandleFunc("GET /api/v1/auth/apikeys", authMiddleware(handleListApiKeys))
+
+	// Hosting Provider Endpoints
+	mux.HandleFunc("POST /api/v1/providers/hostinger/connect", authMiddleware(handleHostingerConnect))
+	mux.HandleFunc("GET /api/v1/providers/hostinger/vps", authMiddleware(handleListHostingerVps))
+	mux.HandleFunc("POST /api/v1/providers/hostinger/vps", authMiddleware(handleCreateHostingerVps))
+	mux.HandleFunc("POST /api/v1/providers/cloudflare/connect", authMiddleware(handleCloudflareConnect))
+	mux.HandleFunc("GET /api/v1/providers/cloudflare/zones", authMiddleware(handleListCloudflareZones))
+	mux.HandleFunc("POST /api/v1/providers/cloudflare/tunnel", authMiddleware(handleCreateCloudflareTunnel))
+	mux.HandleFunc("POST /api/v1/providers/cloudflare/access", authMiddleware(handleConfigureCloudflareAccess))
+	mux.HandleFunc("GET /api/v1/providers/cloudflare/waf", authMiddleware(handleGetCloudflareWafRules))
+
+	// Proxy Management Endpoints
+	mux.HandleFunc("GET /api/v1/security/proxies", authMiddleware(handleListProxies))
+	mux.HandleFunc("POST /api/v1/security/proxies", authMiddleware(handleAddProxy))
+	mux.HandleFunc("POST /api/v1/security/proxies/test", authMiddleware(handleTestProxyChain))
+	mux.HandleFunc("PUT /api/v1/security/proxies/chain", authMiddleware(handleUpdateProxyChainOrder))
+
+	// Protected routes
+	mux.HandleFunc("GET /api/v1/vps", authMiddleware(handleListVPSNodes))
+	mux.HandleFunc("POST /api/v1/vps", authMiddleware(handleCreateVPSNode))
+	mux.HandleFunc("GET /api/v1/c2", authMiddleware(handleListC2Servers))
+	mux.HandleFunc("POST /api/v1/c2", authMiddleware(handleCreateC2Server))
+	mux.HandleFunc("GET /api/v1/implants", authMiddleware(handleListImplants))
+	mux.HandleFunc("POST /api/v1/implants", authMiddleware(handleCreateImplant))
+	mux.HandleFunc("GET /api/v1/playbooks", authMiddleware(handleListPlaybooks))
+	mux.HandleFunc("GET /api/v1/playbooks/{id}", authMiddleware(handleGetPlaybook))
+	mux.HandleFunc("GET /api/v1/docker/containers", authMiddleware(handleDockerContainers))
+	mux.HandleFunc("POST /api/v1/docker/containers", authMiddleware(handleCreateContainer))
+	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", authMiddleware(handleContainerAction))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", authMiddleware(handleContainerLogs))
+	mux.HandleFunc("GET /api/v1/docker/images", authMiddleware(handleDockerImages))
+	mux.HandleFunc("GET /api/v1/mcp", authMiddleware(handleMCPServers))
+	mux.HandleFunc("GET /api/v1/dashboard/stats", authMiddleware(handleDashboardStats))
+	mux.HandleFunc("GET /api/v1/dashboard/activity", authMiddleware(handleDashboardActivity))
+	mux.HandleFunc("GET /api/v1/dashboard/health", authMiddleware(handleDashboardHealth))
+
+	log.Printf("Server starting on :%s\n", cfg.Port)
+	log.Fatal(http.ListenAndServe(":"+cfg.Port, corsMiddleware(mux)))
 }
 
-func handleMetrics(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "# HELP harbinger_up Harbinger backend up status\n")
-	fmt.Fprintf(w, "# TYPE harbinger_up gauge\n")
-	fmt.Fprintf(w, "harbinger_up 1\n")
-	fmt.Fprintf(w, "# HELP harbinger_requests_total Total requests\n")
-	fmt.Fprintf(w, "# TYPE harbinger_requests_total counter\n")
-	fmt.Fprintf(w, "harbinger_requests_total 0\n")
+func handleHome(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Welcome to Harbinger API"})
 }
 
-// ---- Services ----
+func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	var checks []interface{}
 
-func handleServices(w http.ResponseWriter, r *http.Request) {
-	services := []map[string]interface{}{
-		{"id": "hexstrike", "name": "HexStrike AI", "url": cfg.HexStrikeURL, "enabled": cfg.HexStrikeURL != ""},
-		{"id": "pentagi", "name": "PentAGI", "url": cfg.PentagiURL, "enabled": cfg.PentagiURL != ""},
-		{"id": "redteam", "name": "Red Team Ops", "url": cfg.RedteamURL, "enabled": cfg.RedteamURL != ""},
-		{"id": "mcp-ui", "name": "MCP Visualizer", "url": cfg.MCPUIURL, "enabled": cfg.MCPUIURL != ""},
-		{"id": "browser", "name": "Browser Service", "url": cfg.BrowserURL, "enabled": cfg.BrowserURL != ""},
-		{"id": "docker", "name": "Docker", "url": cfg.DockerSocket, "enabled": dockerAvailable()},
+	// Check database connection (simulated)
+	dbStatus := "ok"
+	dbFix := ""
+	if cfg.DBHost == "localhost" && cfg.DBPort == "5432" { // Example check
+		dbStatus = "warning"
+		dbFix = "Configure a production database in .env"
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"services": services})
-}
+	checks = append(checks, map[string]string{"id": "database", "name": "Database", "status": dbStatus, "fix": dbFix})
 
-func handleServicesCheck(w http.ResponseWriter, r *http.Request) {
-	type result struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Status  string `json:"status"`
-		Latency int64  `json:"latency,omitempty"`
-		Fix     string `json:"fix,omitempty"`
+	// Check Redis connection (simulated)
+	redisStatus := "ok"
+	redisFix := ""
+	if cfg.RedisHost == "localhost" && cfg.RedisPort == "6379" { // Example check
+		redisStatus = "warning"
+		redisFix = "Configure a production Redis in .env"
 	}
-	checks := []result{}
-	probeList := []struct {
-		id   string
-		name string
-		url  string
-		fix  string
-	}{
-		{"hexstrike", "HexStrike AI", cfg.HexStrikeURL, "Set HEXSTRIKE_URL env var"},
-		{"pentagi", "PentAGI", cfg.PentagiURL, "Set PENTAGI_URL env var"},
-		{"redteam", "Red Team Ops", cfg.RedteamURL, "Set REDTEAM_URL env var"},
-		{"mcp-ui", "MCP Visualizer", cfg.MCPUIURL, "Set MCP_UI_URL env var"},
-		{"browser", "Browser Service", cfg.BrowserURL, "Set BROWSER_SERVICE_URL env var"},
-	}
-	for _, p := range probeList {
-		status, latency := probeService(p.url)
-		r := result{ID: p.id, Name: p.name, Status: status, Latency: latency}
-		if status == "not_configured" {
-			r.Fix = p.fix
-		}
-		checks = append(checks, r)
-	}
-	// Docker
-	dockerStatus := "disconnected"
-	dockerFix := ""
+	checks = append(checks, map[string]string{"id": "redis", "name": "Redis", "status": redisStatus, "fix": redisFix})
+
+	// Check Docker socket
+	dockerStatus := "error"
+	dockerFix := "Docker socket not found or inaccessible"
 	if dockerAvailable() {
 		dockerStatus = "connected"
 	} else {
 		dockerFix = "Mount /var/run/docker.sock or set DOCKER_SOCKET env var"
 	}
-	checks = append(checks, result{ID: "docker", Name: "Docker", Status: dockerStatus, Fix: dockerFix})
+	checks = append(checks, map[string]string{"id": "docker", "name": "Docker", "status": dockerStatus, "fix": dockerFix})
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"checks": checks})
+}
+
+// ---- Auth & Security Handlers ----
+
+// handleMfaSetup sets up MFA for a user
+func handleMfaSetup(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// Generate a new MFA secret
+	secret := generateRandomString(32)
+	mfaSecrets[userID] = MFASecret{UserID: userID, Secret: secret}
+
+	// In a real application, you would generate a QR code URL here
+	// For now, just return the secret
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "secret": secret})
+}
+
+// handleMfaVerify verifies an MFA code
+func handleMfaVerify(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		Code string `json:"code"`
+	} 
+	
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	mfaSecret, ok := mfaSecrets[userID]
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "MFA not set up for this user"})
+		return
+	}
+
+	// Simulate TOTP verification (replace with actual TOTP library)
+	// For demonstration, we'll just check if the code is 
+    // For demonstration, we'll just check if the code is '123456'
+	if reqBody.Code == "123456" { // Replace with actual TOTP verification
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "MFA verified successfully"})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid MFA code"})
+}
+
+// handleListSessions lists active sessions for a user
+func handleListSessions(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	userSessions := []Session{}
+	for _, session := range sessions {
+		if session.UserID == userID {
+			userSessions = append(userSessions, session)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "sessions": userSessions})
+}
+
+// handleRevokeSession revokes a specific session
+func handleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	sessionID := r.PathValue("id")
+
+	if session, ok := sessions[sessionID]; ok && session.UserID == userID {
+		delete(sessions, sessionID)
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Session Revoked", Details: fmt.Sprintf("Session ID: %s", sessionID), Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Session revoked"})
+		return
+	}
+
+	writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": "Session not found or unauthorized"})
+}
+
+// handleGetAuditLog retrieves audit log entries for a user
+func handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	userAuditLog := []AuditLogEntry{}
+	for _, entry := range auditLog {
+		if entry.UserID == userID {
+			userAuditLog = append(userAuditLog, entry)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "audit_log": userAuditLog})
+}
+
+// handleCreateApiKey creates a new API key for a user
+func handleCreateApiKey(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	newAPIKey := APIKey{
+		ID:        generateRandomString(20),
+		UserID:    userID,
+		Name:      reqBody.Name,
+		Key:       generateRandomString(40), // In a real app, this would be hashed and only a prefix stored
+		CreatedAt: time.Now().Unix(),
+		LastUsed:  0,
+	}
+	apiKeys[newAPIKey.ID] = newAPIKey
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "API Key Created", Details: fmt.Sprintf("API Key Name: %s", newAPIKey.Name), Timestamp: time.Now().Unix()})
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "api_key": newAPIKey})
+}
+
+// handleRevokeApiKey revokes a specific API key
+func handleRevokeApiKey(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	apiKeyID := r.PathValue("id")
+
+	if apiKey, ok := apiKeys[apiKeyID]; ok && apiKey.UserID == userID {
+		delete(apiKeys, apiKeyID)
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "API Key Revoked", Details: fmt.Sprintf("API Key ID: %s", apiKeyID), Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "API key revoked"})
+		return
+	}
+
+	writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": "API key not found or unauthorized"})
+}
+
+// handleListApiKeys lists API keys for a user
+func handleListApiKeys(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	userApiKeys := []APIKey{}
+	for _, apiKey := range apiKeys {
+		if apiKey.UserID == userID {
+			userApiKeys = append(userApiKeys, apiKey)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "api_keys": userApiKeys})
+}
+
+// ---- Hosting Provider Handlers ----
+
+// handleHostingerConnect connects to Hostinger API
+func handleHostingerConnect(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		APIKey string `json:"api_key"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	// Simulate API key validation with Hostinger
+	if reqBody.APIKey == "test_hostinger_key" {
+		hostingerConfigs[userID] = HostingerConfig{UserID: userID, APIKey: reqBody.APIKey, Connected: true}
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Hostinger Connected", Details: "", Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Hostinger connected successfully"})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Hostinger API key"})
+}
+
+// handleListHostingerVps lists Hostinger VPS instances for a user
+func handleListHostingerVps(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if config, ok := hostingerConfigs[userID]; ok && config.Connected {
+		// Simulate fetching VPS list from Hostinger API
+		vpsList := []HostingerVPS{
+			{ID: "hvps-1", Name: "Harbinger-Agent-1", Status: "running", IPAddress: "192.168.1.100", Plan: "VPS 1", Region: "Europe", Price: 5.99, CPU: 1, RAM: 1024, Disk: 20},
+			{ID: "hvps-2", Name: "Harbinger-Agent-2", Status: "stopped", IPAddress: "192.168.1.101", Plan: "VPS 2", Region: "North America", Price: 9.99, CPU: 2, RAM: 2048, Disk: 40},
+		}
+		hostingerVpsList[userID] = vpsList
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "vps_list": vpsList})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Hostinger not connected"})
+}
+
+// handleCreateHostingerVps creates a new Hostinger VPS instance
+func handleCreateHostingerVps(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		Name   string `json:"name"`
+		Plan   string `json:"plan"`
+		Region string `json:"region"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	if config, ok := hostingerConfigs[userID]; ok && config.Connected {
+		// Simulate creating VPS via Hostinger API
+		newVPS := HostingerVPS{
+			ID:        generateRandomString(10),
+			Name:      reqBody.Name,
+			Status:    "provisioning",
+			IPAddress: "", // Will be assigned later
+			Plan:      reqBody.Plan,
+			Region:    reqBody.Region,
+			Price:     12.99, // Dummy price
+			CPU:       2,
+			RAM:       2048,
+			Disk:      40,
+		}
+		currentVpsList := hostingerVpsList[userID]
+		hostingerVpsList[userID] = append(currentVpsList, newVPS)
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Hostinger VPS Created", Details: fmt.Sprintf("VPS Name: %s", newVPS.Name), Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "vps": newVPS})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Hostinger not connected"})
+}
+
+// handleCloudflareConnect connects to Cloudflare API
+func handleCloudflareConnect(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		APIToken string `json:"api_token"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	// Simulate API token validation with Cloudflare
+	if reqBody.APIToken == "test_cloudflare_token" {
+		cloudflareConfigs[userID] = CloudflareConfig{UserID: userID, APIToken: reqBody.APIToken, Connected: true}
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Connected", Details: "", Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Cloudflare connected successfully"})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Cloudflare API token"})
+}
+
+// handleListCloudflareZones lists Cloudflare DNS zones for a user
+func handleListCloudflareZones(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
+		// Simulate fetching zones from Cloudflare API
+		zones := []CloudflareZone{
+			{ID: "cfzone-1", Name: "example.com"},
+			{ID: "cfzone-2", Name: "harbinger.io"},
+		}
+		cloudflareZonesList[userID] = zones
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "zones": zones})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Cloudflare not connected"})
+}
+
+// handleCreateCloudflareTunnel creates a new Cloudflare Tunnel
+func handleCreateCloudflareTunnel(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		ZoneID string `json:"zone_id"`
+		Name   string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
+		// Simulate creating Cloudflare Tunnel
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Tunnel Created", Details: fmt.Sprintf("Zone ID: %s, Tunnel Name: %s", reqBody.ZoneID, reqBody.Name), Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "message": "Cloudflare Tunnel created successfully"})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Cloudflare not connected"})
+}
+
+// handleConfigureCloudflareAccess configures Cloudflare Zero Trust Access
+func handleConfigureCloudflareAccess(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		ZoneID string `json:"zone_id"`
+		Policy string `json:"policy"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
+		// Simulate configuring Zero Trust Access
+		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Zero Trust Configured", Details: fmt.Sprintf("Zone ID: %s, Policy: %s", reqBody.ZoneID, reqBody.Policy), Timestamp: time.Now().Unix()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Cloudflare Zero Trust Access configured successfully"})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Cloudflare not connected"})
+}
+
+// handleGetCloudflareWafRules retrieves Cloudflare WAF rules
+func handleGetCloudflareWafRules(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
+		// Simulate fetching WAF rules
+		wafRules := []string{"SQL Injection", "XSS Protection"}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "waf_rules": wafRules})
+		return
+	}
+
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Cloudflare not connected"})
+}
+
+// ---- Proxy Management Handlers ----
+
+// handleListProxies lists configured proxies for a user
+func handleListProxies(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	userProxies := proxies[userID]
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "proxies": userProxies})
+}
+
+// handleAddProxy adds a new proxy for a user
+func handleAddProxy(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody Proxy
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	reqBody.ID = generateRandomString(10)
+	reqBody.UserID = userID
+	reqBody.Health = "unknown"
+	proxies[userID] = append(proxies[userID], reqBody)
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Proxy Added", Details: fmt.Sprintf("Proxy Type: %s, Address: %s", reqBody.Type, reqBody.Address), Timestamp: time.Now().Unix()})
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "proxy": reqBody})
+}
+
+// handleTestProxyChain tests a proxy chain
+func handleTestProxyChain(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// Simulate testing proxy chain
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Proxy Chain Tested", Details: "", Timestamp: time.Now().Unix()})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Proxy chain test initiated"})
+}
+
+// handleUpdateProxyChainOrder updates the proxy chain order
+func handleUpdateProxyChainOrder(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	var reqBody struct {
+		Order          string `json:"order"`
+		TorIntegration bool   `json:"tor_integration"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "Invalid request body"})
+		return
+	}
+
+	proxyChainConfigs[userID] = ProxyChainConfig{UserID: userID, Order: reqBody.Order, TorIntegration: reqBody.TorIntegration}
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Proxy Chain Config Updated", Details: fmt.Sprintf("Order: %s, Tor Integration: %t", reqBody.Order, reqBody.TorIntegration), Timestamp: time.Now().Unix()})
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Proxy chain configuration updated"})
+}
+
+func generateRandomString(length int) string {
+	b := make([]byte, length)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)[:length]
 }
 
 // ---- Dashboard ----
@@ -675,979 +1235,122 @@ func handleMCPServers(w http.ResponseWriter, r *http.Request) {
 		{"mcp-ui", "MCP Visualizer", cfg.MCPUIURL, "Set MCP_UI_URL env var"},
 	}
 
-	result := []mcpServer{}
+	results := []mcpServer{}
 	for _, s := range servers {
 		status, latency := probeService(s.url)
 		ms := mcpServer{ID: s.id, Name: s.name, URL: s.url, Status: status, Latency: latency}
 		if status == "not_configured" {
 			ms.Fix = s.fix
 		}
-		result = append(result, ms)
+		results = append(results, ms)
+	}
+	writeJSON(w, http.StatusOK, results)
+}
+
+func probeService(serviceURL string) (string, int64) {
+	if serviceURL == "" {
+		return "not_configured", 0
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"servers": result,
-		"total":   len(result),
-		"enabled": cfg.MCPEnabled,
-	})
-}
-
-// ---- Browsers ----
-
-func handleBrowserSessions(w http.ResponseWriter, r *http.Request) {
-	if cfg.BrowserURL == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":      false,
-			"reason":  "not_configured",
-			"fix":     "Set BROWSER_SERVICE_URL env var to your browser automation service",
-			"sessions": []interface{}{},
-		})
-		return
+	start := time.Now()
+	resp, err := http.Get(serviceURL + "/health") // Assuming a /health endpoint
+	if err != nil {
+		return "down", 0
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":       true,
-		"sessions": []interface{}{},
-	})
-}
+	defer resp.Body.Close()
 
-// ---- Agents ----
-
-func handleAgents(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"agents": []interface{}{},
-		"total":  0,
-	})
-}
-
-// ---- Workflows ----
-
-func handleWorkflows(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"workflows": []interface{}{},
-		"total":     0,
-	})
-}
-
-// ---- Bug Bounty Targets ----
-
-func handleTargets(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"targets": []interface{}{},
-		"total":   0,
-	})
-}
-
-func handleCreateTarget(w http.ResponseWriter, r *http.Request) {
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	body["id"] = fmt.Sprintf("target-%d", time.Now().UnixMilli())
-	body["created_at"] = time.Now().UTC().Format(time.RFC3339)
-	writeJSON(w, http.StatusCreated, body)
-}
-
-// ---- Scans & Vulnerabilities ----
-
-func handleScans(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"scans": []interface{}{},
-		"total": 0,
-	})
-}
-
-func handleVulnerabilities(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"vulnerabilities": []interface{}{},
-		"total":           0,
-		"by_severity": map[string]int{
-			"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0,
-		},
-	})
-}
-
-// ---- Auth ----
-
-func handleLogin(w http.ResponseWriter, r *http.Request) {
-	var creds map[string]string
-	json.NewDecoder(r.Body).Decode(&creds)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"token":   "stub-jwt-token",
-		"user":    creds["username"],
-		"expires": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339),
-	})
-}
-
-func handleRegister(w http.ResponseWriter, r *http.Request) {
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	body["id"] = fmt.Sprintf("user-%d", time.Now().UnixMilli())
-	body["created_at"] = time.Now().UTC().Format(time.RFC3339)
-	delete(body, "password")
-	writeJSON(w, http.StatusCreated, body)
-}
-
-// ---- Setup ----
-
-var setupComplete = false
-
-func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":         true,
-		"needsSetup": !setupComplete,
-	})
-}
-
-func handleSetup(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
-			"ok":    false,
-			"error": "Method not allowed",
-		})
-		return
+	if resp.StatusCode == http.StatusOK {
+		latency := time.Since(start).Milliseconds()
+		return "up", latency
 	}
 
-	if setupComplete {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok":    false,
-			"error": "Setup already completed",
-		})
-		return
-	}
-
-	var setupData struct {
-		AppName            string `json:"appName"`
-		AppURL             string `json:"appUrl"`
-		GitHubClientID     string `json:"githubClientId"`
-		GitHubClientSecret string `json:"githubClientSecret"`
-		AdminEmail         string `json:"adminEmail"`
-		AdminPassword      string `json:"adminPassword"`
-		GitHubPat          string `json:"githubPat"`
-		GitHubOwner        string `json:"githubOwner"`
-		GitHubRepo         string `json:"githubRepo"`
-		LlmProvider        string `json:"llmProvider"`
-		LlmApiKey          string `json:"llmApiKey"`
-		LlmModel           string `json:"llmModel"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&setupData); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok":    false,
-			"error": "Invalid JSON",
-		})
-		return
-	}
-
-	// Validate required fields
-	if setupData.AppName == "" || setupData.AppURL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok":    false,
-			"error": "App name and URL are required",
-		})
-		return
-	}
-
-	if setupData.GitHubClientID == "" || setupData.GitHubClientSecret == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok":    false,
-			"error": "GitHub OAuth credentials are required",
-		})
-		return
-	}
-
-	if setupData.AdminEmail == "" || setupData.AdminPassword == "" || len(setupData.AdminPassword) < 8 {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok":    false,
-			"error": "Valid admin email and password (8+ chars) are required",
-		})
-		return
-	}
-
-	// Update config
-	cfg.AppName = setupData.AppName
-	cfg.AppURL = setupData.AppURL
-	cfg.GitHubClientID = setupData.GitHubClientID
-	cfg.GitHubClientSecret = setupData.GitHubClientSecret
-	cfg.GitHubRedirectURL = setupData.AppURL + "/api/auth/github/callback"
-	// ... other config
-
-	setupComplete = true
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":      true,
-		"message": "Setup completed successfully",
-	})
+	return "down", 0
 }
 
-// ---- Settings ----
-
-func handleSettings(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		// Return current settings (excluding secrets)
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok": true,
-			"settings": map[string]interface{}{
-				"appName":        cfg.AppName,
-				"appUrl":         cfg.AppURL,
-				"githubClientId": maskSecret(cfg.GitHubClientID),
-				"setupComplete":  setupComplete,
+func dockerAPIRequest(method, path string, body io.Reader) (*http.Response, error) {
+	host := "http://docker.sock"
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", cfg.DockerSocket)
 			},
-		})
-
-	case http.MethodPut, http.MethodPatch:
-		// Update settings
-		var settings struct {
-			AppName            string `json:"appName,omitempty"`
-			AppURL             string `json:"appUrl,omitempty"`
-			GitHubClientID     string `json:"githubClientId,omitempty"`
-			GitHubClientSecret string `json:"githubClientSecret,omitempty"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-				"ok":    false,
-				"error": "Invalid JSON",
-			})
-			return
-		}
-
-		// Update non-empty fields
-		if settings.AppName != "" {
-			cfg.AppName = settings.AppName
-		}
-		if settings.AppURL != "" {
-			cfg.AppURL = settings.AppURL
-			cfg.GitHubRedirectURL = settings.AppURL + "/api/auth/github/callback"
-		}
-		if settings.GitHubClientID != "" {
-			cfg.GitHubClientID = settings.GitHubClientID
-		}
-		if settings.GitHubClientSecret != "" {
-			cfg.GitHubClientSecret = settings.GitHubClientSecret
-		}
-
-		log.Printf("[Settings] Configuration updated")
-
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":      true,
-			"message": "Settings updated",
-		})
-
-	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
-			"ok":    false,
-			"error": "Method not allowed",
-		})
-	}
-}
-
-func maskSecret(s string) string {
-	if len(s) <= 8 {
-		return "***"
-	}
-	return s[:4] + "..." + s[len(s)-4:]
-}
-
-// ---- GitHub OAuth ----
-
-func handleGitHubAuth(w http.ResponseWriter, r *http.Request) {
-	if cfg.GitHubClientID == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-			"ok":     false,
-			"error":  "GitHub OAuth not configured",
-			"reason": "not_configured",
-			"fix":    "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars",
-		})
-		return
+		},
 	}
 
-	// Generate state token to prevent CSRF
-	stateBytes := make([]byte, 32)
-	if _, err := rand.Read(stateBytes); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"ok":    false,
-			"error": "Failed to generate state",
-		})
-		return
-	}
-	state := base64.URLEncoding.EncodeToString(stateBytes)
-
-	// Build GitHub authorization URL
-	authURL := fmt.Sprintf(
-		"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=%s&state=%s",
-		url.QueryEscape(cfg.GitHubClientID),
-		url.QueryEscape(cfg.GitHubRedirectURL),
-		url.QueryEscape("user:email read:user"),
-		url.QueryEscape(state),
-	)
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":       true,
-		"auth_url": authURL,
-		"state":    state,
-	})
-}
-
-func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	state := r.URL.Query().Get("state")
-	errorParam := r.URL.Query().Get("error")
-
-	if errorParam != "" {
-		http.Redirect(w, r, cfg.AppURL+"/login?error="+url.QueryEscape(errorParam), http.StatusTemporaryRedirect)
-		return
-	}
-
-	// State is optional (used when initiating from frontend) - we could verify it against session
-	_ = state // State verification would require server-side session storage
-
-	if code == "" {
-		http.Redirect(w, r, cfg.AppURL+"/login?error=no_code", http.StatusTemporaryRedirect)
-		return
-	}
-
-	// Exchange code for access token
-	tokenResp, err := exchangeGitHubCode(code)
+	req, err := http.NewRequest(method, host+path, body)
 	if err != nil {
-		log.Printf("[GitHub OAuth] Token exchange failed: %v", err)
-		http.Redirect(w, r, cfg.AppURL+"/login?error=token_exchange_failed", http.StatusTemporaryRedirect)
-		return
+		return nil, err
 	}
 
-	// Get GitHub user info
-	user, err := getGitHubUser(tokenResp.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	return client.Do(req)
+}
+
+func dockerAvailable() bool {
+	// Check if the docker socket exists
+	if _, err := os.Stat(cfg.DockerSocket); os.IsNotExist(err) {
+		return false
+	}
+
+	// Try to make a simple request to the Docker API
+	resp, err := dockerAPIRequest("GET", "/v1.41/version", nil)
 	if err != nil {
-		log.Printf("[GitHub OAuth] Failed to get user: %v", err)
-		http.Redirect(w, r, cfg.AppURL+"/login?error=user_fetch_failed", http.StatusTemporaryRedirect)
-		return
+		return false
 	}
+	defer resp.Body.Close()
 
-	// Generate JWT token
-	userID := fmt.Sprintf("github_%d", user.ID)
-	jwtToken, err := generateJWT(userID, user.Login, user.Email, "github")
-	if err != nil {
-		log.Printf("[GitHub OAuth] Failed to generate JWT: %v", err)
-		http.Redirect(w, r, cfg.AppURL+"/login?error=token_generation_failed", http.StatusTemporaryRedirect)
-		return
-	}
-
-	// Redirect to frontend with token
-	redirectURL := fmt.Sprintf("%s/login?token=%s&provider=github&username=%s",
-		cfg.AppURL,
-		url.QueryEscape(jwtToken),
-		url.QueryEscape(user.Login),
-	)
-	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+	return resp.StatusCode == http.StatusOK
 }
 
-func handleGetMe(w http.ResponseWriter, r *http.Request) {
-	user := r.Context().Value("user").(*Claims)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"user": user,
-	})
-}
-
-func handleLogout(w http.ResponseWriter, r *http.Request) {
-	// In a real implementation, you might invalidate the token in a database or Redis
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":      true,
-		"message": "Logged out successfully",
-	})
-}
-
-// ---- WebSocket stub ----
-
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusUpgradeRequired)
-	w.Write([]byte("WebSocket endpoint - upgrade required"))
-}
-
-// ---- Agent Orchestrator Handlers ----
-
-func handleAgentSwarm(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"agents": []interface{}{},
-		"total":  0,
-		"status": "healthy",
-	})
-}
-
-func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":        fmt.Sprintf("agent-%d", time.Now().UnixMilli()),
-		"type":      body["type"],
-		"status":    "spawned",
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-	})
-}
-
-func handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	agentID := r.URL.Query().Get("agent_id")
-	if agentID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id required"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"agent_id": agentID,
-		"status":   "alive",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
-}
-
-func handleAgentHandoff(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"from_agent": body["from_agent"],
-		"to_agent":   body["to_agent"],
-		"task":       body["task"],
-		"status":     "handoff_initiated",
-	})
-}
-
-// ---- Bounty Hub Handlers ----
-
-func handleBountyPrograms(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"programs": []interface{}{},
-		"total":    0,
-	})
-}
-
-func handleBountySync(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":          "syncing",
-		"last_sync_time":  time.Now().UTC().Format(time.RFC3339),
-		"next_sync_time":  time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339),
-		"total_programs":  0,
-	})
-}
-
-func handleBountyHunt(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"program_id": body["program_id"],
-		"status":     "added_to_hunt_queue",
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-	})
-}
-
-// ---- MCP Tool Execution Handlers ----
-
-func handleMCPExecute(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"execution_id": fmt.Sprintf("exec-%d", time.Now().UnixMilli()),
-		"tool":         body["tool"],
-		"status":       "executing",
-		"result":       nil,
-	})
-}
-
-func handleMCPTools(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tools": []interface{}{},
-		"total": 0,
-	})
-}
-
-// ---- Docker Agent Spawning Handlers ----
-
-func handleDockerAgentSpawn(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"container_id": fmt.Sprintf("agent-%d", time.Now().UnixMilli()),
-		"agent_type":   body["agent_type"],
-		"status":       "running",
-		"created_at":   time.Now().UTC().Format(time.RFC3339),
-	})
-}
-
-func handleDockerAgents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"containers": []interface{}{},
-		"total":      0,
-	})
-}
-
-// ---- Router ----
-
-func handleAddVpsNode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	var newNode VPSNode
-	if err := json.NewDecoder(r.Body).Decode(&newNode); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
-		return
-	}
-
-	newNode.ID = fmt.Sprintf("vps-%d", time.Now().UnixNano())
-	newNode.Status = "configuring"
-	vpsNodes = append(vpsNodes, newNode)
-	writeJSON(w, http.StatusCreated, newNode)
-}
-
-func handleGetVpsNodes(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
+// Placeholder for other handlers
+func handleListVPSNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, vpsNodes)
 }
 
-func handleTestVpsConnection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
-	id = strings.TrimSuffix(id, "/test")
-
-	for i, vps := range vpsNodes {
-		if vps.ID == id {
-			vpsNodes[i].Status = "connected"
-			vpsNodes[i].Latency = 50 // Simulate latency
-			vpsNodes[i].Region = "us-east-1"
-			vpsNodes[i].OS = "Ubuntu"
-			writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
-			return
-		}
-	}
-
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "VPS not found"})
+func handleCreateVPSNode(w http.ResponseWriter, r *http.Request) {
+	var vps VPSNode
+	json.NewDecoder(r.Body).Decode(&vps)
+	vps.ID = fmt.Sprintf("vps-%d", time.Now().UnixMilli())
+	vpsNodes = append(vpsNodes, vps)
+	writeJSON(w, http.StatusCreated, vps)
 }
 
-func handleSetupVps(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
-	id = strings.TrimSuffix(id, "/setup")
-
-	for i, vps := range vpsNodes {
-		if vps.ID == id {
-			vpsNodes[i].Status = "configured"
-			writeJSON(w, http.StatusOK, map[string]string{"status": "configured"})
-			return
-		}
-	}
-
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "VPS not found"})
-}
-
-func handleConnectC2Server(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	var newC2 C2Server
-	if err := json.NewDecoder(r.Body).Decode(&newC2); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
-		return
-	}
-
-	newC2.ID = fmt.Sprintf("c2-%d", time.Now().UnixNano())
-	newC2.Status = "connected"
-	c2Servers = append(c2Servers, newC2)
-	writeJSON(w, http.StatusCreated, newC2)
-}
-
-func handleGetC2Status(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
+func handleListC2Servers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c2Servers)
 }
 
-func handleGetImplants(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
+func handleCreateC2Server(w http.ResponseWriter, r *http.Request) {
+	var c2 C2Server
+	json.NewDecoder(r.Body).Decode(&c2)
+	c2.ID = fmt.Sprintf("c2-%d", time.Now().UnixMilli())
+	c2Servers = append(c2Servers, c2)
+	writeJSON(w, http.StatusCreated, c2)
+}
+
+func handleListImplants(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, implants)
 }
 
-func handleCreateListener(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	var listenerData struct {
-		C2ID string `json:"c2Id"`
-		Type string `json:"type"`
-		Port int    `json:"port"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&listenerData); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
-		return
-	}
-
-	// Simulate listener creation
-	writeJSON(w, http.StatusOK, map[string]string{"status": "listener created"})
+func handleCreateImplant(w http.ResponseWriter, r *http.Request) {
+	var implant Implant
+	json.NewDecoder(r.Body).Decode(&implant)
+	implant.ID = fmt.Sprintf("implant-%d", time.Now().UnixMilli())
+	implants = append(implant, implant)
+	writeJSON(w, http.StatusCreated, implant)
 }
 
-func handleGetInfrastructureGraph(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-	// For now, return a dummy graph or derive from existing data
-	graph := map[string]interface{}{
-		"nodes": vpsNodes,
-		"edges": []interface{}{},
-	}
-	writeJSON(w, http.StatusOK, graph)
-}
-
-func handleGetPlaybooks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
+func handleListPlaybooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, playbooks)
 }
 
-func handleRunPlaybook(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/playbooks/")
-	id = strings.TrimSuffix(id, "/run")
-
+func handleGetPlaybook(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	for _, pb := range playbooks {
 		if pb.ID == id {
-			// Simulate playbook execution
-			writeJSON(w, http.StatusOK, map[string]string{"status": "playbook started"})
+			writeJSON(w, http.StatusOK, pb)
 			return
 		}
 	}
-
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Playbook not found"})
-}
-
-func setupRoutes() http.Handler {
-	mux := http.NewServeMux()
-
-	// Health (both versioned and unversioned)
-	mux.HandleFunc("/api/v1/health", handleHealth)
-	mux.HandleFunc("/api/health", handleHealth)
-	mux.HandleFunc("/metrics", handleMetrics)
-
-	// Setup (public routes for initial configuration)
-	log.Println("[DEBUG] Registering setup routes")
-	mux.HandleFunc("/api/v1/setup/status", handleSetupStatus)
-	mux.HandleFunc("/api/v1/setup", handleSetup)
-	mux.HandleFunc("/api/setup/status", handleSetupStatus)
-	mux.HandleFunc("/api/setup", handleSetup)
-
-	// Settings (protected after setup)
-	mux.HandleFunc("/api/v1/settings", authMiddleware(handleSettings))
-	mux.HandleFunc("/api/settings", authMiddleware(handleSettings))
-
-	// Auth
-	mux.HandleFunc("/api/v1/auth/login", handleLogin)
-	mux.HandleFunc("/api/v1/auth/register", handleRegister)
-	mux.HandleFunc("/api/v1/auth/github", handleGitHubAuth)
-	mux.HandleFunc("/api/v1/auth/github/callback", handleGitHubCallback)
-	mux.HandleFunc("/api/v1/auth/me", authMiddleware(handleGetMe))
-	mux.HandleFunc("/api/v1/auth/logout", authMiddleware(handleLogout))
-	mux.HandleFunc("/api/auth/login", handleLogin)
-	mux.HandleFunc("/api/auth/register", handleRegister)
-	mux.HandleFunc("/api/auth/github", handleGitHubAuth)
-	mux.HandleFunc("/api/auth/github/callback", handleGitHubCallback)
-	mux.HandleFunc("/api/auth/me", authMiddleware(handleGetMe))
-	mux.HandleFunc("/api/auth/logout", authMiddleware(handleLogout))
-
-	// Services
-	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleServicesCheck(w, r)
-		} else {
-			handleServices(w, r)
-		}
-	})
-	mux.HandleFunc("/api/services/check", handleServicesCheck)
-
-	// Dashboard
-	mux.HandleFunc("/api/dashboard/stats", handleDashboardStats)
-	mux.HandleFunc("/api/dashboard/activity", handleDashboardActivity)
-	mux.HandleFunc("/api/dashboard/health", handleDashboardHealth)
-
-	// Docker
-	mux.HandleFunc("/api/docker/containers", handleDockerContainers)
-	mux.HandleFunc("/api/docker/images", handleDockerImages)
-	mux.HandleFunc("/api/docker/", func(w http.ResponseWriter, r *http.Request) {
-		// Route /api/docker/containers/{id}/start|stop|restart|logs|terminal
-		path := strings.TrimPrefix(r.URL.Path, "/api/docker/containers/")
-		parts := strings.SplitN(path, "/", 2)
-		if len(parts) == 2 {
-			id := parts[0]
-			action := parts[1]
-			if action == "logs" {
-				handleContainerLogs(w, r, id)
-			} else if action == "terminal" {
-				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"ok":     false,
-					"reason": "websocket_not_implemented",
-					"fix":    fmt.Sprintf("Use: docker exec -it %s bash", id),
-				})
-			} else {
-				handleContainerAction(w, r, id, action)
-			}
-			return
-		}
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
-	})
-
-	// MCP
-	mux.HandleFunc("/api/mcp/servers", handleMCPServers)
-	mux.HandleFunc("/api/v1/mcp/servers", handleMCPServers)
-	mux.HandleFunc("/api/v1/mcp/execute", handleMCPExecute)
-	mux.HandleFunc("/api/v1/mcp/tools", handleMCPTools)
-
-	// Browsers
-	mux.HandleFunc("/api/browsers/sessions", handleBrowserSessions)
-	mux.HandleFunc("/api/browsers/", func(w http.ResponseWriter, r *http.Request) {
-		handleBrowserSessions(w, r)
-	})
-
-	// Agents & Workflows (both versioned and unversioned)
-	mux.HandleFunc("/api/v1/agents", handleAgents)
-	mux.HandleFunc("/api/agents", handleAgents)
-	mux.HandleFunc("/api/v1/agents/swarm", handleAgentSwarm)
-	mux.HandleFunc("/api/v1/agents/spawn", handleSpawnAgent)
-	mux.HandleFunc("/api/v1/agents/heartbeat", handleAgentHeartbeat)
-	mux.HandleFunc("/api/v1/agents/handoff", handleAgentHandoff)
-	mux.HandleFunc("/api/v1/workflows", handleWorkflows)
-	mux.HandleFunc("/api/workflows", handleWorkflows)
-
-	// Bug bounty
-	mux.HandleFunc("/api/v1/targets", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleCreateTarget(w, r)
-		} else {
-			handleTargets(w, r)
-		}
-	})
-	mux.HandleFunc("/api/v1/bounty/programs", handleBountyPrograms)
-	mux.HandleFunc("/api/v1/bounty/sync", handleBountySync)
-	mux.HandleFunc("/api/v1/bounty/hunt", handleBountyHunt)
-	mux.HandleFunc("/api/v1/scans", handleScans)
-	mux.HandleFunc("/api/v1/vulnerabilities", handleVulnerabilities)
-
-
-	// Red Team
-	mux.HandleFunc("/api/v1/redteam/vps", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleAddVpsNode(w, r)
-		} else if r.Method == http.MethodGet {
-			handleGetVpsNodes(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-	mux.HandleFunc("/api/v1/redteam/vps/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/vps/")
-		parts := strings.SplitN(path, "/", 2)
-		if len(parts) == 2 {
-			id := parts[0]
-			action := parts[1]
-			if action == "test" && r.Method == http.MethodPost {
-				handleTestVpsConnection(w, r)
-			} else if action == "setup" && r.Method == http.MethodPost {
-				handleSetupVps(w, r)
-			} else {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
-			}
-			return
-		}
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
-	})
-tmux.HandleFunc("/api/v1/redteam/c2/connect", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleConnectC2Server(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-tmux.HandleFunc("/api/v1/redteam/c2/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			handleGetC2Status(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-tmux.HandleFunc("/api/v1/redteam/c2/implants", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			handleGetImplants(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-tmux.HandleFunc("/api/v1/redteam/c2/listeners", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleCreateListener(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-tmux.HandleFunc("/api/v1/redteam/infrastructure", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			handleGetInfrastructureGraph(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-	mux.HandleFunc("/api/v1/redteam/playbooks", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			handleGetPlaybooks(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
-		}
-	})
-	mux.HandleFunc("/api/v1/redteam/playbooks/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/v1/redteam/playbooks/")
-		parts := strings.SplitN(path, "/", 2)
-		if len(parts) == 2 {
-			id := parts[0]
-			action := parts[1]
-			if action == "run" && r.Method == http.MethodPost {
-				handleRunPlaybook(w, r)
-			} else {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
-			}
-			return
-		}
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
-	})
-// MCP Tool Execution
-	mux.HandleFunc("/api/v1/mcp/execute", handleMCPExecute)
-	mux.HandleFunc("/api/v1/mcp/tools", handleMCPTools)
-
-	// Docker Agent Spawning
-	mux.HandleFunc("/api/v1/docker/agents/spawn", handleDockerAgentSpawn)
-	mux.HandleFunc("/api/v1/docker/agents", handleDockerAgents)
-
-	// WebSocket
-	mux.HandleFunc("/ws", handleWebSocket)
-
-	// Catch-all
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			writeJSON(w, http.StatusNotFound, map[string]string{
-				"error": "endpoint not found",
-				"path":  r.URL.Path,
-			})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"service": cfg.AppName + " API",
-			"version": getEnv("VERSION", "1.0.0"),
-			"docs":    "/api/health",
-		})
-	})
-
-	return corsMiddleware(mux)
-}
-
-func main() {
-	cfg = loadConfig()
-
-	addr := ":" + cfg.Port
-	metricsAddr := ":" + getEnv("METRICS_PORT", "9090")
-
-	log.Printf("[Harbinger] Starting %s API server (env: %s)", cfg.AppName, cfg.AppEnv)
-	log.Printf("[Harbinger] API listening on %s", addr)
-	log.Printf("[Harbinger] Metrics listening on %s", metricsAddr)
-	log.Printf("[Harbinger] DB: %s@%s:%s/%s", cfg.DBUser, cfg.DBHost, cfg.DBPort, cfg.DBName)
-	log.Printf("[Harbinger] Redis: %s:%s", cfg.RedisHost, cfg.RedisPort)
-	log.Printf("[Harbinger] Neo4j: %s:%s", cfg.Neo4jHost, cfg.Neo4jPort)
-	log.Printf("[Harbinger] MCP Enabled: %v", cfg.MCPEnabled)
-	log.Printf("[Harbinger] Docker Socket: %s (available: %v)", cfg.DockerSocket, dockerAvailable())
-	log.Printf("[Harbinger] HexStrike: %q | PentAGI: %q | RedTeam: %q",
-		cfg.HexStrikeURL, cfg.PentagiURL, cfg.RedteamURL)
-
-	// Start metrics server in background
-	go func() {
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", handleMetrics)
-		metricsMux.HandleFunc("/health", handleHealth)
-		if err := http.ListenAndServe(metricsAddr, metricsMux); err != nil {
-			log.Printf("[Harbinger] Metrics server error: %v", err)
-		}
-	}()
-
-	// Start main API server
-	srv := &http.Server{
-		Addr:         addr,
-		Handler:      setupRoutes(),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
-
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("[Harbinger] Server failed: %v", err)
-	}
 }
