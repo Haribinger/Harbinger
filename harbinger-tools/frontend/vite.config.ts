@@ -11,7 +11,7 @@ export default defineConfig({
       '/api/redteam': {
         target: 'http://localhost:3004',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/redteam/, '../../../mcp-plugins/mcp-ui'),
+        rewrite: (p) => p.replace(/^\/api\/redteam/, ''),
       },
       '/api': {
         target: 'http://localhost:8080',
@@ -24,17 +24,17 @@ export default defineConfig({
       '/mcp/hexstrike': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/mcp\/hexstrike/, '../../../mcp-plugins/mcp-ui'),
+        rewrite: (p) => p.replace(/^\/mcp\/hexstrike/, ''),
       },
       '/mcp/pentagi': {
         target: 'http://localhost:3002',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/mcp\/pentagi/, '../../../mcp-plugins/mcp-ui'),
+        rewrite: (p) => p.replace(/^\/mcp\/pentagi/, ''),
       },
-      '../../../mcp-plugins/mcp-ui': {
+      '../mcp-plugins/mcp-ui': {
         target: 'http://localhost:3003',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/mcp\/ui/, '../../../mcp-plugins/mcp-ui'),
+        rewrite: (p) => p.replace(/^\/mcp\/ui/, ''),
       },
     },
   },
