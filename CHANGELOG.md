@@ -1,3 +1,11 @@
+## [Unreleased]
+### Added
+- SET (Social Engineering Toolkit) — social engineering and phishing for BREACH agent
+- BeEF (Browser Exploitation Framework) — browser hooking for BREACH agent
+- Bettercap — network MITM and recon for PHANTOM and PATHFINDER
+- Evil-WinRM — Windows post-exploitation for PHANTOM agent
+- Gowitness — visual recon screenshots powering the attack surface graph for PATHFINDER
+
 ## [0.9.1] - 2025-02-25
 
 ### Added
@@ -13,4 +21,3 @@
 
 ### Changed
 - Updated tool inventory with Caido, Go tools, MCPwn
-
