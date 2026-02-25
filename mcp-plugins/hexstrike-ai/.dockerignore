@@ -1,9 +1,0 @@
-hexstrike-env/
-__pycache__/
-*.pyc
-*.pyo
-.git/
-assets/
-*.md
-*.png
-*.jpg
