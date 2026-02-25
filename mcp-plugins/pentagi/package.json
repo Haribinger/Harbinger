@@ -1,0 +1,10 @@
+{
+  "name": "@harbinger/mcp-pentagi",
+  "version": "0.1.0",
+  "description": "PentAGI autonomous agent MCP server placeholder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@harbinger/mcp-ui",
+  "version": "0.1.0",
+  "description": "MCP-UI visualization server placeholder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@harbinger/mcp-hexstrike-ai",
+  "version": "0.1.0",
+  "description": "HexStrike AI security tools MCP server placeholder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}
