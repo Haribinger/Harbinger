@@ -1,208 +1,442 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  HARBINGER CLI — Update, manage, and control your Harbinger instance
-#  Usage: ./harbinger <command> [options]
+#  HARBINGER CLI v2 — Wizard-style interactive command center
+#  Usage: ./harbinger [command] [options]
+#  Run with no args for interactive wizard mode.
 # ============================================================================
 
 set -euo pipefail
 
-# Colors
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
+# ── COLORS & STYLES ─────────────────────────────────────────────────────────
+CYAN='\033[38;5;45m'
+GREEN='\033[38;5;82m'
+RED='\033[38;5;196m'
+YELLOW='\033[38;5;220m'
 DIM='\033[2m'
 BOLD='\033[1m'
+ITALIC='\033[3m'
 NC='\033[0m'
+WHITE='\033[1;37m'
 
+# ── PATHS ───────────────────────────────────────────────────────────────────
 HARBINGER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$HARBINGER_DIR/harbinger-tools/frontend"
 BACKEND_DIR="$HARBINGER_DIR/backend"
+MCP_DIR="$HARBINGER_DIR/mcp-plugins"
 
-banner() {
-  echo -e "${CYAN}"
-  echo "  ╔═══════════════════════════════════════════════╗"
-  echo "  ║   ██╗  ██╗ █████╗ ██████╗ ██████╗            ║"
-  echo "  ║   ██║  ██║██╔══██╗██╔══██╗██╔══██╗           ║"
-  echo "  ║   ███████║███████║██████╔╝██████╔╝           ║"
-  echo "  ║   ██╔══██║██╔══██║██╔══██╗██╔══██╗           ║"
-  echo "  ║   ██║  ██║██║  ██║██║  ██║██████╔╝           ║"
-  echo "  ║   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝           ║"
-  echo "  ║          H A R B I N G E R  CLI               ║"
-  echo "  ╚═══════════════════════════════════════════════╝"
-  echo -e "${NC}"
+# ── SPINNER ─────────────────────────────────────────────────────────────────
+SPINNER_FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+SPINNER_PID=""
+
+spinner_start() {
+  local msg="${1:-Working...}"
+  (
+    local i=0
+    while true; do
+      printf "\r  ${CYAN}${SPINNER_FRAMES[$i]}${NC} %s" "$msg"
+      i=$(( (i + 1) % ${#SPINNER_FRAMES[@]} ))
+      sleep 0.08
+    done
+  ) &
+  SPINNER_PID=$!
+  disown "$SPINNER_PID" 2>/dev/null
 }
 
-log()   { echo -e "${GREEN}[✓]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
-err()   { echo -e "${RED}[✗]${NC} $*"; }
-info()  { echo -e "${CYAN}[→]${NC} $*"; }
-dim()   { echo -e "${DIM}    $*${NC}"; }
+spinner_stop() {
+  if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+    kill "$SPINNER_PID" 2>/dev/null
+    wait "$SPINNER_PID" 2>/dev/null || true
+  fi
+  SPINNER_PID=""
+  printf "\r\033[K"
+}
+
+# ── TIMING ──────────────────────────────────────────────────────────────────
+TASK_START=""
+
+timer_start() {
+  TASK_START=$(date +%s%N 2>/dev/null || date +%s)
+}
+
+timer_elapsed() {
+  local now
+  now=$(date +%s%N 2>/dev/null || date +%s)
+  if [ ${#TASK_START} -gt 10 ] && [ ${#now} -gt 10 ]; then
+    local diff=$(( (now - TASK_START) / 1000000 ))
+    local secs=$(( diff / 1000 ))
+    local ms=$(( diff % 1000 ))
+    printf "%d.%01ds" "$secs" "$(( ms / 100 ))"
+  else
+    local diff=$(( now - TASK_START ))
+    printf "%ds" "$diff"
+  fi
+}
+
+# ── PROGRESS LOGGING ────────────────────────────────────────────────────────
+step_ok()   { echo -e "  ${GREEN}├${NC} ${GREEN}✓${NC} $*"; }
+step_warn() { echo -e "  ${YELLOW}├${NC} ${YELLOW}⚠${NC} $*"; }
+step_err()  { echo -e "  ${RED}├${NC} ${RED}✗${NC} $*"; }
+step_info() { echo -e "  ${CYAN}├${NC} ${CYAN}◌${NC} $*"; }
+step_run()  { echo -e "  ${DIM}├${NC} ${DIM}$*${NC}"; }
+
+phase_start() { echo -e "  ${CYAN}◆${NC} ${BOLD}$*${NC}"; echo -e "  ${DIM}│${NC}"; }
+phase_end()   { echo -e "  ${DIM}│${NC}"; echo -e "  ${GREEN}└${NC} ${GREEN}Done${NC}${DIM} in $(timer_elapsed)${NC}"; echo ""; }
+
+log()   { echo -e "  ${GREEN}[✓]${NC} $*"; }
+warn()  { echo -e "  ${YELLOW}[!]${NC} $*"; }
+err()   { echo -e "  ${RED}[✗]${NC} $*"; }
+info()  { echo -e "  ${CYAN}[→]${NC} $*"; }
+
+# ── BANNER ──────────────────────────────────────────────────────────────────
+banner() {
+  echo ""
+  echo -e "${CYAN}${BOLD}"
+  echo "    ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗███╗   ██╗ ██████╗ ███████╗██████╗ "
+  echo "    ██║  ██║██╔══██╗██╔══██╗██╔══██╗██║████╗  ██║██╔════╝ ██╔════╝██╔══██╗"
+  echo "    ███████║███████║██████╔╝██████╔╝██║██╔██╗ ██║██║  ███╗█████╗  ██████╔╝"
+  echo "    ██╔══██║██╔══██║██╔══██╗██╔══██╗██║██║╚██╗██║██║   ██║██╔══╝  ██╔══██╗"
+  echo "    ██║  ██║██║  ██║██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝███████╗██║  ██║"
+  echo "    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝"
+  echo -e "${NC}"
+  echo -e "    ${DIM}Command Center${NC}  ${DIM}·${NC}  ${DIM}v2.0${NC}"
+  echo ""
+}
+
+# ── DOCKER COMPOSE HELPER ──────────────────────────────────────────────────
+dc() {
+  cd "$HARBINGER_DIR"
+  if docker compose version &>/dev/null; then
+    docker compose "$@"
+  elif command -v docker-compose &>/dev/null; then
+    docker-compose "$@"
+  else
+    err "Docker Compose not found."
+    return 1
+  fi
+}
+
+# ── CHECK BUILD CONTEXT EXISTS ──────────────────────────────────────────────
+# Returns list of services whose build context directories actually exist.
+get_valid_services() {
+  local valid=()
+  local all_build_services=("backend" "frontend" "pentagi" "redteam" "hexstrike" "mcp-ui")
+  local contexts=("./backend" "./frontend" "./mcp-plugins/pentagi" "./mcp-plugins/redteam" "./mcp-plugins/hexstrike-ai" "./mcp-plugins/mcp-ui")
+
+  for i in "${!all_build_services[@]}"; do
+    local ctx="${contexts[$i]}"
+    if [ -d "$HARBINGER_DIR/${ctx#./}" ]; then
+      valid+=("${all_build_services[$i]}")
+    fi
+  done
+  echo "${valid[@]}"
+}
+
+get_missing_services() {
+  local missing=()
+  local all_build_services=("backend" "frontend" "pentagi" "redteam" "hexstrike" "mcp-ui")
+  local contexts=("./backend" "./frontend" "./mcp-plugins/pentagi" "./mcp-plugins/redteam" "./mcp-plugins/hexstrike-ai" "./mcp-plugins/mcp-ui")
+
+  for i in "${!all_build_services[@]}"; do
+    local ctx="${contexts[$i]}"
+    if [ ! -d "$HARBINGER_DIR/${ctx#./}" ]; then
+      missing+=("${all_build_services[$i]}")
+    fi
+  done
+  echo "${missing[@]}"
+}
+
+# ── INTERACTIVE WIZARD ──────────────────────────────────────────────────────
+wizard() {
+  banner
+
+  local options=(
+    "Update & Pull Latest"
+    "Start Services"
+    "Stop Services"
+    "Restart Services"
+    "Dev Mode (Frontend)"
+    "View Logs"
+    "Health Check / Doctor"
+    "Initialize Project"
+    "Full Rebuild"
+    "Nuke & Reset"
+  )
+  local commands=("update" "start" "stop" "restart" "dev" "logs" "doctor" "init" "rebuild" "nuke")
+  local selected=0
+  local count=${#options[@]}
+
+  # Hide cursor
+  tput civis 2>/dev/null || true
+
+  # Restore cursor on exit
+  trap 'tput cnorm 2>/dev/null; exit' INT TERM EXIT
+
+  while true; do
+    # Print menu
+    echo -e "  ${CYAN}┌${NC} ${BOLD}Harbinger Command Center${NC}"
+    echo -e "  ${CYAN}│${NC}"
+    echo -e "  ${CYAN}◆${NC} ${BOLD}What would you like to do?${NC}"
+
+    for i in "${!options[@]}"; do
+      if [ "$i" -eq "$selected" ]; then
+        echo -e "  ${CYAN}│${NC}  ${CYAN}●${NC}  ${BOLD}${options[$i]}${NC}"
+      else
+        echo -e "  ${CYAN}│${NC}  ${DIM}○${NC}  ${DIM}${options[$i]}${NC}"
+      fi
+    done
+
+    echo -e "  ${CYAN}└${NC}"
+    echo ""
+    echo -e "  ${DIM}↑/↓ navigate  ·  Enter select  ·  q quit${NC}"
+
+    # Read key
+    local key
+    IFS= read -rsn1 key
+
+    case "$key" in
+      $'\x1b')
+        read -rsn2 -t 0.1 key
+        case "$key" in
+          '[A') selected=$(( (selected - 1 + count) % count )) ;;
+          '[B') selected=$(( (selected + 1) % count )) ;;
+        esac
+        ;;
+      'k') selected=$(( (selected - 1 + count) % count )) ;;
+      'j') selected=$(( (selected + 1) % count )) ;;
+      '')
+        # Enter pressed — restore cursor and run command
+        tput cnorm 2>/dev/null || true
+        trap - INT TERM EXIT
+        echo ""
+        run_command "${commands[$selected]}"
+        return
+        ;;
+      'q'|'Q')
+        tput cnorm 2>/dev/null || true
+        trap - INT TERM EXIT
+        echo ""
+        info "Goodbye."
+        return
+        ;;
+    esac
+
+    # Move cursor up to redraw menu
+    local lines=$(( count + 6 ))
+    printf "\033[%dA\033[J" "$lines"
+  done
+}
 
 # ── UPDATE ──────────────────────────────────────────────────────────────────
 cmd_update() {
   banner
-  info "Updating Harbinger..."
-  echo ""
+  timer_start
+  phase_start "Updating Harbinger"
 
   # 1. Git pull
-  info "Pulling latest from GitHub..."
+  spinner_start "Pulling latest from main..."
   cd "$HARBINGER_DIR"
-  git fetch origin main 2>/dev/null
+  git fetch origin main 2>/dev/null || true
+  spinner_stop
 
-  LOCAL=$(git rev-parse HEAD)
-  REMOTE=$(git rev-parse origin/main)
+  LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+  REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "unknown")
 
   if [ "$LOCAL" = "$REMOTE" ]; then
-    log "Already up to date."
+    step_ok "Already up to date"
   else
-    BEHIND=$(git rev-list --count HEAD..origin/main)
-    info "You are ${BEHIND} commit(s) behind. Pulling..."
-    git pull origin main --ff-only || {
-      warn "Fast-forward failed. Trying rebase..."
-      git pull origin main --rebase
-    }
-    log "Code updated."
-
-    # Show what changed
-    echo ""
-    info "Recent changes:"
-    git log --oneline "$LOCAL"..HEAD | head -10 | while read -r line; do
-      dim "$line"
-    done
+    BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+    spinner_start "Pulling $BEHIND new commit(s)..."
+    git pull origin main --ff-only 2>/dev/null || git pull origin main --rebase 2>/dev/null || true
+    spinner_stop
+    step_ok "Pulled latest from main (${BEHIND} new commits)"
   fi
-
-  echo ""
 
   # 2. Frontend dependencies
   if [ -f "$FRONTEND_DIR/package.json" ]; then
-    info "Checking frontend dependencies..."
+    spinner_start "Installing frontend dependencies..."
     cd "$FRONTEND_DIR"
+    local dep_start
+    dep_start=$(date +%s)
     if command -v pnpm &>/dev/null; then
-      pnpm install --frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null
-      log "Frontend dependencies synced (pnpm)."
+      pnpm install --frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null || true
     elif command -v npm &>/dev/null; then
-      npm install 2>/dev/null
-      log "Frontend dependencies synced (npm)."
-    else
-      warn "No package manager found. Install pnpm: npm i -g pnpm"
+      npm install 2>/dev/null || true
     fi
+    local dep_end
+    dep_end=$(date +%s)
+    local dep_time=$(( dep_end - dep_start ))
+    spinner_stop
+    step_ok "Dependencies installed (${dep_time}s)"
+  else
+    step_warn "No frontend package.json found — skipping"
   fi
 
-  echo ""
-  log "Update complete!"
-  echo ""
+  # 3. Quick health check
+  cd "$HARBINGER_DIR"
+  if command -v docker &>/dev/null && dc ps 2>/dev/null | grep -q "Up"; then
+    step_ok "Docker services running"
+  else
+    step_info "Docker services not running — use ${BOLD}start${NC} to launch"
+  fi
+
+  phase_end
+
   info "Next steps:"
-  dim "→ ./harbinger restart    Restart all Docker services"
-  dim "→ ./harbinger dev        Start frontend dev server"
-  dim "→ ./harbinger status     Check service health"
+  echo -e "    ${DIM}→ ./harbinger restart    Restart all Docker services${NC}"
+  echo -e "    ${DIM}→ ./harbinger dev        Start frontend dev server${NC}"
+  echo -e "    ${DIM}→ ./harbinger status     Check service health${NC}"
+  echo ""
 }
 
 # ── STATUS ──────────────────────────────────────────────────────────────────
 cmd_status() {
   banner
-  info "Harbinger Service Status"
-  echo ""
+  timer_start
+  phase_start "Harbinger Service Status"
 
   cd "$HARBINGER_DIR"
 
-  # Git status
-  BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-  COMMIT=$(git log --oneline -1 2>/dev/null || echo "unknown")
-  info "Branch: ${BOLD}${BRANCH}${NC}"
-  dim "$COMMIT"
-  echo ""
+  # Git info
+  local branch
+  branch=$(git branch --show-current 2>/dev/null || echo "unknown")
+  local commit
+  commit=$(git log --oneline -1 2>/dev/null || echo "unknown")
+  step_ok "Branch: ${BOLD}${branch}${NC}  ${DIM}(${commit})${NC}"
 
   # Docker services
   if command -v docker &>/dev/null; then
-    info "Docker Services:"
-    if docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null; then
-      :
-    elif docker-compose ps 2>/dev/null; then
-      :
-    else
-      warn "Docker Compose not running or not installed."
-    fi
+    echo -e "  ${DIM}│${NC}"
+
+    local services=("postgres:5432" "redis:6379" "neo4j:7474" "backend:8080" "frontend:3000" "hexstrike:3001" "pentagi:3002" "mcp-ui:3003" "redteam:3004")
+    for svc_port in "${services[@]}"; do
+      local svc="${svc_port%%:*}"
+      local port="${svc_port##*:}"
+      if dc ps "$svc" 2>/dev/null | grep -q "Up"; then
+        step_ok "${svc}: ${GREEN}RUNNING${NC} on port ${port}"
+      elif dc ps "$svc" 2>/dev/null | grep -qi "restart"; then
+        step_err "${svc}: ${RED}RESTARTING${NC} — check logs"
+      else
+        step_run "${svc}: ${DIM}not running${NC}"
+      fi
+    done
   else
-    warn "Docker not found."
+    step_warn "Docker not found"
   fi
 
-  echo ""
-
-  # Frontend dev server
-  if lsof -i :3000 &>/dev/null 2>&1 || ss -tlnp 2>/dev/null | grep -q ':3000'; then
-    log "Frontend dev server: ${GREEN}RUNNING${NC} on port 3000"
-  else
-    dim "Frontend dev server: not running"
-  fi
-
-  # Backend
-  if lsof -i :8080 &>/dev/null 2>&1 || ss -tlnp 2>/dev/null | grep -q ':8080'; then
-    log "Backend API: ${GREEN}RUNNING${NC} on port 8080"
-  else
-    dim "Backend API: not running"
-  fi
-
-  # Neo4j
-  if lsof -i :7474 &>/dev/null 2>&1 || ss -tlnp 2>/dev/null | grep -q ':7474'; then
-    log "Neo4j: ${GREEN}RUNNING${NC} on port 7474"
-  else
-    dim "Neo4j: not running"
-  fi
-
-  # Redis
-  if lsof -i :6379 &>/dev/null 2>&1 || ss -tlnp 2>/dev/null | grep -q ':6379'; then
-    log "Redis: ${GREEN}RUNNING${NC} on port 6379"
-  else
-    dim "Redis: not running"
-  fi
-
-  # Postgres
-  if lsof -i :5432 &>/dev/null 2>&1 || ss -tlnp 2>/dev/null | grep -q ':5432'; then
-    log "PostgreSQL: ${GREEN}RUNNING${NC} on port 5432"
-  else
-    dim "PostgreSQL: not running"
-  fi
-
-  echo ""
+  phase_end
 }
 
-# ── START / STOP / RESTART DOCKER ───────────────────────────────────────────
+# ── START ───────────────────────────────────────────────────────────────────
 cmd_start() {
   banner
-  info "Starting Harbinger services..."
+  timer_start
+  phase_start "Starting Harbinger Services"
+
   cd "$HARBINGER_DIR"
-  docker compose up -d 2>/dev/null || docker-compose up -d
-  log "Services started."
-  echo ""
+  spinner_start "Launching Docker services..."
+  dc up -d 2>/dev/null
+  spinner_stop
+  step_ok "All services started"
+
+  phase_end
+
   cmd_status
 }
 
+# ── STOP ────────────────────────────────────────────────────────────────────
 cmd_stop() {
   banner
-  info "Stopping Harbinger services..."
+  timer_start
+  phase_start "Stopping Harbinger Services"
+
   cd "$HARBINGER_DIR"
-  docker compose down 2>/dev/null || docker-compose down
-  log "Services stopped."
+  spinner_start "Stopping Docker services..."
+  dc down 2>/dev/null
+  spinner_stop
+  step_ok "All services stopped"
+
+  phase_end
 }
 
+# ── RESTART (smart — skips services with missing build contexts) ────────────
 cmd_restart() {
   banner
-  info "Restarting Harbinger services..."
+  timer_start
+  phase_start "Restarting Harbinger Services"
+
   cd "$HARBINGER_DIR"
-  docker compose down 2>/dev/null || docker-compose down
-  docker compose up -d 2>/dev/null || docker-compose up -d
-  log "Services restarted."
-  echo ""
-  sleep 3
-  cmd_status
+
+  # Check for missing build contexts
+  local missing
+  missing=$(get_missing_services)
+  if [ -n "$missing" ]; then
+    step_warn "Missing build contexts: ${YELLOW}${missing}${NC} — these will be skipped"
+  fi
+
+  spinner_start "Stopping services..."
+  dc down 2>/dev/null
+  spinner_stop
+  step_ok "Services stopped"
+
+  spinner_start "Starting services..."
+  dc up -d 2>/dev/null
+  spinner_stop
+  step_ok "Services started"
+
+  # Wait a moment for health checks
+  spinner_start "Waiting for health checks..."
+  sleep 4
+  spinner_stop
+
+  # Verify
+  local healthy=0
+  local total=0
+  for svc in postgres redis neo4j backend; do
+    total=$((total + 1))
+    if dc ps "$svc" 2>/dev/null | grep -q "Up"; then
+      healthy=$((healthy + 1))
+    fi
+  done
+
+  if [ "$healthy" -eq "$total" ]; then
+    step_ok "All core services healthy (${healthy}/${total})"
+  else
+    step_warn "Some services may still be starting (${healthy}/${total} healthy)"
+  fi
+
+  phase_end
 }
 
 # ── DEV MODE ────────────────────────────────────────────────────────────────
 cmd_dev() {
   banner
-  info "Starting frontend dev server..."
+  timer_start
+  phase_start "Starting Frontend Dev Server"
+
+  if [ ! -d "$FRONTEND_DIR" ]; then
+    step_err "Frontend directory not found at ${FRONTEND_DIR}"
+    phase_end
+    return 1
+  fi
+
   cd "$FRONTEND_DIR"
+
+  if [ ! -d "node_modules" ]; then
+    spinner_start "Installing dependencies first..."
+    if command -v pnpm &>/dev/null; then
+      pnpm install 2>/dev/null || true
+    elif command -v npm &>/dev/null; then
+      npm install 2>/dev/null || true
+    fi
+    spinner_stop
+    step_ok "Dependencies installed"
+  fi
+
+  step_ok "Launching Vite dev server on ${CYAN}http://localhost:3000${NC}"
+  echo -e "  ${DIM}│${NC}"
+  echo -e "  ${DIM}└${NC} ${DIM}Press Ctrl+C to stop${NC}"
+  echo ""
+
   if command -v pnpm &>/dev/null; then
     pnpm dev
   elif command -v npm &>/dev/null; then
@@ -217,204 +451,337 @@ cmd_dev() {
 cmd_logs() {
   local service="${1:-}"
   cd "$HARBINGER_DIR"
+
   if [ -n "$service" ]; then
-    info "Logs for ${BOLD}${service}${NC}:"
-    docker compose logs -f --tail=100 "$service" 2>/dev/null || docker-compose logs -f --tail=100 "$service"
+    banner
+    info "Streaming logs for ${BOLD}${service}${NC}  ${DIM}(Ctrl+C to stop)${NC}"
+    echo ""
+    dc logs -f --tail=100 "$service" 2>/dev/null
   else
-    info "Logs for all services (last 50 lines each):"
-    docker compose logs -f --tail=50 2>/dev/null || docker-compose logs -f --tail=50
+    banner
+    info "Streaming all service logs  ${DIM}(Ctrl+C to stop)${NC}"
+    echo ""
+    dc logs -f --tail=50 2>/dev/null
   fi
 }
 
 # ── REBUILD ─────────────────────────────────────────────────────────────────
 cmd_rebuild() {
   banner
-  info "Rebuilding Harbinger from scratch..."
+  timer_start
+  phase_start "Full Rebuild"
+
   cd "$HARBINGER_DIR"
 
-  info "Pulling latest code..."
-  git pull origin main --ff-only 2>/dev/null || git pull origin main --rebase
+  # Pull
+  spinner_start "Pulling latest code..."
+  git pull origin main --ff-only 2>/dev/null || git pull origin main --rebase 2>/dev/null || true
+  spinner_stop
+  step_ok "Code updated"
 
-  info "Rebuilding Docker images..."
-  docker compose build --no-cache 2>/dev/null || docker-compose build --no-cache
+  # Build
+  spinner_start "Rebuilding Docker images (this may take a while)..."
+  dc build --no-cache 2>/dev/null
+  spinner_stop
+  step_ok "Docker images rebuilt"
 
-  info "Restarting services..."
-  docker compose down 2>/dev/null || docker-compose down
-  docker compose up -d 2>/dev/null || docker-compose up -d
+  # Restart
+  spinner_start "Restarting services..."
+  dc down 2>/dev/null
+  dc up -d 2>/dev/null
+  spinner_stop
+  step_ok "Services restarted"
 
-  echo ""
-  info "Installing frontend dependencies..."
-  cd "$FRONTEND_DIR"
-  if command -v pnpm &>/dev/null; then
-    pnpm install
-  elif command -v npm &>/dev/null; then
-    npm install
+  # Frontend deps
+  if [ -f "$FRONTEND_DIR/package.json" ]; then
+    spinner_start "Installing frontend dependencies..."
+    cd "$FRONTEND_DIR"
+    if command -v pnpm &>/dev/null; then
+      pnpm install 2>/dev/null || true
+    elif command -v npm &>/dev/null; then
+      npm install 2>/dev/null || true
+    fi
+    spinner_stop
+    step_ok "Frontend dependencies installed"
   fi
 
-  echo ""
-  log "Full rebuild complete!"
-  sleep 3
-  cmd_status
+  phase_end
 }
 
-# ── DOCTOR (diagnose issues) ───────────────────────────────────────────────
+# ── DOCTOR ──────────────────────────────────────────────────────────────────
 cmd_doctor() {
   banner
-  info "Running Harbinger diagnostics..."
-  echo ""
+  timer_start
+  phase_start "Running Diagnostics"
 
-  # Check prerequisites
   local issues=0
 
-  info "Checking prerequisites..."
-
+  # Prerequisites
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Prerequisites${NC}"
   if command -v git &>/dev/null; then
-    log "git: $(git --version)"
+    step_ok "git: $(git --version 2>/dev/null | head -c 30)"
   else
-    err "git: NOT FOUND"
-    ((issues++))
+    step_err "git: NOT FOUND"
+    issues=$((issues + 1))
   fi
 
   if command -v docker &>/dev/null; then
-    log "docker: $(docker --version 2>/dev/null | head -1)"
+    step_ok "docker: $(docker --version 2>/dev/null | head -c 40)"
   else
-    err "docker: NOT FOUND"
-    ((issues++))
+    step_err "docker: NOT FOUND"
+    issues=$((issues + 1))
   fi
 
   if command -v node &>/dev/null; then
-    log "node: $(node --version)"
+    step_ok "node: $(node --version 2>/dev/null)"
   else
-    err "node: NOT FOUND"
-    ((issues++))
+    step_err "node: NOT FOUND"
+    issues=$((issues + 1))
   fi
 
   if command -v pnpm &>/dev/null; then
-    log "pnpm: $(pnpm --version)"
+    step_ok "pnpm: $(pnpm --version 2>/dev/null)"
   elif command -v npm &>/dev/null; then
-    warn "pnpm: not found (using npm $(npm --version) as fallback)"
+    step_warn "pnpm: not found (using npm $(npm --version 2>/dev/null) as fallback)"
   else
-    err "No package manager found"
-    ((issues++))
+    step_err "No package manager found"
+    issues=$((issues + 1))
   fi
 
-  echo ""
+  echo -e "  ${DIM}│${NC}"
 
-  # Check .env
+  # Environment
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Environment${NC}"
   if [ -f "$HARBINGER_DIR/.env" ]; then
-    log ".env file exists"
+    step_ok ".env file exists"
   elif [ -f "$HARBINGER_DIR/.env.example" ]; then
-    warn ".env file missing — copying from .env.example"
-    cp "$HARBINGER_DIR/.env.example" "$HARBINGER_DIR/.env"
-    log ".env created from example. Edit it with your keys."
+    step_warn ".env missing — run ${BOLD}./harbinger init${NC} to create it"
+    issues=$((issues + 1))
   else
-    err ".env file missing and no .env.example found"
-    ((issues++))
+    step_err ".env missing and no .env.example found"
+    issues=$((issues + 1))
   fi
 
-  echo ""
+  echo -e "  ${DIM}│${NC}"
 
-  # Check Docker services health
-  info "Checking Docker service health..."
-  cd "$HARBINGER_DIR"
-
-  for svc in postgres redis neo4j; do
-    if docker compose ps "$svc" 2>/dev/null | grep -q "Up"; then
-      log "$svc: healthy"
-    elif docker compose ps "$svc" 2>/dev/null | grep -qi "restart"; then
-      err "$svc: RESTARTING — check logs with: ./harbinger logs $svc"
-      ((issues++))
+  # Build contexts
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Build Contexts${NC}"
+  local dirs=("backend" "harbinger-tools/frontend" "mcp-plugins/pentagi" "mcp-plugins/redteam" "mcp-plugins/hexstrike-ai" "mcp-plugins/mcp-ui")
+  local labels=("Backend" "Frontend" "PentAGI" "Red Team" "HexStrike AI" "MCP-UI")
+  for i in "${!dirs[@]}"; do
+    if [ -d "$HARBINGER_DIR/${dirs[$i]}" ]; then
+      step_ok "${labels[$i]}: ${DIM}${dirs[$i]}/${NC}"
     else
-      warn "$svc: not running"
+      step_err "${labels[$i]}: ${RED}MISSING${NC} — ${dirs[$i]}/"
+      issues=$((issues + 1))
     fi
   done
 
-  echo ""
+  echo -e "  ${DIM}│${NC}"
 
-  # Check for common frontend issues
-  info "Checking frontend..."
+  # Docker services
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Docker Services${NC}"
+  cd "$HARBINGER_DIR"
+  for svc in postgres redis neo4j; do
+    if command -v docker &>/dev/null && dc ps "$svc" 2>/dev/null | grep -q "Up"; then
+      step_ok "$svc: healthy"
+    elif command -v docker &>/dev/null && dc ps "$svc" 2>/dev/null | grep -qi "restart"; then
+      step_err "$svc: RESTARTING — run: ./harbinger logs $svc"
+      issues=$((issues + 1))
+    else
+      step_run "$svc: ${DIM}not running${NC}"
+    fi
+  done
+
+  echo -e "  ${DIM}│${NC}"
+
+  # Frontend
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Frontend${NC}"
   if [ -d "$FRONTEND_DIR/node_modules" ]; then
-    log "node_modules exists"
+    step_ok "node_modules exists"
   else
-    warn "node_modules missing — run: ./harbinger update"
-    ((issues++))
+    step_warn "node_modules missing — run: ./harbinger update"
+    issues=$((issues + 1))
   fi
 
   if [ -f "$FRONTEND_DIR/src/store/secretsStore.ts" ]; then
-    log "secretsStore.ts exists"
+    step_ok "secretsStore.ts exists"
   else
-    err "secretsStore.ts MISSING — this will cause a white screen!"
-    ((issues++))
+    step_err "secretsStore.ts MISSING — this will cause a white screen!"
+    issues=$((issues + 1))
   fi
 
-  echo ""
+  echo -e "  ${DIM}│${NC}"
+
+  # Postgres init.sql
+  echo -e "  ${DIM}│${NC}  ${ITALIC}Database${NC}"
+  if [ -f "$HARBINGER_DIR/docker/postgres/init.sql" ]; then
+    step_ok "docker/postgres/init.sql exists"
+  else
+    step_err "docker/postgres/init.sql MISSING — Postgres will restart-loop!"
+    issues=$((issues + 1))
+  fi
+
+  echo -e "  ${DIM}│${NC}"
 
   if [ "$issues" -eq 0 ]; then
-    log "${GREEN}${BOLD}All checks passed! Harbinger is healthy.${NC}"
+    step_ok "${GREEN}${BOLD}All checks passed! Harbinger is healthy.${NC}"
   else
-    warn "${YELLOW}Found ${issues} issue(s). Fix them and run ./harbinger doctor again.${NC}"
+    step_warn "${YELLOW}Found ${issues} issue(s). Fix them and run ./harbinger doctor again.${NC}"
   fi
+
+  phase_end
+}
+
+# ── INIT ────────────────────────────────────────────────────────────────────
+cmd_init() {
+  banner
+  timer_start
+  phase_start "Initializing Harbinger"
+
+  cd "$HARBINGER_DIR"
+
+  # 1. .env
+  if [ -f ".env" ]; then
+    step_ok ".env already exists"
+  elif [ -f ".env.example" ]; then
+    cp .env.example .env
+    step_ok "Created .env from .env.example"
+    step_warn "Edit .env with your API keys and secrets"
+  else
+    step_err "No .env.example found — cannot create .env"
+  fi
+
+  # 2. Frontend deps
+  if [ -f "$FRONTEND_DIR/package.json" ]; then
+    spinner_start "Installing frontend dependencies..."
+    cd "$FRONTEND_DIR"
+    if command -v pnpm &>/dev/null; then
+      pnpm install 2>/dev/null || true
+    elif command -v npm &>/dev/null; then
+      npm install 2>/dev/null || true
+    fi
+    spinner_stop
+    step_ok "Frontend dependencies installed"
+    cd "$HARBINGER_DIR"
+  else
+    step_warn "No frontend package.json found"
+  fi
+
+  # 3. Docker check
+  if command -v docker &>/dev/null; then
+    if docker info &>/dev/null; then
+      step_ok "Docker is running"
+
+      # Offer to start services
+      echo -e "  ${DIM}│${NC}"
+      echo -ne "  ${CYAN}│${NC}  Start services now? ${DIM}[Y/n]${NC} "
+      local answer
+      read -r answer
+      if [[ -z "$answer" || "$answer" =~ ^[Yy] ]]; then
+        spinner_start "Starting Docker services..."
+        dc up -d 2>/dev/null
+        spinner_stop
+        step_ok "Services started"
+      else
+        step_info "Skipped — run ${BOLD}./harbinger start${NC} when ready"
+      fi
+    else
+      step_warn "Docker is installed but not running — start Docker first"
+    fi
+  else
+    step_err "Docker not found — install Docker to run Harbinger services"
+  fi
+
+  phase_end
+
+  info "Quick start:"
+  echo -e "    ${DIM}→ ./harbinger start     Launch all services${NC}"
+  echo -e "    ${DIM}→ ./harbinger dev       Start frontend dev server${NC}"
+  echo -e "    ${DIM}→ ./harbinger doctor    Check everything is working${NC}"
   echo ""
 }
 
-# ── NUKE (clean reset) ─────────────────────────────────────────────────────
+# ── NUKE ────────────────────────────────────────────────────────────────────
 cmd_nuke() {
   banner
-  warn "This will destroy all Docker volumes, containers, and node_modules."
-  echo -e "  ${RED}All database data will be lost.${NC}"
+
+  echo -e "  ${RED}${BOLD}⚠  DANGER ZONE${NC}"
   echo ""
-  read -rp "  Type 'NUKE' to confirm: " confirm
+  echo -e "  This will ${RED}destroy${NC} all Docker volumes, containers, and node_modules."
+  echo -e "  ${RED}All database data will be permanently lost.${NC}"
+  echo ""
+  echo -ne "  Type ${RED}${BOLD}NUKE${NC} to confirm: "
+  local confirm
+  read -r confirm
   if [ "$confirm" != "NUKE" ]; then
+    echo ""
     info "Aborted."
     return
   fi
 
-  cd "$HARBINGER_DIR"
-  info "Stopping all services..."
-  docker compose down -v --remove-orphans 2>/dev/null || docker-compose down -v --remove-orphans
-
-  info "Removing node_modules..."
-  rm -rf "$FRONTEND_DIR/node_modules" 2>/dev/null
-
-  info "Pruning Docker..."
-  docker system prune -f 2>/dev/null
-
   echo ""
-  log "Nuked. Run ./harbinger rebuild to start fresh."
+  timer_start
+  phase_start "Nuking Everything"
+
+  cd "$HARBINGER_DIR"
+
+  spinner_start "Stopping all services..."
+  dc down -v --remove-orphans 2>/dev/null || true
+  spinner_stop
+  step_ok "Services stopped and volumes removed"
+
+  spinner_start "Removing node_modules..."
+  rm -rf "$FRONTEND_DIR/node_modules" 2>/dev/null || true
+  spinner_stop
+  step_ok "node_modules removed"
+
+  spinner_start "Pruning Docker..."
+  docker system prune -f 2>/dev/null || true
+  spinner_stop
+  step_ok "Docker pruned"
+
+  phase_end
+
+  info "Run ${BOLD}./harbinger rebuild${NC} to start fresh."
+  echo ""
 }
 
 # ── HELP ────────────────────────────────────────────────────────────────────
 cmd_help() {
   banner
-  echo -e "  ${BOLD}Usage:${NC} ./harbinger <command> [options]"
+  echo -e "  ${BOLD}Usage:${NC} ./harbinger ${DIM}[command] [options]${NC}"
+  echo -e "  ${DIM}Run with no arguments for interactive wizard mode.${NC}"
   echo ""
-  echo -e "  ${CYAN}${BOLD}Core Commands:${NC}"
-  echo -e "    ${BOLD}update${NC}          Pull latest code + install dependencies"
-  echo -e "    ${BOLD}status${NC}          Show service health and versions"
-  echo -e "    ${BOLD}doctor${NC}          Diagnose common issues"
+  echo -e "  ${CYAN}${BOLD}Core Commands${NC}"
+  echo -e "    ${BOLD}update${NC}            Pull latest code + install dependencies"
+  echo -e "    ${BOLD}status${NC}            Show service health and versions"
+  echo -e "    ${BOLD}doctor${NC}            Diagnose common issues"
+  echo -e "    ${BOLD}init${NC}              First-time project setup"
   echo ""
-  echo -e "  ${CYAN}${BOLD}Service Management:${NC}"
-  echo -e "    ${BOLD}start${NC}           Start all Docker services"
-  echo -e "    ${BOLD}stop${NC}            Stop all Docker services"
-  echo -e "    ${BOLD}restart${NC}         Restart all Docker services"
-  echo -e "    ${BOLD}dev${NC}             Start frontend dev server (Vite)"
-  echo -e "    ${BOLD}logs${NC} [service]  Tail logs (all or specific service)"
+  echo -e "  ${CYAN}${BOLD}Service Management${NC}"
+  echo -e "    ${BOLD}start${NC}             Start all Docker services"
+  echo -e "    ${BOLD}stop${NC}              Stop all Docker services"
+  echo -e "    ${BOLD}restart${NC}           Smart restart (skips missing build contexts)"
+  echo -e "    ${BOLD}dev${NC}               Start frontend dev server (Vite)"
+  echo -e "    ${BOLD}logs${NC} ${DIM}[service]${NC}    Tail logs (all or specific service)"
   echo ""
-  echo -e "  ${CYAN}${BOLD}Maintenance:${NC}"
-  echo -e "    ${BOLD}rebuild${NC}         Full rebuild (pull + build images + restart)"
-  echo -e "    ${BOLD}nuke${NC}            Destroy everything and start fresh"
+  echo -e "  ${CYAN}${BOLD}Maintenance${NC}"
+  echo -e "    ${BOLD}rebuild${NC}           Full rebuild (pull + build images + restart)"
+  echo -e "    ${BOLD}nuke${NC}              Destroy everything and start fresh"
   echo ""
   echo -e "  ${DIM}Examples:${NC}"
-  dim "./harbinger update          # Pull latest fixes"
-  dim "./harbinger restart         # Restart after update"
-  dim "./harbinger logs postgres   # Debug Postgres issues"
-  dim "./harbinger doctor          # Check what's broken"
+  echo -e "    ${DIM}./harbinger                  # Interactive wizard${NC}"
+  echo -e "    ${DIM}./harbinger update            # Pull latest fixes${NC}"
+  echo -e "    ${DIM}./harbinger restart           # Smart restart${NC}"
+  echo -e "    ${DIM}./harbinger logs postgres     # Debug Postgres issues${NC}"
+  echo -e "    ${DIM}./harbinger doctor            # Check what's broken${NC}"
   echo ""
 }
 
-# ── MAIN ROUTER ─────────────────────────────────────────────────────────────
-main() {
-  local cmd="${1:-help}"
+# ── COMMAND ROUTER ──────────────────────────────────────────────────────────
+run_command() {
+  local cmd="$1"
   shift 2>/dev/null || true
 
   case "$cmd" in
@@ -427,6 +794,7 @@ main() {
     logs)     cmd_logs "$@" ;;
     rebuild)  cmd_rebuild ;;
     doctor)   cmd_doctor ;;
+    init)     cmd_init ;;
     nuke)     cmd_nuke ;;
     help|-h|--help) cmd_help ;;
     *)
@@ -436,6 +804,19 @@ main() {
       exit 1
       ;;
   esac
+}
+
+# ── MAIN ────────────────────────────────────────────────────────────────────
+main() {
+  local cmd="${1:-}"
+
+  if [ -z "$cmd" ]; then
+    # No args — launch interactive wizard
+    wizard
+  else
+    shift
+    run_command "$cmd" "$@"
+  fi
 }
 
 main "$@"

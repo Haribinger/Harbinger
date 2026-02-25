@@ -1,0 +1,10 @@
+{
+  "name": "@harbinger/mcp-redteam",
+  "version": "0.1.0",
+  "description": "Red team operations MCP server placeholder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}
