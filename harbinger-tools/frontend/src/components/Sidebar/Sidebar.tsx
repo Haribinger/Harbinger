@@ -12,6 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  BookOpen,
+  Target,
+  Swords,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -23,6 +26,9 @@ const navItems = [
   { path: '/mcp', icon: Puzzle, label: 'MCP Tools' },
   { path: '/docker', icon: Container, label: 'Docker' },
   { path: '/browsers', icon: Globe, label: 'Browsers' },
+  { path: '/redteam', icon: Swords, label: 'Red Team' },
+  { path: '/skills', icon: BookOpen, label: 'Skills Hub' },
+  { path: '/bounty-hub', icon: Target, label: 'Bounty Hub' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 

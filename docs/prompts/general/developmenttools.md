@@ -1,0 +1,1 @@
+Research and compile a list of 30 AI tools that can be used to build AI agents. This research should include trusted sources, social media discussions, and real user experiences across various platforms. Focus on tools that are highly recommended by users and experts in the field.

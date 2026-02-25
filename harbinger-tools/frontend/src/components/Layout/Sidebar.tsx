@@ -12,6 +12,8 @@ import {
   Shield,
   Zap,
   Swords,
+  BookOpen,
+  Target,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -31,6 +33,8 @@ const navItems: NavItem[] = [
   { path: '/docker', label: 'Docker', icon: Container },
   { path: '/browsers', label: 'Browsers', icon: Globe },
   { path: '/redteam', label: 'Red Team', icon: Swords },
+  { path: '/skills', label: 'Skills Hub', icon: BookOpen },
+  { path: '/bounty-hub', label: 'Bounty Hub', icon: Target },
 ]
 
 const bottomNavItems: NavItem[] = [

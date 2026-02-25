@@ -13,6 +13,7 @@ import BrowserManager from './pages/BrowserManager/BrowserManager'
 import Settings from './pages/Settings/Settings'
 import RedTeam from './pages/RedTeam/RedTeam'
 import BountyHub from './pages/BountyHub/BountyHub'
+import SkillsHub from './pages/SkillsHub/SkillsHub'
 import Login from './pages/Login/Login'
 import SetupWizard from './pages/Setup/SetupWizard'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
@@ -93,6 +94,7 @@ function AnimatedRoutes() {
           <Route path="browsers" element={<BrowserManager />} />
           <Route path="settings" element={<Settings />} />
           <Route path="redteam" element={<RedTeam />} />
+          <Route path="skills" element={<SkillsHub />} />
           <Route path="bounty-hub" element={<BountyHub />} />
           <Route path="sse" element={<SSERoute />} />
           <Route path="*" element={<div className="p-8 text-center">Page not found</div>} />

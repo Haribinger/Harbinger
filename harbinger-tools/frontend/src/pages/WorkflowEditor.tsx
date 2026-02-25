@@ -1,14 +1,13 @@
 import React, { useCallback, useRef } from 'react';
-import ReactFlow, { Controls, Background, MiniMap, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
+import { ReactFlow, Controls, Background, BackgroundVariant, MiniMap, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useWorkflowEditorStore } from '../store/workflowEditorStore';
-import { shallow } from 'zustand/shallow';
 import WorkflowToolbar from '../components/Workflow/WorkflowToolbar';
 import NodePalette from '../components/Workflow/NodePalette';
 import ToolNode from '../components/Workflow/nodes/ToolNode';
 import AgentNode from '../components/Workflow/nodes/AgentNode';
 import DecisionNode from '../components/Workflow/nodes/DecisionNode';
-import { WorkflowNode } from '../types/workflow';
+import { WorkflowNode, DecisionNodeData } from '../types/workflow';
 
 const nodeTypes = {
   toolNode: ToolNode,
@@ -34,21 +33,7 @@ const WorkflowEditorContent: React.FC = () => {
     setSelectedNode,
     executionState,
     updateNode,
-  } = useWorkflowEditorStore(
-    (state) => ({
-      nodes: state.nodes,
-      edges: state.edges,
-      onNodesChange: state.onNodesChange,
-      onEdgesChange: state.onEdgesChange,
-      onConnect: state.onConnect,
-      addNode: state.addNode,
-      selectedNode: state.selectedNode,
-      setSelectedNode: state.setSelectedNode,
-      executionState: state.executionState,
-      updateNode: state.updateNode,
-    }),
-    shallow
-  );
+  } = useWorkflowEditorStore();
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -113,25 +98,21 @@ const WorkflowEditorContent: React.FC = () => {
           id: getId(),
           type,
           position,
-          data: {
-            label: 'Trigger',
-          },
+          data: { condition: 'Trigger' } as DecisionNodeData,
         };
       } else if (type === 'outputNode') {
         newNode = {
           id: getId(),
           type,
           position,
-          data: {
-            label: 'Output',
-          },
+          data: { condition: 'Output' } as DecisionNodeData,
         };
       } else {
         newNode = {
           id: getId(),
           type,
           position,
-          data: { label: `${type} node` },
+          data: { condition: `${type} node` } as DecisionNodeData,
         };
       }
 
@@ -194,7 +175,7 @@ const WorkflowEditorContent: React.FC = () => {
               return '#eee';
             }} />
             <Controls />
-            <Background variant="dots" gap={12} size={1} color="#1a1a2e" />
+            <Background variant={BackgroundVariant.Dots} gap={12} size={1} color="#1a1a2e" />
           </ReactFlow>
         </div>
         <div className="w-80 p-4 bg-[#0d0d15] border-l border-[#1a1a2e]">

@@ -133,7 +133,7 @@ export default function CreateAgentModal({ onClose, onCreate, personalities: pro
               className="w-full bg-surface-light border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
             >
               {availableModels.length > 0 ? (
-                availableModels.map((m) => (
+                availableModels.map((m: string) => (
                   <option key={m} value={m}>{m}</option>
                 ))
               ) : (

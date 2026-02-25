@@ -72,13 +72,13 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => 
   savedWorkflows: [],
 
   onNodesChange: (changes) => {
-    set({ nodes: applyNodeChanges(changes, get().nodes) });
+    set({ nodes: applyNodeChanges(changes, get().nodes) as WorkflowNode[] });
   },
   onEdgesChange: (changes) => {
-    set({ edges: applyEdgeChanges(changes, get().edges) });
+    set({ edges: applyEdgeChanges(changes, get().edges) as WorkflowEdge[] });
   },
   onConnect: (connection) => {
-    set({ edges: addEdge(connection, get().edges) });
+    set({ edges: addEdge(connection, get().edges) as WorkflowEdge[] });
   },
 
   setNodes: (nodes) => set({ nodes }),
