@@ -140,18 +140,26 @@ Provide specific line numbers and actionable suggestions.`,
       setError: (error) => set({ error }),
 
       spawnAgent: async (agentType, personality, codename) => {
-        // This will interact with the orchestrator and potentially the backend
         console.log(`Spawning agent of type ${agentType} with personality ${personality} and codename ${codename}`);
-        // For now, we'll just add a dummy agent to the store
-        const newAgent = {
+        const now = new Date().toISOString();
+        const newAgent: Agent = {
           id: `agent-${Date.now()}`,
+          name: codename,
+          description: '',
+          color: '#6366f1',
           type: agentType,
-          status: 'spawned',
           personality,
+          status: 'spawned',
           codename,
           currentTask: 'Initializing',
           toolsCount: 0,
           findingsCount: 0,
+          capabilities: [],
+          tools: [],
+          mcps: [],
+          config: { model: '', temperature: 0.7, maxTokens: 4096 },
+          createdAt: now,
+          updatedAt: now,
         };
         set((state) => ({ agents: [...state.agents, newAgent] }));
       },

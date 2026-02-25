@@ -41,22 +41,22 @@ function BountyHub() {
       );
     }
 
+    const platform = filters.platform ?? [];
+    const typeFilter = filters.type ?? [];
+    const minPayout = filters.minPayout ?? 0;
+    const maxPayout = filters.maxPayout ?? Number.MAX_SAFE_INTEGER;
+
     // Apply platform filter
-    if (filters.platform && filters.platform.length > 0) {
-      filtered = filtered.filter(p => filters.platform.includes(p.platform));
+    if (platform.length > 0) {
+      filtered = filtered.filter(p => platform.includes(p.platform));
     }
 
     // Apply payout filter
-    if (filters.minPayout !== undefined) {
-      filtered = filtered.filter(p => p.payoutMax >= filters.minPayout);
-    }
-    if (filters.maxPayout !== undefined) {
-      filtered = filtered.filter(p => p.payoutMin <= filters.maxPayout);
-    }
+    filtered = filtered.filter(p => p.payoutMax >= minPayout && p.payoutMin <= maxPayout);
 
     // Apply type filter
-    if (filters.type && filters.type.length > 0) {
-      filtered = filtered.filter(p => filters.type.includes(p.type));
+    if (typeFilter.length > 0) {
+      filtered = filtered.filter(p => typeFilter.includes(p.type));
     }
 
     setDisplayedPrograms(filtered);

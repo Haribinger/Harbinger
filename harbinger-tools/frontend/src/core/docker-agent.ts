@@ -25,16 +25,16 @@ interface DockerAgentContainer {
 
 class DockerAgentManager {
   private containers: Map<string, DockerAgentContainer> = new Map();
-  private agentTypeImages = {
+  private agentTypeImages: Record<string, string> = {
     'recon-scout': 'harbinger/recon-scout:latest',
     'exploit-dev': 'harbinger/exploit-dev:latest',
     'report-writer': 'harbinger/report-writer:latest',
-    'default': 'harbinger/agent:latest',
+    default: 'harbinger/agent:latest',
   };
 
   async spawnAgentContainer(config: DockerAgentConfig): Promise<DockerAgentContainer> {
     const containerId = `agent-${Date.now()}`;
-    const image = this.agentTypeImages[config.agentType] || this.agentTypeImages['default'];
+    const image = this.agentTypeImages[config.agentType] ?? this.agentTypeImages.default;
 
     const container: DockerAgentContainer = {
       containerId,

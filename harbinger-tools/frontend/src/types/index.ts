@@ -5,7 +5,10 @@ export interface Agent {
   description: string
   avatar?: string
   color: string
-  personality?: string
+  /** Personality ID (string) or full AgentPersonality when creating/editing */
+  personality?: string | AgentPersonality
+  /** Agent type for spawn (e.g. recon-scout, exploit-dev). Used in create flow. */
+  type?: string
   status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped' | 'online' | 'busy' | 'offline' | 'error'
   codename: string
   currentTask: string
@@ -20,16 +23,7 @@ export interface Agent {
   updatedAt: string
 }
 
-export interface AgentPersonality {
-  id: string
-  name: string
-  description: string
-  systemPrompt: string
-  temperature: number
-  maxTokens: number
-  avatar?: string
-  voice?: string
-}
+export type AgentPersonality = { id: string; name?: string; description?: string }
 
 export interface AgentConfig {
   model: string

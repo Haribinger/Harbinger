@@ -45,7 +45,7 @@ function Agents() {
   };
 
   useEffect(() => {
-    const handleStatusChange = (agent) => {
+    const handleStatusChange = (agent: Agent) => {
       useAgentStore.getState().updateAgent(agent.id, agent);
     };
 
