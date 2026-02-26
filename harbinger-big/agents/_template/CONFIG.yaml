@@ -1,0 +1,7 @@
+model: configurable
+temperature: configurable
+docker_image: harbinger/template-agent
+proxy_chain: configurable
+auto_handoff: false
+handoff_to: []
+receives_from: []

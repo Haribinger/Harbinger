@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bug Bounty Attack Surface Map</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ffbf00",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#0A0C0E",
+                        "panel-dark": "#16181a",
+                        "border-muted": "#2d2d2d"
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #0A0C0E;
+            overflow: hidden;
+        }
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(255, 191, 0, 0) 0%, rgba(255, 191, 0, 0.05) 50%, rgba(255, 191, 0, 0) 100%);
+            position: absolute;
+            pointer-events: none;
+        }
+        .graph-node:hover {
+            filter: drop-shadow(0 0 8px #ffbf00);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2d2d2d;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #ffbf00;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-300 antialiased font-display">
+<!-- Scanline Overlay -->
+<div class="scanline top-0 opacity-20"></div>
+<!-- Main Container -->
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Left Navigation Sidebar (Collapsed) -->
+<aside class="w-16 border-r border-border-muted flex flex-col items-center py-6 gap-8 bg-background-dark z-30">
+<div class="w-10 h-10 bg-primary flex items-center justify-center rounded">
+<span class="material-icons text-background-dark font-bold">radar</span>
+</div>
+<nav class="flex flex-col gap-6 flex-1">
+<button class="p-2 text-primary border-l-2 border-primary bg-primary/10">
+<span class="material-icons">hub</span>
+</button>
+<button class="p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-icons">gps_fixed</span>
+</button>
+<button class="p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-icons">terminal</span>
+</button>
+<button class="p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-icons">bar_chart</span>
+</button>
+</nav>
+<button class="p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-icons">settings</span>
+</button>
+</aside>
+<!-- Main Graph Area -->
+<main class="flex-1 relative bg-background-dark">
+<!-- Top Search & Status Bar -->
+<div class="absolute top-6 left-6 right-6 z-20 flex justify-between items-start pointer-events-none">
+<div class="flex gap-4 pointer-events-auto">
+<div class="bg-panel-dark border border-border-muted p-1 flex items-center shadow-2xl">
+<span class="material-icons text-slate-500 px-3 text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-64 placeholder:text-slate-600 text-primary" placeholder="FILTER TARGETS..." type="text"/>
+<kbd class="bg-slate-800 text-[10px] px-1.5 py-0.5 rounded text-slate-400 mr-2">CTRL+K</kbd>
+</div>
+<div class="bg-panel-dark border border-border-muted px-4 py-2 flex items-center gap-4 text-[11px] tracking-widest font-bold">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span>RECON ACTIVE</span>
+</div>
+<div class="h-4 w-[1px] bg-border-muted"></div>
+<div class="text-slate-500">THREADS: 128</div>
+</div>
+</div>
+<div class="pointer-events-auto flex flex-col items-end gap-2">
+<div class="bg-panel-dark border border-border-muted px-4 py-2 text-[10px] tracking-tighter">
+<span class="text-slate-500 uppercase">System Latency:</span>
+<span class="text-primary font-mono ml-2">12ms</span>
+</div>
+</div>
+</div>
+<!-- Graph Canvas Simulation -->
+<div class="absolute inset-0 z-0">
+<svg class="opacity-80" height="100%" width="100%">
+<!-- Connections -->
+<line opacity="0.3" stroke="#ffbf00" stroke-dasharray="4" stroke-width="1" x1="50%" x2="40%" y1="50%" y2="35%"></line>
+<line opacity="0.2" stroke="#ffbf00" stroke-width="1" x1="50%" x2="65%" y1="50%" y2="45%"></line>
+<line opacity="0.1" stroke="#ffbf00" stroke-width="1" x1="65%" x2="70%" y1="45%" y2="30%"></line>
+<line opacity="0.2" stroke="#ffbf00" stroke-width="1" x1="50%" x2="45%" y1="50%" y2="70%"></line>
+<line opacity="0.1" stroke="#ffbf00" stroke-width="1" x1="45%" x2="35%" y1="70%" y2="75%"></line>
+<line opacity="0.1" stroke="#ffbf00" stroke-width="1" x1="45%" x2="55%" y1="70%" y2="80%"></line>
+<!-- Core Node -->
+<circle class="graph-node cursor-pointer" cx="50%" cy="50%" fill="#ffbf00" r="8"></circle>
+<text dx="15" fill="#ffbf00" font-size="12" font-weight="bold" x="50%" y="53%">TARGET_API_PROD</text>
+<!-- Nodes -->
+<g class="graph-node cursor-pointer">
+<circle cx="40%" cy="35%" fill="#16181a" r="6" stroke="#ffbf00" stroke-width="2"></circle>
+<text dx="12" fill="#94a3b8" font-size="10" x="40%" y="38%">api.v2.internal</text>
+</g>
+<g class="graph-node cursor-pointer">
+<circle cx="65%" cy="45%" fill="#ffbf00" r="10"></circle>
+<text dx="15" fill="#ffbf00" font-size="12" font-weight="bold" x="65%" y="48%">MAIN_GATEWAY</text>
+</g>
+<g class="graph-node cursor-pointer opacity-40">
+<rect fill="#16181a" height="12" stroke="#475569" width="12" x="69.2%" y="28.5%"></rect>
+<text dx="15" fill="#475569" font-size="10" x="70%" y="33%">192.168.1.104</text>
+</g>
+<g class="graph-node cursor-pointer">
+<circle cx="45%" cy="70%" fill="#ffbf00" opacity="0.6" r="5"></circle>
+<text dx="12" fill="#94a3b8" font-size="10" x="45%" y="73%">dev-stage.auth</text>
+</g>
+</svg>
+<!-- Context Menu (Simulated Open) -->
+<div class="absolute top-[45%] left-[67%] z-50">
+<div class="bg-panel-dark border-2 border-primary shadow-[4px_4px_0px_0px_#ffbf00] w-56 py-1 flex flex-col">
+<div class="px-3 py-2 border-b border-border-muted bg-primary/10 mb-1">
+<span class="text-[10px] block text-primary font-bold tracking-widest">NODE ACTIONS</span>
+<span class="text-xs text-white truncate">main-gateway.target.io</span>
+</div>
+<button class="px-3 py-2 text-left text-xs hover:bg-primary hover:text-background-dark flex items-center justify-between group">
+                            SCAN WITH NUCLEI
+                            <span class="material-icons text-[16px]">rocket_launch</span>
+</button>
+<button class="px-3 py-2 text-left text-xs hover:bg-primary hover:text-background-dark flex items-center justify-between group">
+                            ADD TO SCOPE
+                            <span class="material-icons text-[16px]">add_task</span>
+</button>
+<button class="px-3 py-2 text-left text-xs hover:bg-primary hover:text-background-dark flex items-center justify-between group">
+                            ENUMERATE PORTS
+                            <span class="material-icons text-[16px]">router</span>
+</button>
+<div class="border-t border-border-muted mt-1 pt-1">
+<button class="px-3 py-2 text-left text-xs text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-between group w-full">
+                                DELETE NODE
+                                <span class="material-icons text-[16px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Legend/Controls Floating -->
+<div class="absolute bottom-6 left-6 z-20 flex items-end gap-6">
+<div class="bg-panel-dark border border-border-muted p-2 flex flex-col gap-2">
+<button class="w-8 h-8 flex items-center justify-center hover:bg-primary/20 text-slate-400 hover:text-primary transition-all">
+<span class="material-icons text-sm">add</span>
+</button>
+<div class="h-[1px] bg-border-muted"></div>
+<button class="w-8 h-8 flex items-center justify-center hover:bg-primary/20 text-slate-400 hover:text-primary transition-all">
+<span class="material-icons text-sm">remove</span>
+</button>
+<div class="h-[1px] bg-border-muted"></div>
+<button class="w-8 h-8 flex items-center justify-center hover:bg-primary/20 text-slate-400 hover:text-primary transition-all">
+<span class="material-icons text-sm">center_focus_strong</span>
+</button>
+</div>
+<div class="bg-panel-dark border border-border-muted px-4 py-3 flex gap-6 text-[10px] uppercase font-bold tracking-widest">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-slate-400">In Scope</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full border border-slate-500"></span>
+<span class="text-slate-400">Out Scope</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-1 bg-primary/40"></span>
+<span class="text-slate-400">DNS Link</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Intelligence Pane -->
+<aside class="w-96 bg-panel-dark border-l border-border-muted flex flex-col z-30">
+<div class="p-6 border-b border-border-muted">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-sm font-bold tracking-[0.2em] text-white">RECON_INTELLIGENCE</h2>
+<span class="material-icons text-primary">analytics</span>
+</div>
+<!-- Scope Summary -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-background-dark border border-border-muted p-3">
+<div class="text-[10px] text-slate-500 mb-1">TOTAL ASSETS</div>
+<div class="text-2xl font-bold text-primary">1,402</div>
+<div class="w-full bg-slate-800 h-1 mt-2">
+<div class="bg-primary h-1" style="width: 70%"></div>
+</div>
+</div>
+<div class="bg-background-dark border border-border-muted p-3">
+<div class="text-[10px] text-slate-500 mb-1">VULNERABILITIES</div>
+<div class="text-2xl font-bold text-red-500">14</div>
+<div class="w-full bg-slate-800 h-1 mt-2">
+<div class="bg-red-500 h-1" style="width: 25%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- New Assets Log -->
+<div class="flex-1 overflow-hidden flex flex-col">
+<div class="px-6 py-4 flex items-center justify-between border-b border-border-muted bg-background-dark/50">
+<span class="text-[10px] font-bold tracking-widest text-slate-400">DISCOVERED_ASSETS_LOG</span>
+<span class="text-[10px] text-primary">LIVE UPDATING...</span>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar">
+<div class="divide-y divide-border-muted">
+<!-- Asset Item -->
+<div class="p-4 hover:bg-primary/5 group cursor-pointer border-l-2 border-transparent hover:border-primary transition-all">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-mono text-white">vpn.internal.corp</span>
+<span class="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5">DNS_A</span>
+</div>
+<div class="flex gap-2 items-center">
+<span class="text-[10px] text-slate-500">10.0.84.12</span>
+<span class="w-1 h-1 rounded-full bg-slate-700"></span>
+<span class="text-[10px] text-primary">PORTS: 443, 1194</span>
+</div>
+<div class="mt-2 text-[9px] text-slate-600 font-mono italic">Detected 2m ago</div>
+</div>
+<!-- Asset Item -->
+<div class="p-4 hover:bg-primary/5 group cursor-pointer border-l-2 border-transparent hover:border-primary transition-all">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-mono text-white">staging-db-01.io</span>
+<span class="text-[9px] bg-primary/20 text-primary px-1 py-0.5">NEW</span>
+</div>
+<div class="flex gap-2 items-center">
+<span class="text-[10px] text-slate-500">34.12.98.2</span>
+<span class="w-1 h-1 rounded-full bg-slate-700"></span>
+<span class="text-[10px] text-red-500">UNAUTHENTICATED REDIS</span>
+</div>
+<div class="mt-2 text-[9px] text-slate-600 font-mono italic">Detected 8m ago</div>
+</div>
+<!-- Asset Item -->
+<div class="p-4 hover:bg-primary/5 group cursor-pointer border-l-2 border-transparent hover:border-primary transition-all">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-mono text-white">auth-sso.target.io</span>
+<span class="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5">CNAME</span>
+</div>
+<div class="flex gap-2 items-center">
+<span class="text-[10px] text-slate-500">okta.com</span>
+<span class="w-1 h-1 rounded-full bg-slate-700"></span>
+<span class="text-[10px] text-slate-500">SSL: EXPIRES 12D</span>
+</div>
+<div class="mt-2 text-[9px] text-slate-600 font-mono italic">Detected 15m ago</div>
+</div>
+<!-- Asset Item -->
+<div class="p-4 hover:bg-primary/5 group cursor-pointer border-l-2 border-transparent hover:border-primary transition-all">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-mono text-white">jenkins.build.internal</span>
+<span class="text-[9px] bg-red-900/30 text-red-400 px-1 py-0.5">RISK_HIGH</span>
+</div>
+<div class="flex gap-2 items-center">
+<span class="text-[10px] text-slate-500">10.0.12.5</span>
+<span class="w-1 h-1 rounded-full bg-slate-700"></span>
+<span class="text-[10px] text-primary">PORT: 8080</span>
+</div>
+<div class="mt-2 text-[9px] text-slate-600 font-mono italic">Detected 22m ago</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Console Summary -->
+<div class="p-6 bg-background-dark border-t border-border-muted">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-[10px] font-bold tracking-widest">ACTIVE_NODE_DETAILS</span>
+</div>
+<div class="bg-panel-dark p-3 border border-border-muted font-mono text-[11px] leading-relaxed">
+<div class="flex justify-between">
+<span class="text-slate-500">IDENTIFIER:</span>
+<span class="text-primary">GW-9921-X</span>
+</div>
+<div class="flex justify-between">
+<span class="text-slate-500">ASN:</span>
+<span class="text-white">AS15169</span>
+</div>
+<div class="flex justify-between">
+<span class="text-slate-500">LOC:</span>
+<span class="text-white">US-EAST-1</span>
+</div>
+<div class="mt-2 pt-2 border-t border-border-muted">
+<span class="text-slate-500 block mb-1">RAW DATA:</span>
+<div class="text-[9px] text-slate-600 break-all leading-tight">
+                            {"discovery_method":"masscan","found_by":"worker-04","risk_score":0.82,"tags":["prod","pci-dss"]}
+                        </div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+<!-- Hidden Imagery References (as per instruction) -->
+<div class="hidden">
+<img alt="Background Texture" data-alt="Abstract digital network circuit board pattern" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASc2iPBFbKzvpybGFzZgJfvKz_rxoAWLzUy0pJiKGi_RUIpqcKcRSs-viuai33EqIn1rDUEx0depOLqOLiD9it5-FmNlkxKilwGkJoZ14Q6xQiTsK7h6oTJ4naWWIxzsDiwVCqbAaXkzlEy9ewyGoThsmSEIeMjohyDWnU65IY5H94rn_XQOZyLxBOuYj-fj2D9sPNpebeRGu2xFUTf4gyFeonPFoFkGq0tWF5HyLx3W1XzpShF8kfv-lqr7Y2RD1HycQHfWQWaoQ"/>
+<div data-location="San Francisco" style=""></div>
+</div>
+</body></html>

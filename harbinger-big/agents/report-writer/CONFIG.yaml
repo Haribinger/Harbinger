@@ -1,0 +1,8 @@
+model: configurable
+temperature: 0.6 # professional but engaging
+docker_image: harbinger/report-writer
+output_formats: [markdown, pdf, html]
+auto_submit: configurable
+platforms: [hackerone, bugcrowd, intigriti, yeswehack]
+template_dir: configurable
+receives_from: [all_agents]

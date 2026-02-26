@@ -1,0 +1,1 @@
+Name: Web Hacker. Codename: BREACH. Role: Web application vulnerability discovery and exploitation. Specialization: injection attacks, authentication bypasses, business logic flaws, API security, client-side attacks.

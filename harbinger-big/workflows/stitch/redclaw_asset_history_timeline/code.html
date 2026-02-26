@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RedClaw Asset History Timeline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ffbf00",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#0A0C0E", /* Overriding to match specific user request while keeping variable name */
+                        "surface-dark": "#14181C",
+                        "surface-darker": "#050607",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "monospace"],
+                        "mono": ["Space Grotesk", "monospace"] /* Simulating mono with Space Grotesk tabular nums */
+                    },
+                    borderRadius: { "DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "0px" }, /* Brutalist override */
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Scrollbar for that technical feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0A0C0E;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border: 1px solid #0A0C0E;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ffbf00;
+        }
+        
+        /* Utility for brutalist borders */
+        .brutalist-border {
+            border: 1px solid #333;
+        }
+        .brutalist-border-l {
+            border-left: 1px solid #333;
+        }
+        .brutalist-border-r {
+            border-right: 1px solid #333;
+        }
+        .brutalist-border-b {
+            border-bottom: 1px solid #333;
+        }
+        
+        /* Terminal text effect */
+        .term-text {
+            text-shadow: 0 0 2px rgba(255, 191, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-300 font-display h-screen flex flex-col overflow-hidden selection:bg-primary selection:text-black">
+<!-- Top Bar -->
+<header class="h-16 flex-none bg-surface-dark border-b border-gray-800 flex items-center justify-between px-6 z-20 relative">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-icons text-primary">bug_report</span>
+<h1 class="text-xl font-bold tracking-tight text-white uppercase">RedClaw <span class="text-primary text-xs align-top">PRO</span></h1>
+</div>
+<div class="h-8 w-px bg-gray-700"></div>
+<!-- Asset Selector -->
+<div class="flex items-center gap-3">
+<label class="text-xs uppercase text-gray-500 font-bold tracking-wider">Target Asset:</label>
+<div class="relative group">
+<button class="flex items-center gap-2 bg-black border border-gray-700 px-3 py-1.5 text-sm text-primary hover:border-primary transition-colors min-w-[200px] justify-between">
+<span class="font-mono">api.acme.corp</span>
+<span class="material-icons text-base">expand_more</span>
+</button>
+<!-- Dropdown (Visual only) -->
+<div class="absolute top-full left-0 w-full bg-surface-dark border border-gray-700 mt-1 hidden group-hover:block shadow-xl z-50">
+<div class="p-2 hover:bg-white/5 cursor-pointer text-gray-400 hover:text-white text-sm">www.acme.corp</div>
+<div class="p-2 hover:bg-white/5 cursor-pointer text-gray-400 hover:text-white text-sm">dev.acme.corp</div>
+</div>
+</div>
+<div class="px-2 py-0.5 bg-green-900/30 border border-green-500/30 text-green-500 text-[10px] uppercase font-bold tracking-wider">Active Monitoring</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-xs text-gray-500 border border-gray-800 px-3 py-1 bg-black/50">
+<span class="material-icons text-sm">calendar_today</span>
+<span>RANGE: LAST 30 DAYS</span>
+</div>
+<button class="bg-primary hover:bg-yellow-400 text-black font-bold uppercase text-xs tracking-wider px-5 py-2 flex items-center gap-2 transition-colors">
+<span class="material-icons text-sm">compare_arrows</span>
+                Compare Snapshots
+            </button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 flex overflow-hidden relative">
+<!-- Left Sidebar: Recon Snapshots -->
+<aside class="w-64 flex-none bg-surface-dark border-r border-gray-800 flex flex-col z-10">
+<div class="p-4 border-b border-gray-800 bg-surface-darker/50">
+<h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Recon Snapshots</h2>
+<div class="text-[10px] text-gray-600">Historical scan integrity check</div>
+</div>
+<div class="flex-1 overflow-y-auto p-2 space-y-1">
+<!-- Month Group -->
+<div class="mb-4">
+<div class="px-2 py-1 text-[10px] font-bold text-gray-500 uppercase border-b border-gray-800 mb-2">October 2023</div>
+<button class="w-full text-left p-2 hover:bg-white/5 group border-l-2 border-transparent hover:border-gray-500 transition-all">
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-gray-300 group-hover:text-white">Oct 24, 09:00</span>
+<span class="text-[10px] text-green-500">COMPLETE</span>
+</div>
+<div class="text-[10px] text-gray-600 font-mono">HASH: 8f3a...b2</div>
+</button>
+<button class="w-full text-left p-2 bg-primary/10 border-l-2 border-primary group transition-all">
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-primary">Oct 22, 14:30</span>
+<span class="text-[10px] text-primary">SELECTED</span>
+</div>
+<div class="text-[10px] text-primary/60 font-mono">HASH: c41e...99</div>
+</button>
+<button class="w-full text-left p-2 hover:bg-white/5 group border-l-2 border-transparent hover:border-gray-500 transition-all">
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-gray-300 group-hover:text-white">Oct 18, 04:15</span>
+<span class="text-[10px] text-gray-500">AUTO</span>
+</div>
+<div class="text-[10px] text-gray-600 font-mono">HASH: a12b...cc</div>
+</button>
+</div>
+<!-- Month Group -->
+<div class="mb-4">
+<div class="px-2 py-1 text-[10px] font-bold text-gray-500 uppercase border-b border-gray-800 mb-2">September 2023</div>
+<button class="w-full text-left p-2 hover:bg-white/5 group border-l-2 border-transparent hover:border-gray-500 transition-all">
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-gray-300 group-hover:text-white">Sep 30, 11:00</span>
+<span class="text-[10px] text-yellow-600">WARNING</span>
+</div>
+<div class="text-[10px] text-gray-600 font-mono">HASH: 77b2...0a</div>
+</button>
+</div>
+</div>
+<div class="p-3 border-t border-gray-800 bg-surface-darker">
+<button class="w-full py-2 border border-dashed border-gray-700 text-gray-500 text-xs hover:text-primary hover:border-primary transition-colors uppercase tracking-wider">
+                    + Manual Scan
+                </button>
+</div>
+</aside>
+<!-- Center Workspace: Timeline -->
+<section class="flex-1 bg-background-dark relative overflow-hidden flex flex-col">
+<!-- Background Grid Pattern -->
+<div class="absolute inset-0 z-0 opacity-10 pointer-events-none" style="background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px); background-size: 20px 20px;"></div>
+<!-- Timeline Header -->
+<div class="flex-none p-6 pb-2 z-10 flex justify-between items-end">
+<div>
+<h2 class="text-2xl font-bold text-white uppercase tracking-tight">Timeline Analysis</h2>
+<p class="text-sm text-gray-500">Visualizing 4 critical changes detected.</p>
+</div>
+<div class="flex gap-2">
+<button class="p-1 hover:text-primary text-gray-400"><span class="material-icons">filter_list</span></button>
+<button class="p-1 hover:text-primary text-gray-400"><span class="material-icons">download</span></button>
+</div>
+</div>
+<!-- Timeline Content -->
+<div class="flex-1 overflow-y-auto relative p-6 z-10">
+<!-- Central Line -->
+<div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-primary/30 transform -translate-x-1/2 h-full z-0"></div>
+<!-- Event 1: Critical DNS Change -->
+<div class="relative w-full mb-8 group">
+<!-- Dot on line -->
+<div class="absolute left-1/2 top-6 w-3 h-3 bg-black border-2 border-primary rounded-none transform -translate-x-1/2 z-10 group-hover:scale-125 transition-transform"></div>
+<div class="flex justify-between items-start w-full">
+<!-- Left side (Time/Meta) -->
+<div class="w-[45%] text-right pr-8 pt-4">
+<div class="text-primary font-bold font-mono text-sm">14:32:01 UTC</div>
+<div class="text-xs text-gray-500 uppercase tracking-widest mb-2">Oct 22, 2023</div>
+<div class="inline-block px-2 py-0.5 bg-red-900/30 border border-red-500/50 text-red-400 text-[10px] font-bold uppercase">Critical Severity</div>
+</div>
+<!-- Right side (Card) -->
+<div class="w-[45%] pl-8">
+<div class="bg-surface-dark border border-gray-700 hover:border-primary transition-colors p-4 relative shadow-lg">
+<!-- Connector line horizontal -->
+<div class="absolute top-6 -left-8 w-8 h-px bg-primary/30"></div>
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-white uppercase tracking-wider flex items-center gap-2">
+<span class="material-icons text-primary text-sm">dns</span>
+                                        DNS A Record Update
+                                    </h3>
+<span class="text-[10px] bg-gray-800 text-gray-300 px-1.5 py-0.5 border border-gray-600">IP CHANGE</span>
+</div>
+<!-- Diff View -->
+<div class="grid grid-cols-[1fr_auto_1fr] gap-2 items-center bg-black/50 p-3 border border-gray-800 font-mono text-xs">
+<div class="text-gray-500 line-through text-center">192.168.1.5</div>
+<div class="text-gray-600"><span class="material-icons text-xs">arrow_forward</span></div>
+<div class="text-primary font-bold text-center">104.22.5.1</div>
+<div class="text-[10px] text-gray-600 text-center uppercase mt-1">Cloudflare (US)</div>
+<div></div>
+<div class="text-[10px] text-primary/50 text-center uppercase mt-1">AWS (EU-West)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Event 2: Tech Stack Update -->
+<div class="relative w-full mb-8 group">
+<div class="absolute left-1/2 top-6 w-3 h-3 bg-black border-2 border-gray-500 group-hover:border-primary rounded-none transform -translate-x-1/2 z-10 transition-colors"></div>
+<div class="flex justify-between items-start w-full flex-row-reverse">
+<!-- Right side (Time/Meta) -->
+<div class="w-[45%] text-left pl-8 pt-4">
+<div class="text-white font-bold font-mono text-sm">11:05:44 UTC</div>
+<div class="text-xs text-gray-500 uppercase tracking-widest mb-2">Oct 21, 2023</div>
+<div class="inline-block px-2 py-0.5 bg-blue-900/20 border border-blue-500/30 text-blue-400 text-[10px] font-bold uppercase">Info</div>
+</div>
+<!-- Left side (Card) -->
+<div class="w-[45%] pr-8">
+<div class="bg-surface-dark border border-gray-700 hover:border-gray-500 transition-colors p-4 relative shadow-lg">
+<div class="absolute top-6 -right-8 w-8 h-px bg-gray-700"></div>
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-white uppercase tracking-wider flex items-center gap-2">
+<span class="material-icons text-gray-400 text-sm">layers</span>
+                                        Tech Stack Drift
+                                    </h3>
+<span class="text-[10px] bg-gray-800 text-gray-300 px-1.5 py-0.5 border border-gray-600">WAPPALYZER</span>
+</div>
+<div class="space-y-2 bg-black/50 p-3 border border-gray-800 font-mono text-xs">
+<div class="flex justify-between items-center border-b border-gray-800 pb-2">
+<span class="text-gray-500">Server</span>
+<div class="flex items-center gap-2">
+<span class="text-gray-500 line-through">Apache 2.4</span>
+<span class="material-icons text-[10px] text-gray-600">arrow_forward</span>
+<span class="text-primary">Nginx 1.18</span>
+</div>
+</div>
+<div class="flex justify-between items-center pt-1">
+<span class="text-gray-500">Framework</span>
+<div class="flex items-center gap-2">
+<span class="text-gray-500">Laravel</span>
+<span class="text-primary bg-primary/10 px-1 text-[10px]">+ v8.0 Detected</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Event 3: New Port Open -->
+<div class="relative w-full mb-8 group">
+<div class="absolute left-1/2 top-6 w-3 h-3 bg-black border-2 border-primary rounded-none transform -translate-x-1/2 z-10 group-hover:scale-125 transition-transform"></div>
+<div class="flex justify-between items-start w-full">
+<div class="w-[45%] text-right pr-8 pt-4">
+<div class="text-primary font-bold font-mono text-sm">09:15:00 UTC</div>
+<div class="text-xs text-gray-500 uppercase tracking-widest mb-2">Oct 20, 2023</div>
+<div class="inline-block px-2 py-0.5 bg-yellow-900/30 border border-yellow-500/50 text-yellow-500 text-[10px] font-bold uppercase">High Risk</div>
+</div>
+<div class="w-[45%] pl-8">
+<div class="bg-surface-dark border border-gray-700 hover:border-primary transition-colors p-4 relative shadow-lg bg-gradient-to-r from-primary/5 to-transparent">
+<div class="absolute top-6 -left-8 w-8 h-px bg-primary/30"></div>
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-white uppercase tracking-wider flex items-center gap-2">
+<span class="material-icons text-primary text-sm">lock_open</span>
+                                        New Port Exposure
+                                    </h3>
+<span class="text-[10px] bg-gray-800 text-gray-300 px-1.5 py-0.5 border border-gray-600">NMAP</span>
+</div>
+<div class="bg-black/50 p-3 border border-gray-800 font-mono text-xs flex justify-between items-center">
+<div class="text-gray-400">Port Scan</div>
+<div class="flex items-center gap-2">
+<span class="text-primary font-bold">PORT 8080</span>
+<span class="bg-primary text-black px-1 font-bold text-[10px]">OPEN</span>
+</div>
+</div>
+<div class="mt-2 text-[10px] text-gray-500 font-mono">Service: http-proxy (Potential admin panel)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Sidebar: Change Analysis -->
+<aside class="w-80 flex-none bg-surface-dark border-l border-gray-800 flex flex-col z-10">
+<div class="p-4 border-b border-gray-800">
+<h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Change Analysis</h2>
+<!-- Lobster Score Card -->
+<div class="bg-black border border-gray-700 p-4 mb-6 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-1 opacity-20">
+<span class="material-icons text-6xl text-primary">local_fire_department</span>
+</div>
+<div class="text-[10px] uppercase text-gray-500 tracking-widest mb-1">Lobster-Score Risk</div>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-bold text-white font-mono">78</span>
+<span class="text-sm font-bold text-red-500 flex items-center">
+<span class="material-icons text-sm">arrow_upward</span> +12
+                        </span>
+</div>
+<div class="w-full bg-gray-800 h-1 mt-3">
+<div class="bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 h-full w-[78%]"></div>
+</div>
+<div class="text-[10px] text-gray-400 mt-2 text-right">High Volatility Detected</div>
+</div>
+<!-- Stability Graph (Simulated) -->
+<div class="mb-6">
+<div class="text-[10px] uppercase text-gray-500 tracking-widest mb-2 flex justify-between">
+<span>Asset Stability (7 Days)</span>
+<span class="text-primary">Low</span>
+</div>
+<div class="h-24 w-full bg-black/50 border border-gray-800 relative flex items-end justify-between px-1 pb-0 overflow-hidden">
+<!-- Bars -->
+<div class="w-1/12 bg-gray-700 h-[20%] mx-0.5"></div>
+<div class="w-1/12 bg-gray-700 h-[20%] mx-0.5"></div>
+<div class="w-1/12 bg-gray-700 h-[30%] mx-0.5"></div>
+<div class="w-1/12 bg-primary/40 h-[60%] mx-0.5"></div>
+<div class="w-1/12 bg-primary/60 h-[50%] mx-0.5"></div>
+<div class="w-1/12 bg-gray-700 h-[20%] mx-0.5"></div>
+<div class="w-1/12 bg-primary h-[80%] mx-0.5"></div> <!-- Today -->
+<!-- Trend Line (Overlay SVG) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" preserveaspectratio="none">
+<path d="M0 80 L40 80 L80 70 L120 40 L160 50 L200 80 L240 20" fill="none" stroke="#ffbf00" stroke-width="1" vector-effect="non-scaling-stroke"></path>
+</svg>
+</div>
+</div>
+</div>
+<!-- Summary List -->
+<div class="flex-1 overflow-y-auto p-4">
+<h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Key Findings</h3>
+<ul class="space-y-3">
+<li class="flex gap-3 items-start">
+<span class="material-icons text-red-500 text-sm mt-0.5">warning</span>
+<div>
+<div class="text-xs text-white font-bold">Unstable DNS Resolution</div>
+<p class="text-[10px] text-gray-500 leading-tight mt-0.5">IP addresses rotated 3 times in 24 hours.</p>
+</div>
+</li>
+<li class="flex gap-3 items-start">
+<span class="material-icons text-primary text-sm mt-0.5">security</span>
+<div>
+<div class="text-xs text-white font-bold">Certificate Expiry</div>
+<p class="text-[10px] text-gray-500 leading-tight mt-0.5">SSL Cert expires in &lt; 48 hours.</p>
+</div>
+</li>
+<li class="flex gap-3 items-start">
+<span class="material-icons text-gray-500 text-sm mt-0.5">public</span>
+<div>
+<div class="text-xs text-gray-300 font-bold">Geolocation Shift</div>
+<p class="text-[10px] text-gray-500 leading-tight mt-0.5">Hosting moved from US-East to EU-Central.</p>
+</div>
+</li>
+</ul>
+<!-- Map Thumbnail -->
+<div class="mt-6 border border-gray-700 p-1 bg-black">
+<div class="relative h-32 w-full bg-gray-800 overflow-hidden">
+<img alt="Dark map of the world showing network connections" class="w-full h-full object-cover opacity-60 grayscale hover:grayscale-0 transition-all" data-alt="Abstract world map network visualization" data-location="Global Network Map" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPnERMqv5niHD9I9AiCQCWo86ajFq8JH7LxOlVRC_ivmuNLWS84gR9kNjzruJ-3PHusd1fUWXfHOru3aIE5lkT8eofofjtCMMMHZ07suvyzhuV4hG2oSAljXHszhyaNLaE6HoQDYveQ5KIhyM2pU_WuKmC0TJFe_d17_3_q9_Zaij8F1WevlZgCWunWLddL0GKUhlQDubvsnwa-Cy5vjQ56ao5cmSOwYFRpcIeZP9NAidipkwfAfqP0ZWm9hEuPV0lLM5OruKkekc"/>
+<div class="absolute inset-0 bg-primary/10 mix-blend-overlay"></div>
+<!-- Ping location dots -->
+<div class="absolute top-1/2 left-1/3 w-2 h-2 bg-primary rounded-full animate-ping"></div>
+<div class="absolute top-1/2 left-1/3 w-1.5 h-1.5 bg-white rounded-full"></div>
+</div>
+<div class="text-[10px] text-center text-primary font-mono mt-1">LATEST GEO: FRANKFURT, DE</div>
+</div>
+</div>
+</aside>
+</main>
+<!-- Bottom Terminal Panel -->
+<footer class="h-48 flex-none bg-black border-t-2 border-primary/50 flex flex-col font-mono text-xs z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+<!-- Terminal Tabs -->
+<div class="flex border-b border-gray-800 bg-surface-darker">
+<button class="px-4 py-1.5 bg-black text-primary border-t-2 border-primary font-bold">OUTPUT: WHOIS</button>
+<button class="px-4 py-1.5 text-gray-500 hover:text-white hover:bg-white/5 border-t-2 border-transparent">OUTPUT: DIG</button>
+<button class="px-4 py-1.5 text-gray-500 hover:text-white hover:bg-white/5 border-t-2 border-transparent">LOGS: NMAP</button>
+<div class="flex-1 flex justify-end px-2 py-1">
+<button class="text-gray-500 hover:text-white"><span class="material-icons text-sm">close</span></button>
+</div>
+</div>
+<!-- Terminal Content -->
+<div class="flex-1 overflow-y-auto p-4 text-gray-400 font-mono leading-relaxed relative">
+<div class="absolute top-4 right-4 text-[10px] text-gray-600">ID: #EVENT-2023-10-22-DNS</div>
+<p><span class="text-green-500">user@redclaw:~$</span> whois 104.22.5.1</p>
+<p class="mt-1 text-gray-300">
+                NetRange:       104.16.0.0 - 104.31.255.255<br/>
+                CIDR:           104.16.0.0/12<br/>
+                NetName:        CLOUDFLARENET<br/>
+                NetHandle:      NET-104-16-0-0-1<br/>
+                Parent:         NET-104-0-0-0-0<br/>
+                NetType:        Direct Allocation<br/>
+                OriginAS:       AS13335<br/>
+                Organization:   Cloudflare, Inc. (CLOUD14)<br/>
+                RegDate:        2014-03-28<br/>
+                Updated:        2017-02-17<br/>
+<span class="text-yellow-600"># WARNING: IP ownership changed recently from AMAZON-AES to CLOUDFLARENET</span>
+</p>
+<p class="mt-2"><span class="text-green-500">user@redclaw:~$</span> <span class="animate-pulse">_</span></p>
+</div>
+</footer>
+</body></html>

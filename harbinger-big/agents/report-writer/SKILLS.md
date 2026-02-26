@@ -1,0 +1,1 @@
+CVSS v3.1 scoring methodology, platform-specific report formatting, proof-of-concept best practices, impact assessment frameworks, remediation writing, duplicate avoidance strategies, triage optimization.

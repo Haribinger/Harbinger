@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bug Bounty Scope Manager | Project Falcon</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ffbf00",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#231e0f",
+                        "neutral-800": "#3d361c",
+                        "neutral-900": "#2a2514",
+                        "neutral-700": "#524926",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem", 
+                        "lg": "0.25rem", 
+                        "xl": "0.5rem", 
+                        "full": "0.75rem"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            scrollbar-width: thin;
+            scrollbar-color: #ffbf00 #231e0f;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #231e0f;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #ffbf00;
+        }
+        .mono-text {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .asset-row:hover {
+            background-color: rgba(255, 191, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 antialiased h-screen flex flex-col overflow-hidden">
+<!-- Top Navigation -->
+<header class="border-b border-primary/20 bg-background-light dark:bg-background-dark px-6 py-3 flex items-center justify-between z-10">
+<div class="flex items-center gap-4">
+<div class="bg-primary p-1 rounded-sm">
+<span class="material-icons-outlined text-background-dark text-xl font-bold">security</span>
+</div>
+<div>
+<h1 class="text-lg font-bold tracking-tight uppercase">Project Falcon</h1>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-mono opacity-60 uppercase tracking-widest">Scope Live Session</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 border border-primary/40 text-primary hover:bg-primary/10 rounded transition-colors text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+<span class="material-icons-outlined text-sm">file_download</span>
+                Export Scope
+            </button>
+<button class="px-4 py-2 bg-primary text-background-dark hover:bg-primary/90 rounded font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+<span class="material-icons-outlined text-sm">add_box</span>
+                Add to Scope
+            </button>
+<div class="h-8 w-[1px] bg-primary/20 mx-2"></div>
+<div class="flex items-center gap-3">
+<img class="w-8 h-8 rounded border border-primary/40" data-alt="User profile picture security professional" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBttW4MuhiOusdnFFQ1EPpPZYtehBOoJ_akVVvMTgagRwhUoI70hzLOn-NUbU6nT0Mm55cVboCwPWpOB_o3dWpixcVhx5DxqSoiy1bT8yWlmT6nPDsomqEqCTvmG8Z-bzpLnUKTm_iPPTL1PYubM8drjJYfpWmjv4r0PUhq00nBTa_Ha94LmX4bSLt8QHtE4749rHdk475ymvvPwdFZIjA4qXnojibLpdWmhZofl6w1p_Z87pbLQsqEkdL_yv2xJ-9ScrOrlLBm7zw"/>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+<!-- Controls Bar -->
+<div class="p-4 flex items-center justify-between bg-neutral-900/40 border-b border-primary/10">
+<div class="flex gap-4">
+<div class="flex rounded border border-primary/20 overflow-hidden">
+<button class="bg-primary/20 text-primary px-4 py-1.5 text-xs font-bold uppercase border-r border-primary/20">All Assets</button>
+<button class="px-4 py-1.5 text-xs font-bold uppercase opacity-60 hover:opacity-100 transition-opacity">Cloud Assets</button>
+<button class="px-4 py-1.5 text-xs font-bold uppercase opacity-60 hover:opacity-100 transition-opacity">Mobile Binary</button>
+</div>
+<div class="relative">
+<span class="material-icons-outlined absolute left-3 top-1/2 -translate-y-1/2 text-primary/60 text-sm">search</span>
+<input class="bg-neutral-900 border border-primary/20 text-xs py-1.5 pl-9 pr-4 w-64 focus:ring-1 focus:ring-primary focus:border-primary outline-none rounded" placeholder="Search target pattern..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[10px] flex items-center gap-1 opacity-60 hover:opacity-100 uppercase tracking-tighter">
+<span class="material-icons-outlined text-sm text-primary">filter_list</span>
+                    Filter By Tag
+                </button>
+<button class="text-[10px] flex items-center gap-1 opacity-60 hover:opacity-100 uppercase tracking-tighter">
+<span class="material-icons-outlined text-sm text-primary">history</span>
+                    Audit Log
+                </button>
+</div>
+</div>
+<div class="flex flex-1 min-h-0">
+<!-- In-Scope Section -->
+<section class="flex-1 flex flex-col border-r border-primary/10 bg-background-dark/50">
+<div class="px-4 py-2 bg-primary/5 flex items-center justify-between border-b border-primary/20">
+<div class="flex items-center gap-2">
+<span class="material-icons-outlined text-primary text-base">verified_user</span>
+<h2 class="text-xs font-bold uppercase tracking-widest text-primary">In-Scope Assets</h2>
+<span class="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono">142</span>
+</div>
+<button class="text-[10px] text-primary/80 hover:underline uppercase">Bulk Action</button>
+</div>
+<div class="flex-1 overflow-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-neutral-900 z-10 shadow-sm">
+<tr class="text-[10px] uppercase font-bold text-slate-500 border-b border-primary/10">
+<th class="px-4 py-2 font-medium">Asset Pattern</th>
+<th class="px-4 py-2 font-medium">Type</th>
+<th class="px-4 py-2 font-medium">Tags</th>
+<th class="px-4 py-2 font-medium w-10 text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-primary/5 mono-text text-[11px]">
+<!-- Rows -->
+<tr class="asset-row group">
+<td class="px-4 py-2 text-primary">*.falcon-api.io</td>
+<td class="px-4 py-2 opacity-70">Wildcard</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">API</span>
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">NodeJS</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400">
+<span class="material-icons-outlined text-sm">block</span>
+</button>
+</td>
+</tr>
+<tr class="asset-row group">
+<td class="px-4 py-2 text-primary">app.falcon-platform.com</td>
+<td class="px-4 py-2 opacity-70">Web App</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">Prod</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400">
+<span class="material-icons-outlined text-sm">block</span>
+</button>
+</td>
+</tr>
+<tr class="asset-row group">
+<td class="px-4 py-2 text-primary">10.0.4.0/24</td>
+<td class="px-4 py-2 opacity-70">CIDR</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">Internal</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400">
+<span class="material-icons-outlined text-sm">block</span>
+</button>
+</td>
+</tr>
+<!-- More Rows -->
+<tr class="asset-row group">
+<td class="px-4 py-2 text-primary">checkout.falcon.com</td>
+<td class="px-4 py-2 opacity-70">Web App</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">PCI-DSS</span>
+<span class="px-1.5 py-0.5 border border-primary/20 text-[9px] uppercase rounded-sm bg-primary/5">Mobile</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400">
+<span class="material-icons-outlined text-sm">block</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Out-of-Scope Section -->
+<section class="flex-1 flex flex-col bg-background-dark/30">
+<div class="px-4 py-2 bg-neutral-900 flex items-center justify-between border-b border-primary/20">
+<div class="flex items-center gap-2">
+<span class="material-icons-outlined text-slate-500 text-base">security_update_warning</span>
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Out-of-Scope Assets</h2>
+<span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">24</span>
+</div>
+<button class="text-[10px] text-slate-500 hover:underline uppercase">Import Exclusion</button>
+</div>
+<div class="flex-1 overflow-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-neutral-900 z-10 shadow-sm">
+<tr class="text-[10px] uppercase font-bold text-slate-500 border-b border-primary/10">
+<th class="px-4 py-2 font-medium">Asset Pattern</th>
+<th class="px-4 py-2 font-medium">Reason</th>
+<th class="px-4 py-2 font-medium">Tags</th>
+<th class="px-4 py-2 font-medium w-10 text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-primary/5 mono-text text-[11px]">
+<tr class="asset-row group">
+<td class="px-4 py-2 text-slate-400">dev.falcon-internal.com</td>
+<td class="px-4 py-2 text-red-400/70 italic">Third Party Managed</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-slate-700 text-[9px] uppercase rounded-sm text-slate-500">Staging</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-primary hover:text-primary/80">
+<span class="material-icons-outlined text-sm">undo</span>
+</button>
+</td>
+</tr>
+<tr class="asset-row group">
+<td class="px-4 py-2 text-slate-400">*.legacy.falcon.io</td>
+<td class="px-4 py-2 text-red-400/70 italic">Deprecated Assets</td>
+<td class="px-4 py-2">
+<div class="flex gap-1">
+<span class="px-1.5 py-0.5 border border-slate-700 text-[9px] uppercase rounded-sm text-slate-500">Legacy</span>
+</div>
+</td>
+<td class="px-4 py-2 text-center">
+<button class="opacity-0 group-hover:opacity-100 text-primary hover:text-primary/80">
+<span class="material-icons-outlined text-sm">undo</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<!-- Bulk Import / Tooling Panel (Lower half sidebar context) -->
+<div class="h-48 border-t border-primary/30 flex bg-neutral-900/80">
+<!-- Console -->
+<div class="flex-1 flex flex-col min-w-0 border-r border-primary/10">
+<div class="px-3 py-1 bg-neutral-800 border-b border-primary/10 flex items-center justify-between">
+<span class="text-[9px] font-bold text-primary tracking-widest uppercase">System Validation Logs</span>
+<span class="text-[9px] font-mono text-primary/60">SESSION_ID: 0x8F92A</span>
+</div>
+<div class="p-3 mono-text text-[10px] space-y-1 overflow-auto custom-scrollbar flex-1 bg-background-dark">
+<div class="flex gap-2">
+<span class="text-primary/50">[14:22:01]</span>
+<span class="text-green-400">INF: Successfully parsed 142 in-scope assets.</span>
+</div>
+<div class="flex gap-2">
+<span class="text-primary/50">[14:22:05]</span>
+<span class="text-slate-400">LOG: Validating regex patterns for wildcard domains...</span>
+</div>
+<div class="flex gap-2">
+<span class="text-primary/50">[14:22:08]</span>
+<span class="text-primary">WRN: Overlap detected between CIDR 10.0.4.0/24 and exclusion list.</span>
+</div>
+<div class="flex gap-2">
+<span class="text-primary/50">[14:22:12]</span>
+<span class="text-slate-400">LOG: Auto-tagging applied based on subdomain structure.</span>
+</div>
+<div class="flex gap-2 animate-pulse">
+<span class="text-primary/50">[14:22:45]</span>
+<span class="text-primary">SYS: Awaiting bulk CSV upload...</span>
+<span class="w-1.5 h-3 bg-primary/40 inline-block align-middle ml-1"></span>
+</div>
+</div>
+</div>
+<!-- Bulk Entry -->
+<div class="w-[450px] flex flex-col">
+<div class="px-3 py-1 bg-neutral-800 border-b border-primary/10 flex items-center gap-4">
+<span class="text-[9px] font-bold text-primary tracking-widest uppercase">Quick Asset Entry</span>
+<div class="flex gap-2">
+<label class="flex items-center gap-1 cursor-pointer">
+<input checked="" class="w-2.5 h-2.5 bg-background-dark border-primary/40 text-primary focus:ring-0" name="target" type="radio"/>
+<span class="text-[8px] uppercase font-bold text-primary/80">In-Scope</span>
+</label>
+<label class="flex items-center gap-1 cursor-pointer">
+<input class="w-2.5 h-2.5 bg-background-dark border-primary/40 text-primary focus:ring-0" name="target" type="radio"/>
+<span class="text-[8px] uppercase font-bold text-slate-500">Exclusion</span>
+</label>
+</div>
+</div>
+<div class="flex-1 p-2 relative">
+<textarea class="w-full h-full bg-background-dark border border-primary/20 rounded-sm text-[10px] mono-text p-2 focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-none placeholder:text-slate-600" placeholder="Paste assets here (one per line)...
+*.example.com
+192.168.1.0/24"></textarea>
+<div class="absolute bottom-4 right-4 flex gap-2">
+<button class="bg-neutral-800 border border-primary/20 text-slate-300 px-3 py-1 text-[9px] font-bold uppercase hover:bg-neutral-700 rounded-sm flex items-center gap-1">
+<span class="material-icons-outlined text-xs">upload_file</span>
+                            CSV/TXT
+                        </button>
+<button class="bg-primary text-background-dark px-3 py-1 text-[9px] font-bold uppercase hover:brightness-110 rounded-sm">
+                            Process List
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Status Bar -->
+<footer class="bg-neutral-900 border-t border-primary/20 px-4 py-1.5 flex items-center justify-between text-[10px] tracking-widest font-mono text-primary/40">
+<div class="flex items-center gap-6">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                API CONNECTED
+            </span>
+<span>SYNC: 200 OK</span>
+<span>LATENCY: 14ms</span>
+</div>
+<div class="flex items-center gap-4 uppercase font-display font-bold">
+<span class="text-primary/60">Compliance Level: High</span>
+<span class="material-icons-outlined text-xs">settings</span>
+</div>
+</footer>
+</body></html>

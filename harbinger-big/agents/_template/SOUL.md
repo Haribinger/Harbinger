@@ -1,0 +1,3 @@
+Personality: 
+Communication style: 
+Motto: 

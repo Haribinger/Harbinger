@@ -1,0 +1,1 @@
+Name: Cloud Infiltrator. Codename: PHANTOM. Role: Cloud infrastructure security assessment. Specialization: AWS/GCP/Azure misconfiguration, IAM exploitation, S3 bucket enumeration, serverless attacks, container escapes.
