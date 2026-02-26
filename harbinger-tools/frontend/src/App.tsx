@@ -1,8 +1,9 @@
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { Toaster } from 'react-hot-toast'
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense, useCallback } from 'react'
 import { useThemeStore, applyTheme } from './store/themeStore'
+import { API_BASE } from './config'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout/Layout'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
@@ -22,6 +23,7 @@ const BountyHub = lazy(() => import('./pages/BountyHub/BountyHub'))
 const CommandCenter = lazy(() => import('./pages/CommandCenter/CommandCenter'))
 const SkillsHub = lazy(() => import('./pages/SkillsHub/SkillsHub'))
 const OpenClaw = lazy(() => import('./pages/OpenClaw/OpenClaw'))
+const WorkflowEditor = lazy(() => import('./pages/WorkflowEditor'))
 const Login = lazy(() => import('./pages/Login/Login'))
 const SetupWizard = lazy(() => import('./pages/Setup/SetupWizard'))
 
@@ -45,20 +47,23 @@ function SSERoute() {
   return null
 }
 
-// Setup check wrapper
+// Setup check wrapper — verifies backend is reachable before routing
 function SetupCheck({ children }: { children: React.ReactNode }) {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
+  const [backendDown, setBackendDown] = useState(false)
   const location = useLocation()
 
   useEffect(() => {
-    fetch('/api/setup/status')
+    fetch(`${API_BASE}/api/setup/status`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()
       })
       .then((data) => setNeedsSetup(data.needsSetup === true))
       .catch(() => {
-        setNeedsSetup(false)
+        // Backend unreachable — assume setup needed so user can configure
+        setBackendDown(true)
+        setNeedsSetup(true)
       })
   }, [])
 
@@ -79,10 +84,84 @@ function SetupCheck({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (needsSetup && location.pathname !== '/setup' && location.pathname !== '/login') {
+  // If on the setup page, always allow through (even if backend is down)
+  if (location.pathname === '/setup') {
+    return <>{children}</>
+  }
+
+  // Show clear error when backend is not reachable (for non-setup pages)
+  if (backendDown) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0a0a0f',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'JetBrains Mono, Fira Code, monospace',
+        color: '#9ca3af',
+        gap: '16px',
+        padding: '24px',
+        textAlign: 'center',
+      }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ef444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ color: '#ef4444', fontSize: '24px' }}>!</span>
+        </div>
+        <h2 style={{ color: '#f0c040', fontSize: '18px', margin: 0, letterSpacing: '0.1em' }}>BACKEND UNREACHABLE</h2>
+        <p style={{ maxWidth: '420px', fontSize: '12px', lineHeight: 1.7 }}>
+          Cannot connect to the Harbinger API server.
+        </p>
+        <div style={{ background: '#0d0d15', border: '1px solid #1a1a2e', borderRadius: '8px', padding: '16px', fontSize: '11px', textAlign: 'left', maxWidth: '420px', width: '100%' }}>
+          <p style={{ color: '#f0c040', marginTop: 0, marginBottom: '8px' }}>Start the backend:</p>
+          <code style={{ color: '#22c55e' }}>cd backend && go run ./cmd/</code>
+          <p style={{ color: '#f0c040', marginTop: '12px', marginBottom: '8px' }}>Or with Docker:</p>
+          <code style={{ color: '#22c55e' }}>docker compose up -d</code>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 24px',
+              background: 'transparent',
+              border: '1px solid #f0c040',
+              borderRadius: '4px',
+              color: '#f0c040',
+              fontSize: '11px',
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            RETRY CONNECTION
+          </button>
+          <button
+            onClick={() => { setBackendDown(false); setNeedsSetup(true) }}
+            style={{
+              padding: '10px 24px',
+              background: 'transparent',
+              border: '1px solid #1a1a2e',
+              borderRadius: '4px',
+              color: '#9ca3af',
+              fontSize: '11px',
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            RUN SETUP ANYWAY
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect to setup if needed (from any page including /login)
+  if (needsSetup && location.pathname !== '/setup') {
     return <Navigate to="/setup" replace />
   }
 
+  // Already configured — redirect away from setup
   if (!needsSetup && location.pathname === '/setup') {
     return <Navigate to="/login" replace />
   }
@@ -90,8 +169,43 @@ function SetupCheck({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Teleport handler — picks up ?teleport=<id> from CLI, fetches context, navigates
+function useTeleportHandler() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const teleportId = params.get('teleport')
+    if (!teleportId) return
+
+    // Clean URL immediately
+    window.history.replaceState({}, '', location.pathname)
+
+    fetch(`${API_BASE}/api/teleport/pull?id=${encodeURIComponent(teleportId)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok || !data.context) return
+        const ctx = data.context as Record<string, any>
+        // Route based on context type
+        if (ctx.page) {
+          navigate(String(ctx.page))
+        } else if (ctx.agentId) {
+          navigate(`/agents?agentId=${ctx.agentId}`)
+        } else if (ctx.workflowId) {
+          navigate(`/workflow-editor/${ctx.workflowId}`)
+        }
+        // Default: stay on current page (context received but no routing hint)
+      })
+      .catch(() => {
+        // Silent — teleport is best-effort
+      })
+  }, []) // Only on mount
+}
+
 function AnimatedRoutes() {
   const location = useLocation()
+  useTeleportHandler()
 
   return (
     <AnimatePresence mode="wait">
@@ -129,6 +243,8 @@ function AnimatedRoutes() {
           <Route path="chat/:agentId?" element={<Suspense fallback={<PageLoader />}><Chat /></Suspense>} />
           <Route path="agents" element={<Suspense fallback={<PageLoader />}><Agents /></Suspense>} />
           <Route path="workflows" element={<Suspense fallback={<PageLoader />}><Workflows /></Suspense>} />
+          <Route path="workflow-editor" element={<Suspense fallback={<PageLoader />}><WorkflowEditor /></Suspense>} />
+          <Route path="workflow-editor/:id" element={<Suspense fallback={<PageLoader />}><WorkflowEditor /></Suspense>} />
           <Route path="mcp" element={<Suspense fallback={<PageLoader />}><MCPManager /></Suspense>} />
           <Route path="docker" element={<Suspense fallback={<PageLoader />}><DockerManager /></Suspense>} />
           <Route path="browsers" element={<Suspense fallback={<PageLoader />}><BrowserManager /></Suspense>} />

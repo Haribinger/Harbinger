@@ -187,6 +187,35 @@ var agentContainers = struct {
 	m map[string]string // agentID -> containerID
 }{m: make(map[string]string)}
 
+// teleportStore holds CLI↔UI context transfer payloads with 1-hour TTL.
+type teleportEntry struct {
+	ID        string      `json:"id"`
+	Context   interface{} `json:"context"`
+	CreatedAt time.Time   `json:"-"`
+	Consumed  bool        `json:"-"`
+}
+
+var teleportStore = struct {
+	sync.RWMutex
+	m map[string]*teleportEntry
+}{m: make(map[string]*teleportEntry)}
+
+func initTeleportEviction() {
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			teleportStore.Lock()
+			cutoff := time.Now().Add(-1 * time.Hour)
+			for id, entry := range teleportStore.m {
+				if entry.CreatedAt.Before(cutoff) || entry.Consumed {
+					delete(teleportStore.m, id)
+				}
+			}
+			teleportStore.Unlock()
+		}
+	}()
+}
+
 type Config struct {
 	AppName           string
 	AppEnv            string
@@ -232,7 +261,7 @@ func loadConfig() Config {
 		RedisPort:          getEnv("REDIS_PORT", "6379"),
 		Neo4jHost:          getEnv("NEO4J_HOST", "localhost"),
 		Neo4jPort:          getEnv("NEO4J_PORT", "7687"),
-		JWTSecret:          getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTSecret:          getEnvRequired("JWT_SECRET", "change-me-in-production"),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		MCPEnabled:         getEnv("MCP_ENABLED", "true") == "true",
 		HexStrikeURL:       getEnv("HEXSTRIKE_URL", ""),
@@ -256,12 +285,31 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// getEnvRequired returns the env value or fallback, but warns in production if using a weak default.
+func getEnvRequired(key, fallback string) string {
+	v := os.Getenv(key)
+	if v != "" {
+		return v
+	}
+	env := os.Getenv("APP_ENV")
+	if env == "production" && (fallback == "" || fallback == "change-me-in-production" || fallback == "change-me") {
+		log.Printf("[SECURITY] WARNING: %s is not set — using insecure default. Set %s for production.", key, key)
+	}
+	return fallback
+}
+
 // ---- Response helpers ----
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// internalError logs the real error server-side and returns a generic message to the client.
+func internalError(w http.ResponseWriter, context string, err error) {
+	log.Printf("[ERROR] %s: %v", context, err)
+	writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": context})
 }
 
 // ---- Rate Limiter (sliding window per IP) ----
@@ -472,8 +520,9 @@ func handleGitHubLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a random state value (stored in JWT later; no server-side session needed for now)
+	// Generate a random state value and store server-side for CSRF protection
 	state := generateRandomString(32)
+	storeOAuthState(state)
 
 	// Build the GitHub authorization URL
 	params := url.Values{}
@@ -502,6 +551,14 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		redirectURL := fmt.Sprintf("%s/login?error=no_code", cfg.AppURL)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Validate OAuth state to prevent CSRF
+	state := r.URL.Query().Get("state")
+	if state == "" || !validateAndConsumeOAuthState(state) {
+		redirectURL := fmt.Sprintf("%s/login?error=invalid_state", cfg.AppURL)
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
@@ -750,7 +807,7 @@ func handleDeviceFlowStart(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequest("POST", "https://github.com/login/device/code", strings.NewReader(data.Encode()))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	req.Header.Set("Accept", "application/json")
@@ -796,7 +853,7 @@ func handleDeviceFlowPoll(w http.ResponseWriter, r *http.Request) {
 
 	httpReq, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", strings.NewReader(data.Encode()))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	httpReq.Header.Set("Accept", "application/json")
@@ -828,7 +885,7 @@ func handleDeviceFlowPoll(w http.ResponseWriter, r *http.Request) {
 
 	jwt, err := issueJWTFromGitHubToken(tokenResp.AccessToken)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 
@@ -974,7 +1031,19 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetup accepts the setup wizard submission and applies configuration.
+// Guarded: only works when setup is actually needed (no auth configured).
 func handleSetup(w http.ResponseWriter, r *http.Request) {
+	// Guard: reject if setup is not needed (server already has auth configured)
+	githubOK := cfg.GitHubClientID != "" && cfg.GitHubClientSecret != ""
+	hasAnyAuth := githubOK || cfg.GitHubToken != ""
+	if hasAnyAuth {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":    false,
+			"error": "Setup already completed — server is configured",
+		})
+		return
+	}
+
 	var body struct {
 		AppName            string `json:"appName"`
 		AppURL             string `json:"appUrl"`
@@ -1061,6 +1130,9 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 	if body.OllamaURL != "" {
 		envLines = append(envLines, fmt.Sprintf("OLLAMA_URL=%s", body.OllamaURL))
 	}
+	if body.AdminEmail != "" {
+		envLines = append(envLines, fmt.Sprintf("ADMIN_EMAIL=%s", body.AdminEmail))
+	}
 
 	// Channel configs
 	if body.DiscordBotToken != "" {
@@ -1135,11 +1207,15 @@ func main() {
 	// Initialize channel configs from env
 	initChannels()
 
+	// Start teleport store eviction goroutine
+	initTeleportEviction()
+
 	mux := http.NewServeMux()
 
 	// Public routes
 	mux.HandleFunc("GET /", handleHome)
 	mux.HandleFunc("GET /health", handleHealthCheck)
+	mux.HandleFunc("GET /api/health", handleHealthCheck)
 	mux.HandleFunc("GET /api/v1/health", handleHealthCheck)
 	mux.HandleFunc("GET /api/setup/status", handleSetupStatus)
 	mux.HandleFunc("POST /api/setup", handleSetup)
@@ -1399,6 +1475,12 @@ func main() {
 	mux.HandleFunc("POST /api/v1/themes/schedule", authMiddleware(handleSetThemeSchedule))
 	mux.HandleFunc("POST /api/v1/themes/generate", authMiddleware(handleGenerateTheme))
 
+	// ── Teleport (CLI ↔ UI context transfer) ─────────────────────────────
+	mux.HandleFunc("POST /api/teleport/push", authMiddleware(handleTeleportPush))
+	mux.HandleFunc("GET /api/teleport/pull", authMiddleware(handleTeleportPull))
+	mux.HandleFunc("POST /api/v1/teleport/push", authMiddleware(handleTeleportPush))
+	mux.HandleFunc("GET /api/v1/teleport/pull", authMiddleware(handleTeleportPull))
+
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux
 	handler = maxBodyMiddleware(handler)
@@ -1496,16 +1578,14 @@ func handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := mfaSecrets[userID]
+	mfaEntry, ok := mfaSecrets[userID]
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "MFA not set up for this user"})
 		return
 	}
 
-	// Simulate TOTP verification (replace with actual TOTP library)
-	// For demonstration, we'll just check if the code is 
-    // For demonstration, we'll just check if the code is '123456'
-	if reqBody.Code == "123456" { // Replace with actual TOTP verification
+	// TOTP verification — HMAC-SHA1 based, 30-second time step, 6-digit code
+	if verifyTOTP(mfaEntry.Secret, reqBody.Code) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "MFA verified successfully"})
 		return
 	}
@@ -1966,6 +2046,79 @@ func generateRandomString(length int) string {
 	return base64.URLEncoding.EncodeToString(b)[:length]
 }
 
+// ---- TOTP Verification ----
+
+// verifyTOTP validates a 6-digit TOTP code using HMAC-SHA256 with a 30-second time step.
+// Checks current window and one step before/after to handle clock drift.
+func verifyTOTP(secret, code string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	now := time.Now().Unix()
+	// Check current, previous, and next 30-second windows
+	for _, offset := range []int64{-1, 0, 1} {
+		counter := (now / 30) + offset
+		expected := generateTOTPCode(secret, counter)
+		if hmac.Equal([]byte(expected), []byte(code)) {
+			return true
+		}
+	}
+	return false
+}
+
+func generateTOTPCode(secret string, counter int64) string {
+	// Encode counter as big-endian 8 bytes
+	msg := make([]byte, 8)
+	for i := 7; i >= 0; i-- {
+		msg[i] = byte(counter & 0xff)
+		counter >>= 8
+	}
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(msg)
+	hash := h.Sum(nil)
+
+	// Dynamic truncation
+	offset := hash[len(hash)-1] & 0x0f
+	code := (int(hash[offset])&0x7f)<<24 |
+		(int(hash[offset+1])&0xff)<<16 |
+		(int(hash[offset+2])&0xff)<<8 |
+		(int(hash[offset+3]) & 0xff)
+	otp := code % 1000000
+	return fmt.Sprintf("%06d", otp)
+}
+
+// ---- OAuth State Store ----
+
+var oauthStateStore = struct {
+	sync.Mutex
+	states map[string]int64 // state -> expiry timestamp
+}{states: make(map[string]int64)}
+
+func storeOAuthState(state string) {
+	oauthStateStore.Lock()
+	defer oauthStateStore.Unlock()
+	// Expire after 10 minutes
+	oauthStateStore.states[state] = time.Now().Add(10 * time.Minute).Unix()
+	// Garbage-collect expired entries
+	now := time.Now().Unix()
+	for k, v := range oauthStateStore.states {
+		if v < now {
+			delete(oauthStateStore.states, k)
+		}
+	}
+}
+
+func validateAndConsumeOAuthState(state string) bool {
+	oauthStateStore.Lock()
+	defer oauthStateStore.Unlock()
+	expiry, ok := oauthStateStore.states[state]
+	if !ok {
+		return false
+	}
+	delete(oauthStateStore.states, state)
+	return time.Now().Unix() < expiry
+}
+
 // ---- Dashboard ----
 
 func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
@@ -2080,6 +2233,16 @@ func handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// allowedDockerActions prevents path injection via the {action} route parameter.
+var allowedDockerActions = map[string]bool{
+	"start":   true,
+	"stop":    true,
+	"restart": true,
+	"pause":   true,
+	"unpause": true,
+	"kill":    true,
+}
+
 func handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	action := r.PathValue("action")
@@ -2087,6 +2250,15 @@ func handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	if id == "" || action == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"ok": false, "error": "missing id or action",
+		})
+		return
+	}
+
+	// Whitelist check — prevents arbitrary Docker API path injection
+	if !allowedDockerActions[action] {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("unsupported action: %s (allowed: start, stop, restart, pause, unpause, kill)", action),
 		})
 		return
 	}
@@ -2101,14 +2273,16 @@ func handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	endpoint := fmt.Sprintf("/v1.41/containers/%s/%s", id, action)
 	resp, err := dockerAPIRequest("POST", endpoint, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		log.Printf("[Docker] action %s on %s failed: %v", action, id, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "Docker operation failed"})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": string(body)})
+		log.Printf("[Docker] action %s on %s returned %d: %s", action, id, resp.StatusCode, string(body))
+		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": fmt.Sprintf("Container %s failed (status %d)", action, resp.StatusCode)})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "action": action})
@@ -2133,7 +2307,7 @@ func handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	endpoint := fmt.Sprintf("/v1.41/containers/%s/logs?stdout=true&stderr=true&tail=100", id)
 	resp, err := dockerAPIRequest("GET", endpoint, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -2145,7 +2319,7 @@ func handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
@@ -2162,7 +2336,7 @@ func handleDockerImages(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := dockerAPIRequest("GET", "/v1.41/images/json", nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -2370,4 +2544,61 @@ func handleGetPlaybook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Playbook not found"})
+}
+
+// ── Teleport handlers (CLI ↔ UI context transfer) ─────────────────────────
+
+func handleTeleportPush(w http.ResponseWriter, r *http.Request) {
+	var body map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
+		return
+	}
+
+	// Generate a unique teleport ID
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "id_generation_failed"})
+		return
+	}
+	id := "tp-" + fmt.Sprintf("%x", b)
+
+	entry := &teleportEntry{
+		ID:        id,
+		Context:   body,
+		CreatedAt: time.Now(),
+	}
+
+	teleportStore.Lock()
+	teleportStore.m[id] = entry
+	teleportStore.Unlock()
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+func handleTeleportPull(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_id"})
+		return
+	}
+
+	teleportStore.Lock()
+	entry, exists := teleportStore.m[id]
+	if exists {
+		entry.Consumed = true
+	}
+	teleportStore.Unlock()
+
+	if !exists {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
+	if time.Since(entry.CreatedAt) > time.Hour {
+		writeJSON(w, http.StatusGone, map[string]any{"ok": false, "error": "expired"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "context": entry.Context})
 }
