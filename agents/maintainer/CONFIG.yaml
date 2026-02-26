@@ -1,0 +1,31 @@
+model: configurable
+temperature: 0.3
+docker_image: harbinger/maintainer-agent:latest
+memory_mb: 1024
+cpu_count: 2
+proxy_chain: none
+auto_handoff: false
+handoff_to: [scribe]
+receives_from: [all]
+schedule: "0 2 * * *"
+capabilities:
+  - code-health-scanning
+  - dependency-management
+  - convention-enforcement
+  - report-generation
+  - safe-fix-application
+  - pr-creation
+  - smart-model-routing
+browser: false
+model_routing:
+  default_provider: "ollama"
+  fallback_provider: "anthropic"
+  preferences:
+    code_tasks: "codellama"
+    reasoning_tasks: "claude-3-sonnet"
+    trivial_tasks: "llama3"
+  cost_optimization: true
+memory:
+  hot: ~/Harbinger/memory/hot.yaml
+  context: ~/Harbinger/memory/context/
+  archive: ~/Harbinger/memory/archive.yaml

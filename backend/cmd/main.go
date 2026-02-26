@@ -1202,6 +1202,8 @@ func main() {
 	initDB(cfg)
 	if dbAvailable() {
 		seedDefaultAgents()
+		ensureCodeHealthTable()
+		ensureModelRoutesTable()
 	}
 
 	// Initialize channel configs from env
@@ -1227,6 +1229,20 @@ func main() {
 	mux.HandleFunc("POST /api/auth/github/device/poll", authRateLimited(handleDeviceFlowPoll))
 	mux.HandleFunc("POST /api/auth/github/token", authRateLimited(handleGitHubTokenAuth))
 	mux.HandleFunc("GET /api/auth/github/token/env", authRateLimited(handleGitHubTokenFromEnv))
+
+	// Google OAuth
+	mux.HandleFunc("GET /api/auth/google", authRateLimited(handleGoogleLogin))
+	mux.HandleFunc("GET /api/auth/google/callback", handleGoogleCallback)
+	mux.HandleFunc("GET /api/v1/auth/google", authRateLimited(handleGoogleLogin))
+	mux.HandleFunc("GET /api/v1/auth/google/callback", handleGoogleCallback)
+
+	// Provider key validation + connection testing
+	mux.HandleFunc("POST /api/auth/provider/validate", authRateLimited(handleValidateProviderKey))
+	mux.HandleFunc("POST /api/auth/provider/test", authRateLimited(handleTestProviderConnection))
+	mux.HandleFunc("GET /api/auth/providers", handleListAuthProviders)
+	mux.HandleFunc("POST /api/v1/auth/provider/validate", authRateLimited(handleValidateProviderKey))
+	mux.HandleFunc("POST /api/v1/auth/provider/test", authRateLimited(handleTestProviderConnection))
+	mux.HandleFunc("GET /api/v1/auth/providers", handleListAuthProviders)
 
 	// Auth & Security Endpoints (some public, some protected)
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", authMiddleware(handleMfaSetup))
@@ -1296,6 +1312,8 @@ func main() {
 	mux.HandleFunc("GET /api/v1/agents/{id}/status", authMiddleware(handleAgentStatus))
 	mux.HandleFunc("GET /api/v1/agents/{id}/logs", authMiddleware(handleAgentLogs))
 	mux.HandleFunc("POST /api/v1/agents/{id}/heartbeat", authMiddleware(handleAgentHeartbeat))
+	mux.HandleFunc("GET /api/v1/agents/{id}/soul", authMiddleware(handleGetAgentSoul))
+	mux.HandleFunc("GET /api/v1/agents/{id}/profile", authMiddleware(handleGetAgentProfile))
 	mux.HandleFunc("POST /api/v1/agents/{id}/clone", authMiddleware(handleCloneAgent))
 	mux.HandleFunc("GET /api/v1/agents/templates", authMiddleware(handleGetAgentTemplates))
 
@@ -1361,6 +1379,8 @@ func main() {
 	mux.HandleFunc("GET /api/agents/{id}/status", authMiddleware(handleAgentStatus))
 	mux.HandleFunc("GET /api/agents/{id}/logs", authMiddleware(handleAgentLogs))
 	mux.HandleFunc("POST /api/agents/{id}/heartbeat", authMiddleware(handleAgentHeartbeat))
+	mux.HandleFunc("GET /api/agents/{id}/soul", authMiddleware(handleGetAgentSoul))
+	mux.HandleFunc("GET /api/agents/{id}/profile", authMiddleware(handleGetAgentProfile))
 	mux.HandleFunc("POST /api/agents/{id}/clone", authMiddleware(handleCloneAgent))
 	mux.HandleFunc("GET /api/agents/templates", authMiddleware(handleGetAgentTemplates))
 	// Jobs (non-v1)
@@ -1474,6 +1494,22 @@ func main() {
 	mux.HandleFunc("GET /api/v1/themes/schedule", authMiddleware(handleGetThemeSchedule))
 	mux.HandleFunc("POST /api/v1/themes/schedule", authMiddleware(handleSetThemeSchedule))
 	mux.HandleFunc("POST /api/v1/themes/generate", authMiddleware(handleGenerateTheme))
+
+	// ── Code Health (MAINTAINER agent metrics) ──────────────────────────
+	mux.HandleFunc("GET /api/health/code", authMiddleware(handleHealthHistory))
+	mux.HandleFunc("GET /api/health/current", authMiddleware(handleCurrentHealth))
+	mux.HandleFunc("POST /api/health/code", authMiddleware(handleUpdateHealthMetrics))
+	mux.HandleFunc("GET /api/v1/health/code", authMiddleware(handleHealthHistory))
+	mux.HandleFunc("GET /api/v1/health/current", authMiddleware(handleCurrentHealth))
+	mux.HandleFunc("POST /api/v1/health/code", authMiddleware(handleUpdateHealthMetrics))
+
+	// ── Model Router (Smart model selection) ────────────────────────────
+	mux.HandleFunc("GET /api/settings/model-routes", authMiddleware(handleGetModelRoutes))
+	mux.HandleFunc("PUT /api/settings/model-routes", authMiddleware(handleUpdateModelRoutes))
+	mux.HandleFunc("POST /api/model-routes/resolve", authMiddleware(handleResolveModel))
+	mux.HandleFunc("GET /api/v1/settings/model-routes", authMiddleware(handleGetModelRoutes))
+	mux.HandleFunc("PUT /api/v1/settings/model-routes", authMiddleware(handleUpdateModelRoutes))
+	mux.HandleFunc("POST /api/v1/model-routes/resolve", authMiddleware(handleResolveModel))
 
 	// ── Teleport (CLI ↔ UI context transfer) ─────────────────────────────
 	mux.HandleFunc("POST /api/teleport/push", authMiddleware(handleTeleportPush))

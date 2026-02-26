@@ -2,13 +2,72 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
+
+// agentTypeToDir maps agent type slugs to their profile directory names under agents/.
+var agentTypeToDir = map[string]string{
+	"recon":             "recon-scout",
+	"web":               "web-hacker",
+	"cloud":             "cloud-infiltrator",
+	"osint":             "osint-detective",
+	"binary":            "binary-reverser",
+	"report":            "report-writer",
+	"coding-assistant":  "coding-assistant",
+	"reporter":          "morning-brief",
+	"learning-agent":    "learning-agent",
+	"browser-agent":     "browser-agent",
+	"maintainer":        "maintainer",
+	"custom":            "_template",
+	"network":           "_template",
+	"mobile":            "_template",
+	"api":               "_template",
+}
+
+// resolveAgentDir finds the absolute path to an agent's profile directory.
+func resolveAgentDir(agentType string) string {
+	dir, ok := agentTypeToDir[agentType]
+	if !ok {
+		dir = agentType // fallback: try type as directory name
+	}
+	return filepath.Join("agents", dir)
+}
+
+// readAgentSoul reads SOUL.md from the agent's profile directory.
+func readAgentSoul(agentType string) (string, error) {
+	soulPath := filepath.Join(resolveAgentDir(agentType), "SOUL.md")
+	data, err := os.ReadFile(soulPath)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// readAgentProfileFile reads any markdown file from the agent's profile directory.
+func readAgentProfileFile(agentType, filename string) (string, error) {
+	path := filepath.Join(resolveAgentDir(agentType), filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// hashContent returns a short SHA-256 hash of content for version tracking.
+func hashContent(content string) string {
+	h := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(h[:8])
+}
 
 // ============================================================================
 // AGENT CRUD HANDLERS
@@ -155,7 +214,93 @@ func handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+
+	result := map[string]any{"ok": true}
+
+	// Enrich heartbeat with soul version if agent type is known
+	agent, err := dbGetAgent(id)
+	if err == nil {
+		soul, soulErr := readAgentSoul(agent.Type)
+		if soulErr == nil {
+			result["soul_version"] = hashContent(soul)
+		}
+		result["agent_type"] = agent.Type
+		result["agent_name"] = agent.Name
+		result["status"] = agent.Status
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleGetAgentSoul serves the SOUL.md content for an agent.
+func handleGetAgentSoul(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if !dbAvailable() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "database not available"})
+		return
+	}
+
+	agent, err := dbGetAgent(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "agent not found"})
+		return
+	}
+
+	soul, err := readAgentSoul(agent.Type)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":   true,
+			"soul": "",
+			"note": "no SOUL.md found for agent type: " + agent.Type,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":           true,
+		"soul":         soul,
+		"soul_version": hashContent(soul),
+		"agent_type":   agent.Type,
+		"agent_name":   agent.Name,
+	})
+}
+
+// handleGetAgentProfile serves the full agent profile (SOUL, IDENTITY, SKILLS, HEARTBEAT, TOOLS).
+func handleGetAgentProfile(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if !dbAvailable() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "database not available"})
+		return
+	}
+
+	agent, err := dbGetAgent(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "agent not found"})
+		return
+	}
+
+	profileFiles := []string{"SOUL.md", "IDENTITY.md", "SKILLS.md", "HEARTBEAT.md", "TOOLS.md", "CONFIG.yaml"}
+	profile := map[string]any{
+		"ok":         true,
+		"agent_type": agent.Type,
+		"agent_name": agent.Name,
+		"agent_dir":  resolveAgentDir(agent.Type),
+	}
+
+	for _, f := range profileFiles {
+		content, err := readAgentProfileFile(agent.Type, f)
+		key := strings.TrimSuffix(strings.TrimSuffix(strings.ToLower(f), ".md"), ".yaml")
+		if err != nil {
+			profile[key] = nil
+		} else {
+			profile[key] = content
+			profile[key+"_version"] = hashContent(content)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, profile)
 }
 
 // ============================================================================
@@ -274,6 +419,24 @@ func handleGetAgentTemplates(w http.ResponseWriter, r *http.Request) {
 			"config":       map[string]any{"docker_image": "harbinger/browser-agent:latest", "memory_mb": 1024, "cpu_count": 1},
 			"color":        "#06b6d4",
 		},
+		{
+			"id": "template-maintainer", "name": "MAINTAINER", "type": "maintainer",
+			"description":  "Code Quality Specialist — Nightly health scans, safe auto-fixes, convention enforcement, dependency audits, health scoring, and PR creation. Runs at 02:00 UTC.",
+			"capabilities": []string{"code-health-scanning", "dependency-management", "convention-enforcement", "safe-fix-application", "pr-creation", "smart-model-routing"},
+			"config": map[string]any{
+				"docker_image": "harbinger/maintainer-agent:latest",
+				"memory_mb":    1024,
+				"cpu_count":    2,
+				"schedule":     "0 2 * * *",
+				"model_routing": map[string]any{
+					"default_provider":  "ollama",
+					"fallback_provider": "anthropic",
+					"cost_optimization": true,
+				},
+			},
+			"color":       "#10b981",
+			"personality": "You are MAINTAINER, the code quality specialist in the Harbinger platform. You run nightly scans to detect any types, console.logs, outdated dependencies, and convention violations. You apply safe auto-fixes with rollback capability, compute health scores, and create PRs. You never modify business logic or test expectations. Safety first — every change has a rollback path.",
+		},
 	}
 
 	templates = append(templates, customTypes...)
@@ -369,17 +532,34 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 		image = cfgImage
 	}
 
+	// Load agent soul for container injection
+	soul, _ := readAgentSoul(agent.Type)
+	soulVersion := ""
+	if soul != "" {
+		soulVersion = hashContent(soul)
+	}
+
 	// Create the container
 	containerName := fmt.Sprintf("harbinger-%s-%s", agent.Type, agentID[:8])
+	envVars := []string{
+		"AGENT_ID=" + agentID,
+		"AGENT_NAME=" + agent.Name,
+		"AGENT_TYPE=" + agent.Type,
+		"HARBINGER_API=http://backend:8080",
+	}
+	if soul != "" {
+		envVars = append(envVars, "AGENT_SOUL_VERSION="+soulVersion)
+		// Truncate soul to 4KB for env var safety
+		soulForEnv := soul
+		if len(soulForEnv) > 4096 {
+			soulForEnv = soulForEnv[:4096]
+		}
+		envVars = append(envVars, "AGENT_SOUL="+soulForEnv)
+	}
 	containerConfig := map[string]any{
 		"Image":    image,
 		"Hostname": containerName,
-		"Env": []string{
-			"AGENT_ID=" + agentID,
-			"AGENT_NAME=" + agent.Name,
-			"AGENT_TYPE=" + agent.Type,
-			"HARBINGER_API=http://backend:8080",
-		},
+		"Env":      envVars,
 		"Labels": map[string]string{
 			"harbinger.agent.id":   agentID,
 			"harbinger.agent.name": agent.Name,
