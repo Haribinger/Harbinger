@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  ShieldCheck,
   Swords,
   BookOpen,
   Target,
@@ -17,6 +18,9 @@ import {
   Zap,
   Radio,
   Monitor,
+  Activity,
+  Crosshair,
+  Wrench,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -40,6 +44,10 @@ const navItems: NavItem[] = [
   { path: '/skills', label: 'Skills Hub', icon: BookOpen },
   { path: '/bounty-hub', label: 'Bounty Hub', icon: Target },
   { path: '/openclaw', label: 'OpenClaw', icon: Radio },
+  { path: '/code-health', label: 'Code Health', icon: Activity },
+  { path: '/scope-manager', label: 'Scope Manager', icon: ShieldCheck },
+  { path: '/vuln-deep-dive', label: 'Vuln Deep Dive', icon: Crosshair },
+  { path: '/remediation', label: 'Remediation', icon: Wrench },
 ]
 
 const bottomNavItems: NavItem[] = [

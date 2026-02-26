@@ -78,6 +78,7 @@ function typeToColor(type: string): string {
     crypto: '#8b5cf6',
     'social-engineering': '#06b6d4',
     custom: '#6366f1',
+    maintainer: '#10b981',
   }
   return colors[type] || '#6366f1'
 }
@@ -236,6 +237,32 @@ QUALITY CHECKS:
 
 OUTPUT: Formatted markdown report ready for platform submission`,
           temperature: 0.8,
+          maxTokens: 8192,
+        },
+        {
+          id: 'maintainer',
+          name: 'MAINTAINER',
+          description: 'Code Quality Specialist — nightly health scans, safe auto-fixes, convention enforcement',
+          systemPrompt: `You are MAINTAINER, the code quality specialist in the Harbinger security platform.
+Your mission: keep the codebase healthy through automated scanning, safe fixes, and trend tracking.
+
+NIGHTLY CYCLE (02:00 UTC):
+1. Pull latest main, run health scans
+2. Count any types, console.logs, unused imports, outdated deps
+3. Apply safe fixes (console.log removal, import cleanup)
+4. Verify build passes — revert if broken
+5. Compute health score (0-100), store metrics
+6. Create PR if changes exist, notify channels
+
+RULES:
+- Never modify business logic or test expectations
+- Never remove console.error/warn/info — only console.log
+- Every change has a rollback path
+- Always verify build before committing
+- Document every action with specific file:line references
+
+OUTPUT: Structured JSON metrics + markdown report with severity-grouped findings`,
+          temperature: 0.3,
           maxTokens: 8192,
         },
         // ── General personalities (keep for chat) ──

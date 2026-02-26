@@ -32,6 +32,8 @@ import {
   Trash2,
   Edit3,
   Type,
+  Lock,
+  Router,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useSecretsStore, PROVIDER_MODELS } from '../../store/secretsStore'
@@ -40,6 +42,8 @@ import { useThemeStore, applyTheme } from '../../store/themeStore'
 import type { HarbingerTheme, ThemeTokens } from '../../types/theme'
 import { BUILTIN_THEMES } from '../../types/theme'
 import { useBugBountyStore } from '../../store/bugBountyStore'
+import { useModelRouterStore } from '../../store/modelRouterStore'
+import type { ModelRoute } from '../../store/modelRouterStore'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -52,6 +56,7 @@ const sections = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'api-keys', label: 'API Keys', icon: Key },
   { id: 'security', label: 'Security', icon: Shield },
+  { id: 'model-router', label: 'Model Router', icon: Router },
   { id: 'advanced', label: 'Advanced', icon: Database },
 ]
 
@@ -879,6 +884,11 @@ function Settings() {
             </Section>
           )}
 
+          {/* Model Router */}
+          {activeSection === 'model-router' && (
+            <ModelRouterSection />
+          )}
+
           {/* Advanced */}
           {activeSection === 'advanced' && (
             <Section title="Advanced" description="Advanced configuration options">
@@ -1029,6 +1039,7 @@ const AGENT_ROSTER = [
   { id: 'brief', name: 'BRIEF', color: '#fbbf24' },
   { id: 'sage', name: 'SAGE', color: '#10b981' },
   { id: 'lens', name: 'LENS', color: '#06b6d4' },
+  { id: 'maintainer', name: 'MAINTAINER', color: '#10b981' },
 ]
 
 function ThemeSection({ autoSave, updateSettings }: { autoSave: boolean; updateSettings: (s: any) => void }) {
@@ -1947,6 +1958,245 @@ function ChannelsSection() {
               <code className="px-1 py-0.5 bg-background rounded text-xs">getUpdates</code> for chat ID.
             </p>
           </div>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+// ─── Model Router Section ─────────────────────────────────────────────────
+
+const COMPLEXITY_TIERS = ['trivial', 'simple', 'moderate', 'complex', 'massive'] as const
+const TIER_DESCRIPTIONS: Record<string, string> = {
+  trivial: 'Greetings, simple lookups (500 tokens)',
+  simple: 'Single-step tasks, short answers (2K tokens)',
+  moderate: 'Multi-step analysis, code review (4K tokens)',
+  complex: 'Deep reasoning, exploit dev (8K tokens)',
+  massive: 'Full codebase analysis, report gen (32K tokens)',
+}
+
+const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'gpt4all']
+const ALL_PROVIDERS = ['ollama', 'lmstudio', 'gpt4all', 'anthropic', 'openai', 'google', 'gemini', 'mistral', 'groq', 'custom']
+
+function ModelRouterSection() {
+  const {
+    routes,
+    config,
+    isLoading,
+    fetchRoutes,
+    updateRoutes,
+    updateRoute,
+    toggleLocalMode,
+  } = useModelRouterStore()
+
+  useEffect(() => {
+    fetchRoutes()
+  }, [])
+
+  const handleSaveRoutes = async () => {
+    await updateRoutes(routes, config)
+    toast.success('Model routes saved')
+  }
+
+  const availableProviders = config.local_mode ? LOCAL_PROVIDERS : ALL_PROVIDERS
+
+  return (
+    <Section title="Model Router" description="Local-first smart model routing — control where your data goes">
+      {/* Local Mode Toggle — most prominent element */}
+      <div
+        className="rounded-xl p-5"
+        style={{
+          background: config.local_mode ? '#10b98110' : '#0d0d15',
+          border: `2px solid ${config.local_mode ? '#10b981' : '#1a1a2e'}`,
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: config.local_mode ? '#10b98120' : '#1a1a2e' }}>
+              <Lock size={20} style={{ color: config.local_mode ? '#10b981' : '#9ca3af' }} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                Local Mode
+                {config.local_mode && (
+                  <span className="text-[9px] px-2 py-0.5 rounded tracking-wider" style={{ background: '#10b98120', color: '#10b981' }}>
+                    ALL TRAFFIC STAYS LOCAL
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {config.local_mode
+                  ? 'Nothing leaves your system. All tasks routed to local models.'
+                  : 'Cloud providers available for complex tasks. Toggle to lock down.'}
+              </p>
+            </div>
+          </div>
+          <Toggle value={config.local_mode} onChange={toggleLocalMode} />
+        </div>
+      </div>
+
+      {/* Auto-Classify + Cost Optimization toggles */}
+      <div className="grid grid-cols-2 gap-4">
+        <Setting label="Auto-Classify Tasks" description="Detect task complexity automatically">
+          <Toggle
+            value={config.auto_classify}
+            onChange={(v) => updateRoutes(routes, { ...config, auto_classify: v })}
+          />
+        </Setting>
+        <Setting label="Cost Optimization" description="Always prefer cheapest sufficient model">
+          <Toggle
+            value={config.cost_optimization}
+            onChange={(v) => updateRoutes(routes, { ...config, cost_optimization: v })}
+          />
+        </Setting>
+      </div>
+
+      {/* Route Table */}
+      <div className="bg-surface rounded-xl border border-border p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Router size={16} style={{ color: '#f0c040' }} />
+            Route Table
+          </h3>
+          <button
+            onClick={handleSaveRoutes}
+            disabled={isLoading}
+            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded border transition-colors"
+            style={{ borderColor: '#f0c040', color: '#f0c040' }}
+          >
+            <Save size={12} />
+            Save Routes
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {/* Header */}
+          <div className="grid grid-cols-5 gap-3 text-[10px] text-text-secondary tracking-wider px-1">
+            <span>TIER</span>
+            <span>PROVIDER</span>
+            <span>MODEL</span>
+            <span>FALLBACK</span>
+            <span>TOKENS</span>
+          </div>
+
+          {/* Rows */}
+          {routes.map((route, idx) => (
+            <div
+              key={route.task_type}
+              className="grid grid-cols-5 gap-3 items-center p-3 rounded-lg"
+              style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
+            >
+              <div>
+                <span className="text-xs font-bold uppercase" style={{ color: '#f0c040' }}>
+                  {route.task_type}
+                </span>
+                <p className="text-[9px] text-text-secondary mt-0.5">
+                  {TIER_DESCRIPTIONS[route.task_type] || ''}
+                </p>
+              </div>
+
+              <select
+                value={route.default_provider}
+                onChange={(e) => updateRoute(idx, { default_provider: e.target.value })}
+                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
+              >
+                {availableProviders.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+
+              <input
+                value={route.model}
+                onChange={(e) => updateRoute(idx, { model: e.target.value })}
+                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
+              />
+
+              <input
+                value={route.fallback_model || ''}
+                onChange={(e) => updateRoute(idx, { fallback_model: e.target.value, fallback_provider: e.target.value ? 'anthropic' : '' })}
+                placeholder="none"
+                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
+              />
+
+              <input
+                type="number"
+                value={route.max_tokens}
+                onChange={(e) => updateRoute(idx, { max_tokens: parseInt(e.target.value) || 500 })}
+                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono w-full"
+              />
+            </div>
+          ))}
+
+          {routes.length === 0 && (
+            <div className="text-center py-6 text-xs text-text-secondary">
+              No routes configured. Save to initialize defaults.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Provider Priority */}
+      <div className="bg-surface rounded-xl border border-border p-5">
+        <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+          <Zap size={16} style={{ color: '#f0c040' }} />
+          Provider Priority
+        </h3>
+        <p className="text-xs text-text-secondary mb-3">
+          Order determines fallback preference. Local providers are tried first.
+        </p>
+        <div className="space-y-1.5">
+          {['ollama', 'lmstudio', 'gpt4all', 'anthropic', 'openai', 'google'].map((provider, i) => {
+            const isLocal = LOCAL_PROVIDERS.includes(provider)
+            return (
+              <div
+                key={provider}
+                className="flex items-center justify-between p-2.5 rounded"
+                style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] w-5 text-center" style={{ color: '#666' }}>{i + 1}</span>
+                  <span className="text-xs font-mono">{provider}</span>
+                  {isLocal && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: '#10b98115', color: '#10b981' }}>
+                      local
+                    </span>
+                  )}
+                </div>
+                <div className="w-2 h-2 rounded-full" style={{ background: isLocal ? '#10b981' : '#3b82f6' }} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Per-Agent Overrides */}
+      <div className="bg-surface rounded-xl border border-border p-5">
+        <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+          <Bot size={16} style={{ color: '#f0c040' }} />
+          Per-Agent Overrides
+        </h3>
+        <p className="text-xs text-text-secondary mb-3">
+          Pin specific agents to models. Overrides the route table for that agent.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { agent: 'CIPHER', hint: 'opus (deep analysis)', color: '#f97316' },
+            { agent: 'MAINTAINER', hint: 'local (cost-free)', color: '#10b981' },
+            { agent: 'PATHFINDER', hint: 'sonnet (balanced)', color: '#3b82f6' },
+            { agent: 'SCRIBE', hint: 'sonnet (writing)', color: '#22c55e' },
+          ].map(({ agent, hint, color }) => (
+            <div
+              key={agent}
+              className="flex items-center justify-between p-2.5 rounded"
+              style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                <span className="text-xs font-mono">{agent}</span>
+              </div>
+              <span className="text-[10px]" style={{ color: '#666' }}>{hint}</span>
+            </div>
+          ))}
         </div>
       </div>
     </Section>

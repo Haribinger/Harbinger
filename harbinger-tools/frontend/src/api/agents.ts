@@ -99,9 +99,19 @@ export const agentsApi = {
     return resp.data
   },
 
-  // Send heartbeat
-  heartbeat: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/agents/${id}/heartbeat`)
+  // Send heartbeat — returns enriched status with soul version
+  heartbeat: async (id: string): Promise<{ ok: boolean; soul_version?: string; agent_type?: string; status?: string }> => {
+    return apiClient.post(`/api/agents/${id}/heartbeat`)
+  },
+
+  // Get agent soul (SOUL.md content)
+  getSoul: async (id: string): Promise<{ ok: boolean; soul?: string; soul_version?: string; agent_type?: string }> => {
+    return apiClient.get(`/api/agents/${id}/soul`)
+  },
+
+  // Get full agent profile (SOUL, IDENTITY, SKILLS, HEARTBEAT, TOOLS)
+  getProfile: async (id: string): Promise<Record<string, any>> => {
+    return apiClient.get(`/api/agents/${id}/profile`)
   },
 
   // Get agent templates

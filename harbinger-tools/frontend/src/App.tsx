@@ -24,6 +24,10 @@ const CommandCenter = lazy(() => import('./pages/CommandCenter/CommandCenter'))
 const SkillsHub = lazy(() => import('./pages/SkillsHub/SkillsHub'))
 const OpenClaw = lazy(() => import('./pages/OpenClaw/OpenClaw'))
 const WorkflowEditor = lazy(() => import('./pages/WorkflowEditor'))
+const CodeHealth = lazy(() => import('./pages/CodeHealth/CodeHealth'))
+const ScopeManager = lazy(() => import('./pages/ScopeManager/ScopeManager'))
+const VulnDeepDive = lazy(() => import('./pages/VulnDeepDive/VulnDeepDive'))
+const RemediationTracker = lazy(() => import('./pages/RemediationTracker/RemediationTracker'))
 const Login = lazy(() => import('./pages/Login/Login'))
 const SetupWizard = lazy(() => import('./pages/Setup/SetupWizard'))
 
@@ -253,6 +257,10 @@ function AnimatedRoutes() {
           <Route path="skills" element={<Suspense fallback={<PageLoader />}><SkillsHub /></Suspense>} />
           <Route path="bounty-hub" element={<Suspense fallback={<PageLoader />}><BountyHub /></Suspense>} />
           <Route path="openclaw" element={<Suspense fallback={<PageLoader />}><OpenClaw /></Suspense>} />
+          <Route path="code-health" element={<Suspense fallback={<PageLoader />}><CodeHealth /></Suspense>} />
+          <Route path="scope-manager" element={<Suspense fallback={<PageLoader />}><ScopeManager /></Suspense>} />
+          <Route path="vuln-deep-dive" element={<Suspense fallback={<PageLoader />}><VulnDeepDive /></Suspense>} />
+          <Route path="remediation" element={<Suspense fallback={<PageLoader />}><RemediationTracker /></Suspense>} />
           <Route path="sse" element={<SSERoute />} />
           <Route path="*" element={<div className="p-8 text-center font-mono text-gray-400">404 // Page not found</div>} />
         </Route>

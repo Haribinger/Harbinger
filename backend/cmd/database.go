@@ -791,3 +791,212 @@ func formatTextArray(arr []string) string {
 	}
 	return "{" + strings.Join(arr, ",") + "}"
 }
+
+// ============================================================================
+// CODE HEALTH METRICS
+// ============================================================================
+
+// ensureCodeHealthTable creates the code_health_scans table if it doesn't exist.
+func ensureCodeHealthTable() {
+	if !dbAvailable() {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS code_health_scans (
+			id          SERIAL PRIMARY KEY,
+			date        TEXT NOT NULL,
+			any_types   INT DEFAULT 0,
+			console_logs INT DEFAULT 0,
+			test_coverage INT DEFAULT 0,
+			deps_outdated INT DEFAULT 0,
+			conventions  INT DEFAULT 0,
+			score        INT DEFAULT 0,
+			created_at   TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create code_health_scans table: %v", err)
+	}
+}
+
+// dbStoreHealthMetric inserts a health metric into the database.
+func dbStoreHealthMetric(m HealthMetric) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	_, err := db.Exec(`
+		INSERT INTO code_health_scans (date, any_types, console_logs, test_coverage, deps_outdated, conventions, score)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		m.Date, m.AnyTypes, m.ConsoleLogs, m.TestCoverage, m.DepsOutdated, m.Conventions, m.Score,
+	)
+	return err
+}
+
+// dbLoadHealthHistory loads metrics since a given date.
+func dbLoadHealthHistory(since string) ([]HealthMetric, error) {
+	if !dbAvailable() {
+		return nil, fmt.Errorf("database not available")
+	}
+	rows, err := db.Query(`
+		SELECT date, any_types, console_logs, test_coverage, deps_outdated, conventions, score
+		FROM code_health_scans
+		WHERE date >= $1
+		ORDER BY date ASC`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var metrics []HealthMetric
+	for rows.Next() {
+		var m HealthMetric
+		if err := rows.Scan(&m.Date, &m.AnyTypes, &m.ConsoleLogs, &m.TestCoverage, &m.DepsOutdated, &m.Conventions, &m.Score); err != nil {
+			return nil, err
+		}
+		metrics = append(metrics, m)
+	}
+	return metrics, nil
+}
+
+// ============================================================================
+// MODEL ROUTES
+// ============================================================================
+
+// ensureModelRoutesTable creates the model_routes table if it doesn't exist.
+func ensureModelRoutesTable() {
+	if !dbAvailable() {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS model_routes (
+			id               SERIAL PRIMARY KEY,
+			task_type        TEXT NOT NULL UNIQUE,
+			default_provider TEXT NOT NULL,
+			fallback_provider TEXT DEFAULT '',
+			model            TEXT NOT NULL,
+			fallback_model   TEXT DEFAULT '',
+			max_tokens       INT DEFAULT 2000,
+			cost_optimize    BOOLEAN DEFAULT true,
+			created_at       TIMESTAMPTZ DEFAULT NOW(),
+			updated_at       TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create model_routes table: %v", err)
+	}
+
+	// Config table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS model_router_config (
+			id               SERIAL PRIMARY KEY,
+			local_mode       BOOLEAN DEFAULT false,
+			auto_classify    BOOLEAN DEFAULT true,
+			default_provider TEXT DEFAULT 'ollama',
+			cost_optimization BOOLEAN DEFAULT true,
+			updated_at       TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create model_router_config table: %v", err)
+	}
+}
+
+// dbSaveModelRoutes persists routes and config to the database.
+func dbSaveModelRoutes(routes []ModelRoute, config ModelRouterConfig) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Upsert routes
+	for _, r := range routes {
+		_, err := tx.Exec(`
+			INSERT INTO model_routes (task_type, default_provider, fallback_provider, model, fallback_model, max_tokens, cost_optimize, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+			ON CONFLICT (task_type) DO UPDATE SET
+				default_provider = EXCLUDED.default_provider,
+				fallback_provider = EXCLUDED.fallback_provider,
+				model = EXCLUDED.model,
+				fallback_model = EXCLUDED.fallback_model,
+				max_tokens = EXCLUDED.max_tokens,
+				cost_optimize = EXCLUDED.cost_optimize,
+				updated_at = NOW()`,
+			r.TaskType, r.DefaultProvider, r.FallbackProvider, r.Model, r.FallbackModel, r.MaxTokens, r.CostOptimize,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Upsert config (single row)
+	_, err = tx.Exec(`
+		INSERT INTO model_router_config (id, local_mode, auto_classify, default_provider, cost_optimization, updated_at)
+		VALUES (1, $1, $2, $3, $4, NOW())
+		ON CONFLICT (id) DO UPDATE SET
+			local_mode = EXCLUDED.local_mode,
+			auto_classify = EXCLUDED.auto_classify,
+			default_provider = EXCLUDED.default_provider,
+			cost_optimization = EXCLUDED.cost_optimization,
+			updated_at = NOW()`,
+		config.LocalMode, config.AutoClassify, config.DefaultProvider, config.CostOptimization,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// dbLoadModelRoutes loads routes and config from the database.
+func dbLoadModelRoutes() ([]ModelRoute, ModelRouterConfig, error) {
+	config := ModelRouterConfig{
+		LocalMode:        false,
+		AutoClassify:     true,
+		DefaultProvider:  "ollama",
+		CostOptimization: true,
+	}
+
+	if !dbAvailable() {
+		return nil, config, fmt.Errorf("database not available")
+	}
+
+	// Load config
+	err := db.QueryRow(`SELECT local_mode, auto_classify, default_provider, cost_optimization FROM model_router_config WHERE id = 1`).
+		Scan(&config.LocalMode, &config.AutoClassify, &config.DefaultProvider, &config.CostOptimization)
+	if err != nil {
+		// Not found is ok — use defaults
+	}
+
+	// Load routes
+	rows, err := db.Query(`
+		SELECT task_type, default_provider, fallback_provider, model, fallback_model, max_tokens, cost_optimize
+		FROM model_routes
+		ORDER BY CASE task_type
+			WHEN 'trivial' THEN 1
+			WHEN 'simple' THEN 2
+			WHEN 'moderate' THEN 3
+			WHEN 'complex' THEN 4
+			WHEN 'massive' THEN 5
+			ELSE 6
+		END`)
+	if err != nil {
+		return nil, config, err
+	}
+	defer rows.Close()
+
+	var routes []ModelRoute
+	for rows.Next() {
+		var r ModelRoute
+		if err := rows.Scan(&r.TaskType, &r.DefaultProvider, &r.FallbackProvider, &r.Model, &r.FallbackModel, &r.MaxTokens, &r.CostOptimize); err != nil {
+			return nil, config, err
+		}
+		routes = append(routes, r)
+	}
+
+	return routes, config, nil
+}

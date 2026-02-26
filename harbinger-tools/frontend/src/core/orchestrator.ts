@@ -45,6 +45,8 @@ interface AgentConfig {
   toolsCount: number
   findingsCount: number
   containerId?: string
+  soulVersion?: string
+  soul?: string
 }
 
 class AgentOrchestrator extends SimpleEventEmitter {
@@ -81,6 +83,15 @@ class AgentOrchestrator extends SimpleEventEmitter {
 
       this.agents.set(agentId, config)
       this.emit('agentStatusChange', config)
+
+      // Load agent soul from profile directory
+      agentsApi.getSoul(agentId).then((soulResult) => {
+        if (soulResult.ok && soulResult.soul) {
+          config.soul = soulResult.soul
+          config.soulVersion = soulResult.soul_version
+          this.emit('agentSoulLoaded', { agentId, soul: soulResult.soul, version: soulResult.soul_version })
+        }
+      }).catch(() => {})
 
       // Start heartbeat polling for this agent
       this.startHeartbeat(agentId)
@@ -147,10 +158,23 @@ class AgentOrchestrator extends SimpleEventEmitter {
     this.stopHeartbeat(agentId) // Clear existing
     const timer = setInterval(async () => {
       try {
-        await agentsApi.heartbeat(agentId)
+        const result = await agentsApi.heartbeat(agentId)
         const config = this.agents.get(agentId)
         if (config) {
           config.status = 'running'
+
+          // Detect soul version changes (hot-reload of SOUL.md)
+          if (result.soul_version && config.soulVersion && result.soul_version !== config.soulVersion) {
+            console.log(`[Orchestrator] Soul updated for ${agentId}, reloading...`)
+            config.soulVersion = result.soul_version
+            agentsApi.getSoul(agentId).then((soulResult) => {
+              if (soulResult.ok && soulResult.soul) {
+                config.soul = soulResult.soul
+                this.emit('agentSoulUpdated', { agentId, soul: soulResult.soul, version: soulResult.soul_version })
+              }
+            }).catch(() => {})
+          }
+
           this.emit('agentStatusChange', config)
         }
       } catch {

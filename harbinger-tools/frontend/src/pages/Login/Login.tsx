@@ -5,7 +5,7 @@ import { AlertCircle, Loader2, Copy, Cpu, RefreshCw, Key } from 'lucide-react'
 import { useAuthStore, parseJWT } from '../../store/authStore'
 import { useNavigate } from 'react-router-dom'
 
-type Tab = 'oauth' | 'device' | 'token'
+type Tab = 'oauth' | 'device' | 'token' | 'api-key'
 
 interface DeviceState {
   deviceCode: string
@@ -79,9 +79,18 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'oauth', label: 'OAUTH' },
   { id: 'device', label: 'DEVICE FLOW' },
   { id: 'token', label: 'TOKEN' },
+  { id: 'api-key', label: 'API KEY' },
 ]
 
-const AGENTS = ['PATHFINDER', 'BREACH', 'PHANTOM', 'SPECTER', 'CIPHER', 'SCRIBE']
+const AGENTS = ['PATHFINDER', 'BREACH', 'PHANTOM', 'SPECTER', 'CIPHER', 'SCRIBE', 'MAINTAINER']
+
+const API_KEY_PROVIDERS = [
+  { id: 'openai', name: 'OpenAI', placeholder: 'sk-...', color: '#22c55e' },
+  { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-api03-...', color: '#f97316' },
+  { id: 'groq', name: 'Groq', placeholder: 'gsk_...', color: '#f0c040' },
+  { id: 'mistral', name: 'Mistral', placeholder: 'Bearer ...', color: '#ef4444' },
+  { id: 'gemini', name: 'Gemini', placeholder: 'AIza...', color: '#3b82f6' },
+] as const
 
 function Login() {
   const [tab, setTab] = useState<Tab>('oauth')
@@ -91,9 +100,11 @@ function Login() {
   const [device, setDevice] = useState<DeviceState | null>(null)
   const [polling, setPolling] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState('openai')
+  const [providerKey, setProviderKey] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { login, initiateGitHubAuth, startDeviceFlow, pollDeviceFlow, loginWithGHToken } = useAuthStore()
+  const { login, initiateGitHubAuth, initiateGoogleAuth, validateProviderKey, startDeviceFlow, pollDeviceFlow, loginWithGHToken } = useAuthStore()
   const navigate = useNavigate()
 
   // Clear device flow polling on unmount
@@ -339,30 +350,63 @@ function Login() {
                       color: S.muted,
                       fontSize: '11px',
                       lineHeight: 1.7,
-                      marginBottom: '22px',
+                      marginBottom: '16px',
                       marginTop: 0,
                     }}
                   >
-                    Standard GitHub OAuth flow. Requires a callback URL configured in your GitHub OAuth App settings.
+                    Authenticate with GitHub or Google OAuth.
                   </p>
-                  <button
-                    onClick={handleOAuthLogin}
-                    disabled={isLoading}
-                    style={{ ...btnBase, opacity: isLoading ? 0.5 : 1 }}
-                    onMouseEnter={(e) => {
-                      if (!isLoading) e.currentTarget.style.borderColor = S.white
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = S.gold
-                    }}
-                  >
-                    {isLoading ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <GitHubIcon />
-                    )}
-                    {isLoading ? 'CONNECTING...' : 'CONTINUE WITH GITHUB'}
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <button
+                      onClick={handleOAuthLogin}
+                      disabled={isLoading}
+                      style={{ ...btnBase, opacity: isLoading ? 0.5 : 1 }}
+                      onMouseEnter={(e) => {
+                        if (!isLoading) e.currentTarget.style.borderColor = S.white
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = S.gold
+                      }}
+                    >
+                      {isLoading ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <GitHubIcon />
+                      )}
+                      {isLoading ? 'CONNECTING...' : 'CONTINUE WITH GITHUB'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setIsLoading(true)
+                        setError(null)
+                        const result = await initiateGoogleAuth()
+                        if (result?.success && result.data?.authUrl) {
+                          window.location.href = result.data.authUrl
+                        } else {
+                          setIsLoading(false)
+                          setError(result?.error?.message ?? 'Google OAuth not configured on server')
+                        }
+                      }}
+                      disabled={isLoading}
+                      style={{ ...btnBase, borderColor: S.border, color: S.muted, opacity: isLoading ? 0.5 : 1 }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#4285f4'
+                        e.currentTarget.style.color = '#4285f4'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = S.border
+                        e.currentTarget.style.color = S.muted
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      CONTINUE WITH GOOGLE
+                    </button>
+                  </div>
                 </motion.div>
               )}
 
@@ -567,6 +611,119 @@ function Login() {
                       USE SERVER GH_TOKEN
                     </button>
                   </div>
+                </motion.div>
+              )}
+              {/* ── API Key ── */}
+              {tab === 'api-key' && (
+                <motion.div
+                  key="api-key"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.12 }}
+                >
+                  <p
+                    style={{
+                      color: S.muted,
+                      fontSize: '11px',
+                      lineHeight: 1.7,
+                      marginBottom: '14px',
+                      marginTop: 0,
+                    }}
+                  >
+                    Sign in with an AI provider API key. Key is validated against the provider&apos;s API.
+                  </p>
+
+                  {/* Provider selector */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                    {API_KEY_PROVIDERS.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setSelectedProvider(p.id); setProviderKey('') }}
+                        style={{
+                          padding: '6px 12px',
+                          background: selectedProvider === p.id ? `${p.color}15` : 'transparent',
+                          border: `1px solid ${selectedProvider === p.id ? p.color : S.border}`,
+                          borderRadius: '4px',
+                          color: selectedProvider === p.id ? p.color : S.dimmer,
+                          fontSize: '10px',
+                          letterSpacing: '0.08em',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {p.name.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    type="password"
+                    value={providerKey}
+                    onChange={(e) => setProviderKey(e.target.value)}
+                    placeholder={API_KEY_PROVIDERS.find(p => p.id === selectedProvider)?.placeholder || 'API key...'}
+                    autoComplete="off"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: S.bg,
+                      border: `1px solid ${S.border}`,
+                      borderRadius: '4px',
+                      color: S.white,
+                      fontSize: '12px',
+                      fontFamily: 'inherit',
+                      marginBottom: '12px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = S.gold)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = S.border)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && providerKey.trim()) {
+                        (async () => {
+                          setIsLoading(true)
+                          setError(null)
+                          const result = await validateProviderKey(selectedProvider, providerKey.trim())
+                          setIsLoading(false)
+                          if (result?.valid) {
+                            navigate('/')
+                          } else {
+                            setError(result?.error || 'Invalid API key')
+                          }
+                        })()
+                      }
+                    }}
+                  />
+
+                  <button
+                    onClick={async () => {
+                      if (!providerKey.trim()) {
+                        setError('Enter an API key')
+                        return
+                      }
+                      setIsLoading(true)
+                      setError(null)
+                      const result = await validateProviderKey(selectedProvider, providerKey.trim())
+                      setIsLoading(false)
+                      if (result?.valid) {
+                        navigate('/')
+                      } else {
+                        setError(result?.error || 'Invalid API key')
+                      }
+                    }}
+                    disabled={isLoading}
+                    style={{ ...btnBase, opacity: isLoading ? 0.5 : 1 }}
+                  >
+                    {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Key size={13} />}
+                    {isLoading ? 'VALIDATING...' : `AUTHENTICATE WITH ${selectedProvider.toUpperCase()}`}
+                  </button>
+
+                  <p style={{ color: S.dim, fontSize: '9px', marginTop: '10px', lineHeight: 1.6 }}>
+                    Your key is sent to the Harbinger backend for validation only.
+                    It is not stored server-side.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>

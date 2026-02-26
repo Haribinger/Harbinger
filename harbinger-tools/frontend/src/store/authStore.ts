@@ -10,7 +10,7 @@ interface User {
   provider: string
 }
 
-type GitHubAuthData = { authUrl: string; state: string }
+type OAuthData = { authUrl: string; state: string; provider: string }
 
 type DeviceFlowData = {
   deviceCode: string
@@ -35,7 +35,10 @@ interface AuthState {
   logout: () => void
   clearError: () => void
 
-  initiateGitHubAuth: () => Promise<APIResponse<GitHubAuthData> | null>
+  initiateGitHubAuth: () => Promise<APIResponse<OAuthData> | null>
+  initiateGoogleAuth: () => Promise<APIResponse<OAuthData> | null>
+  initiateProviderAuth: (provider: string) => Promise<APIResponse<OAuthData> | null>
+  validateProviderKey: (provider: string, apiKey: string) => Promise<{ ok: boolean; valid: boolean; jwt?: string; error?: string } | null>
   startDeviceFlow: () => Promise<DeviceFlowData | null>
   pollDeviceFlow: (deviceCode: string) => Promise<boolean>
   loginWithGHToken: (token?: string) => Promise<{ ok: boolean; jwt?: string; error?: string } | null>
@@ -112,8 +115,74 @@ export const useAuthStore = create<AuthState>()(
             return { success: false, error: { code: 'bad_response', message } }
           }
 
-          return { success: true, data: { authUrl, state } }
+          return { success: true, data: { authUrl, state, provider: 'github' } }
         } catch (e) {
+          set({ error: 'Network error' })
+          return null
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      initiateGoogleAuth: async () => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/google`)
+          const json = await response.json().catch(() => null)
+          if (!response.ok || !json?.ok || !json.auth_url) {
+            const message = json?.error || `Failed to initiate Google auth (${response.status})`
+            set({ error: message })
+            return { success: false, error: { code: 'auth_failed', message } }
+          }
+          return { success: true, data: { authUrl: json.auth_url, state: json.state, provider: 'google' } }
+        } catch {
+          set({ error: 'Network error' })
+          return null
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      initiateProviderAuth: async (provider: string) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/${provider}`)
+          const json = await response.json().catch(() => null)
+          if (!response.ok || !json?.ok || !json.auth_url) {
+            const message = json?.error || json?.fix || `${provider} OAuth not configured`
+            set({ error: message })
+            return { success: false, error: { code: 'auth_failed', message } }
+          }
+          return { success: true, data: { authUrl: json.auth_url, state: json.state, provider } }
+        } catch {
+          set({ error: 'Network error' })
+          return null
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      validateProviderKey: async (provider: string, apiKey: string) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/provider/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, api_key: apiKey }),
+          })
+          const json = await response.json().catch(() => null)
+          if (!json) return null
+
+          if (json.valid && json.jwt) {
+            // Auto-login on successful validation
+            const parsed = parseJWT(json.jwt)
+            if (parsed?.success && parsed.data) {
+              useAuthStore.getState().login(json.jwt, parsed.data)
+            }
+          }
+
+          return { ok: !!json.ok, valid: !!json.valid, jwt: json.jwt, error: json.error }
+        } catch {
           set({ error: 'Network error' })
           return null
         } finally {

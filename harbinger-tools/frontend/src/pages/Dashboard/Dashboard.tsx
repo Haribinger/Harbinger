@@ -18,6 +18,7 @@ import {
   Radio,
   Database,
   GitBranch,
+  Wrench,
 } from 'lucide-react'
 import { useAgentStore } from '../../store/agentStore'
 import { useDockerStore } from '../../store/dockerStore'
@@ -46,7 +47,7 @@ const FONT = 'JetBrains Mono, Fira Code, monospace'
 const TYPE_ICON: Record<string, typeof Crosshair> = {
   recon: Crosshair, web: Zap, cloud: Radio, osint: Target,
   binary: Terminal, report: FileText, network: Globe, mobile: Shield,
-  api: Database, custom: Bot, default: Bot,
+  api: Database, custom: Bot, maintainer: Wrench, default: Bot,
 }
 
 // Fallback when no agents in DB yet
