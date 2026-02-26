@@ -16,6 +16,7 @@ import {
   Cpu,
   Zap,
   Radio,
+  Monitor,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -28,6 +29,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: Zap },
+  { path: '/command-center', label: 'Command Center', icon: Monitor },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/agents', label: 'Agents', icon: Bot },
   { path: '/workflows', label: 'Workflows', icon: Workflow },

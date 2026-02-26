@@ -264,18 +264,200 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// ---- Rate Limiter (sliding window per IP) ----
+
+type rateLimiter struct {
+	mu       sync.Mutex
+	visitors map[string]*visitorBucket
+	rate     int           // requests per window
+	window   time.Duration // window size
+}
+
+type visitorBucket struct {
+	tokens    int
+	lastReset time.Time
+}
+
+func newRateLimiter(rate int, window time.Duration) *rateLimiter {
+	rl := &rateLimiter{
+		visitors: make(map[string]*visitorBucket),
+		rate:     rate,
+		window:   window,
+	}
+	// Evict stale entries every 5 minutes
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			rl.mu.Lock()
+			cutoff := time.Now().Add(-2 * rl.window)
+			for ip, v := range rl.visitors {
+				if v.lastReset.Before(cutoff) {
+					delete(rl.visitors, ip)
+				}
+			}
+			rl.mu.Unlock()
+		}
+	}()
+	return rl
+}
+
+func (rl *rateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	v, exists := rl.visitors[ip]
+	now := time.Now()
+	if !exists || now.Sub(v.lastReset) >= rl.window {
+		rl.visitors[ip] = &visitorBucket{tokens: rl.rate - 1, lastReset: now}
+		return true
+	}
+	if v.tokens <= 0 {
+		return false
+	}
+	v.tokens--
+	return true
+}
+
+// Global rate limiters — separate limits for auth vs general API
+var (
+	apiLimiter  = newRateLimiter(120, time.Minute) // 120 req/min per IP
+	authLimiter = newRateLimiter(20, time.Minute)  // 20 req/min per IP for auth
+)
+
+func rateLimitMiddleware(limiter *rateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+			if ip == "" {
+				ip = r.RemoteAddr
+			}
+			// Trust X-Forwarded-For behind reverse proxy (nginx/Docker)
+			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+				ip = strings.SplitN(fwd, ",", 2)[0]
+				ip = strings.TrimSpace(ip)
+			}
+			if !limiter.allow(ip) {
+				w.Header().Set("Retry-After", "60")
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{
+					"ok":    false,
+					"error": "rate_limit_exceeded",
+					"fix":   "Too many requests. Wait 60 seconds.",
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ---- CORS Middleware ----
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
-		w.Header().Set("Access-Control-Expose-Headers", "Authorization")
+		origin := r.Header.Get("Origin")
+		allowed := false
+
+		// In development, allow configured APP_URL and localhost variants
+		allowedOrigins := []string{cfg.AppURL}
+		if cfg.AppEnv == "development" {
+			allowedOrigins = append(allowedOrigins,
+				"http://localhost:3000",
+				"http://localhost:5173",
+				"http://127.0.0.1:3000",
+				"http://127.0.0.1:5173",
+			)
+		}
+
+		for _, o := range allowedOrigins {
+			if o != "" && origin == o {
+				allowed = true
+				break
+			}
+		}
+
+		// If no Origin header (same-origin request), allow it
+		if origin == "" {
+			allowed = true
+		}
+
+		if allowed {
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
+			w.Header().Set("Access-Control-Expose-Headers", "Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+		}
+
 		if r.Method == http.MethodOptions {
+			if !allowed {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ---- Body Size Limiter ----
+
+const (
+	maxBodySize      int64 = 10 << 20 // 10 MB general limit
+	maxUploadSize    int64 = 50 << 20 // 50 MB for file uploads
+)
+
+func maxBodyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && r.ContentLength != 0 {
+			limit := maxBodySize
+			// Allow larger bodies for specific upload paths
+			if strings.HasPrefix(r.URL.Path, "/api/docker/images/pull") ||
+				strings.HasPrefix(r.URL.Path, "/api/v1/docker/images/pull") {
+				limit = maxUploadSize
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ---- Security Headers ----
+
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// authRateLimited wraps a handler with the stricter auth rate limiter
+func authRateLimited(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if ip == "" {
+			ip = r.RemoteAddr
+		}
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+		}
+		if !authLimiter.allow(ip) {
+			w.Header().Set("Retry-After", "60")
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{
+				"ok":    false,
+				"error": "rate_limit_exceeded",
+				"fix":   "Too many auth attempts. Wait 60 seconds.",
+			})
+			return
+		}
+		handler(w, r)
+	}
 }
 
 func handleGitHubLogin(w http.ResponseWriter, r *http.Request) {
@@ -961,14 +1143,14 @@ func main() {
 	mux.HandleFunc("GET /api/v1/health", handleHealthCheck)
 	mux.HandleFunc("GET /api/setup/status", handleSetupStatus)
 	mux.HandleFunc("POST /api/setup", handleSetup)
-	// GitHub OAuth endpoints
-	mux.HandleFunc("GET /api/auth/github", handleGitHubLogin)
-	mux.HandleFunc("GET /api/auth/github/login", handleGitHubLogin)
-	mux.HandleFunc("GET /api/auth/github/callback", handleGitHubCallback)
-	mux.HandleFunc("POST /api/auth/github/device/start", handleDeviceFlowStart)
-	mux.HandleFunc("POST /api/auth/github/device/poll", handleDeviceFlowPoll)
-	mux.HandleFunc("POST /api/auth/github/token", handleGitHubTokenAuth)
-	mux.HandleFunc("GET /api/auth/github/token/env", handleGitHubTokenFromEnv)
+	// GitHub OAuth endpoints (rate-limited to prevent brute force)
+	mux.HandleFunc("GET /api/auth/github", authRateLimited(handleGitHubLogin))
+	mux.HandleFunc("GET /api/auth/github/login", authRateLimited(handleGitHubLogin))
+	mux.HandleFunc("GET /api/auth/github/callback", authRateLimited(handleGitHubCallback))
+	mux.HandleFunc("POST /api/auth/github/device/start", authRateLimited(handleDeviceFlowStart))
+	mux.HandleFunc("POST /api/auth/github/device/poll", authRateLimited(handleDeviceFlowPoll))
+	mux.HandleFunc("POST /api/auth/github/token", authRateLimited(handleGitHubTokenAuth))
+	mux.HandleFunc("GET /api/auth/github/token/env", authRateLimited(handleGitHubTokenFromEnv))
 
 	// Auth & Security Endpoints (some public, some protected)
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", authMiddleware(handleMfaSetup))
@@ -1217,8 +1399,25 @@ func main() {
 	mux.HandleFunc("POST /api/v1/themes/schedule", authMiddleware(handleSetThemeSchedule))
 	mux.HandleFunc("POST /api/v1/themes/generate", authMiddleware(handleGenerateTheme))
 
+	// Chain middleware: security headers → CORS → rate limit → body size → mux
+	var handler http.Handler = mux
+	handler = maxBodyMiddleware(handler)
+	handler = rateLimitMiddleware(apiLimiter)(handler)
+	handler = corsMiddleware(handler)
+	handler = securityHeadersMiddleware(handler)
+
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB max headers
+	}
+
 	log.Printf("Server starting on :%s\n", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, corsMiddleware(mux)))
+	log.Fatal(server.ListenAndServe())
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {

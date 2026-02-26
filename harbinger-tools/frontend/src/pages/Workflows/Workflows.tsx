@@ -15,9 +15,13 @@ import {
   Container,
   Globe,
   Terminal,
+  FileText,
+  Search,
+  Shield,
+  Target,
 } from 'lucide-react'
 import { useWorkflowStore } from '../../store/workflowStore'
-import type { Workflow as WorkflowType } from '../../types'
+import type { Workflow as WorkflowType, WorkflowNode, WorkflowEdge } from '../../types'
 
 const nodeTypes = [
   { type: 'agent', label: 'Agent Task', icon: Bot, color: 'from-[#f0c040] to-amber-400' },
@@ -25,6 +29,121 @@ const nodeTypes = [
   { type: 'browser', label: 'Browser Action', icon: Globe, color: 'from-purple-500 to-pink-500' },
   { type: 'script', label: 'Script', icon: Terminal, color: 'from-orange-500 to-red-500' },
   { type: 'trigger', label: 'Trigger', icon: Zap, color: 'from-yellow-500 to-amber-500' },
+]
+
+// Pre-built workflow templates with real node definitions
+interface WorkflowTemplate {
+  id: string
+  name: string
+  description: string
+  icon: typeof Search
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  config: WorkflowType['config']
+}
+
+const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: 'recon-pipeline',
+    name: 'Recon Pipeline',
+    description: 'Full reconnaissance: subdomain enum, port scan, HTTP probing, screenshot capture',
+    icon: Search,
+    nodes: [
+      { id: 'n1', type: 'trigger', position: { x: 50, y: 200 }, data: { label: 'Target Input', trigger: 'manual', input: 'domain' } },
+      { id: 'n2', type: 'agent', position: { x: 300, y: 100 }, data: { label: 'Subdomain Enum', agent: 'pathfinder', tool: 'subfinder', args: '-d ${domain} -silent' } },
+      { id: 'n3', type: 'agent', position: { x: 300, y: 300 }, data: { label: 'DNS Resolve', agent: 'pathfinder', tool: 'dnsx', args: '-l ${subdomains} -resp -a' } },
+      { id: 'n4', type: 'agent', position: { x: 550, y: 100 }, data: { label: 'Port Scan', agent: 'pathfinder', tool: 'naabu', args: '-l ${live_hosts} -top-ports 1000' } },
+      { id: 'n5', type: 'agent', position: { x: 550, y: 300 }, data: { label: 'HTTP Probe', agent: 'pathfinder', tool: 'httpx', args: '-l ${live_hosts} -sc -td -title' } },
+      { id: 'n6', type: 'agent', position: { x: 800, y: 200 }, data: { label: 'Screenshot', agent: 'lens', tool: 'screenshot', args: '-urls ${http_alive}' } },
+      { id: 'n7', type: 'agent', position: { x: 1050, y: 200 }, data: { label: 'Generate Report', agent: 'scribe', tool: 'markdown-report', args: '--template recon' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2', animated: true },
+      { id: 'e2', source: 'n1', target: 'n3', animated: true },
+      { id: 'e3', source: 'n2', target: 'n4' },
+      { id: 'e4', source: 'n3', target: 'n5' },
+      { id: 'e5', source: 'n4', target: 'n6' },
+      { id: 'e6', source: 'n5', target: 'n6' },
+      { id: 'e7', source: 'n6', target: 'n7' },
+    ],
+    config: { autoStart: false, retryOnError: true, maxRetries: 2, timeout: 7200, parallelExecution: true },
+  },
+  {
+    id: 'vuln-scan',
+    name: 'Vulnerability Scanner',
+    description: 'Nuclei templates + custom checks against discovered endpoints',
+    icon: Shield,
+    nodes: [
+      { id: 'n1', type: 'trigger', position: { x: 50, y: 200 }, data: { label: 'URL List Input', trigger: 'manual', input: 'urls_file' } },
+      { id: 'n2', type: 'agent', position: { x: 300, y: 100 }, data: { label: 'Nuclei Scan', agent: 'breach', tool: 'nuclei', args: '-l ${urls_file} -severity critical,high,medium -o findings.json -jsonl' } },
+      { id: 'n3', type: 'agent', position: { x: 300, y: 300 }, data: { label: 'Directory Fuzz', agent: 'breach', tool: 'ffuf', args: '-u ${base_url}/FUZZ -w /wordlists/common.txt -mc 200,301,403' } },
+      { id: 'n4', type: 'agent', position: { x: 550, y: 100 }, data: { label: 'XSS Check', agent: 'breach', tool: 'dalfox', args: '-b ${urls_file} --skip-bav' } },
+      { id: 'n5', type: 'agent', position: { x: 550, y: 300 }, data: { label: 'SQLi Check', agent: 'breach', tool: 'sqlmap', args: '-m ${urls_file} --batch --level 3 --risk 2' } },
+      { id: 'n6', type: 'agent', position: { x: 800, y: 200 }, data: { label: 'Deduplicate Findings', agent: 'scribe', tool: 'dedup', args: '--input findings/' } },
+      { id: 'n7', type: 'agent', position: { x: 1050, y: 200 }, data: { label: 'Write Report', agent: 'scribe', tool: 'markdown-report', args: '--template vuln-assessment' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2', animated: true },
+      { id: 'e2', source: 'n1', target: 'n3', animated: true },
+      { id: 'e3', source: 'n2', target: 'n4' },
+      { id: 'e4', source: 'n2', target: 'n5' },
+      { id: 'e5', source: 'n3', target: 'n6' },
+      { id: 'e6', source: 'n4', target: 'n6' },
+      { id: 'e7', source: 'n5', target: 'n6' },
+      { id: 'e8', source: 'n6', target: 'n7' },
+    ],
+    config: { autoStart: false, retryOnError: true, maxRetries: 3, timeout: 14400, parallelExecution: true },
+  },
+  {
+    id: 'bug-bounty-full',
+    name: 'Bug Bounty Pipeline',
+    description: 'End-to-end: recon, enumerate, scan, exploit, report — full automated bounty workflow',
+    icon: Target,
+    nodes: [
+      { id: 'n1', type: 'trigger', position: { x: 50, y: 200 }, data: { label: 'Program Scope', trigger: 'manual', input: 'scope_domains' } },
+      { id: 'n2', type: 'agent', position: { x: 250, y: 200 }, data: { label: 'PATHFINDER Recon', agent: 'pathfinder', tool: 'full-recon', args: '-scope ${scope_domains}' } },
+      { id: 'n3', type: 'agent', position: { x: 450, y: 100 }, data: { label: 'SPECTER OSINT', agent: 'specter', tool: 'osint-gather', args: '-targets ${recon_output}' } },
+      { id: 'n4', type: 'agent', position: { x: 450, y: 300 }, data: { label: 'BREACH Scan', agent: 'breach', tool: 'vuln-scan', args: '-urls ${http_alive} -severity high,critical' } },
+      { id: 'n5', type: 'agent', position: { x: 650, y: 100 }, data: { label: 'PHANTOM Cloud Check', agent: 'phantom', tool: 'cloud-enum', args: '-domains ${subdomains}' } },
+      { id: 'n6', type: 'agent', position: { x: 650, y: 300 }, data: { label: 'LENS Visual Verify', agent: 'lens', tool: 'screenshot-verify', args: '-findings ${vuln_findings}' } },
+      { id: 'n7', type: 'agent', position: { x: 850, y: 200 }, data: { label: 'Triage & Dedupe', agent: 'scribe', tool: 'triage', args: '-all-findings ${findings_dir}' } },
+      { id: 'n8', type: 'agent', position: { x: 1050, y: 200 }, data: { label: 'SCRIBE Report', agent: 'scribe', tool: 'bounty-report', args: '--platform hackerone --template professional' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2', animated: true },
+      { id: 'e2', source: 'n2', target: 'n3' },
+      { id: 'e3', source: 'n2', target: 'n4' },
+      { id: 'e4', source: 'n3', target: 'n5' },
+      { id: 'e5', source: 'n4', target: 'n6' },
+      { id: 'e6', source: 'n5', target: 'n7' },
+      { id: 'e7', source: 'n6', target: 'n7' },
+      { id: 'e8', source: 'n7', target: 'n8' },
+    ],
+    config: { autoStart: false, retryOnError: true, maxRetries: 2, timeout: 28800, parallelExecution: true },
+  },
+  {
+    id: 'report-gen',
+    name: 'Report Generator',
+    description: 'Collect findings from agents, deduplicate, score by CVSS, generate formatted report',
+    icon: FileText,
+    nodes: [
+      { id: 'n1', type: 'trigger', position: { x: 50, y: 200 }, data: { label: 'Findings Input', trigger: 'manual', input: 'findings_dir' } },
+      { id: 'n2', type: 'script', position: { x: 300, y: 200 }, data: { label: 'Parse Findings', script: 'parse-findings.sh', args: '${findings_dir}' } },
+      { id: 'n3', type: 'script', position: { x: 550, y: 100 }, data: { label: 'CVSS Scoring', script: 'cvss-score.py', args: '--input ${parsed_findings}' } },
+      { id: 'n4', type: 'script', position: { x: 550, y: 300 }, data: { label: 'Dedup & Merge', script: 'dedup-findings.sh', args: '--input ${parsed_findings}' } },
+      { id: 'n5', type: 'agent', position: { x: 800, y: 200 }, data: { label: 'SCRIBE Narrative', agent: 'scribe', tool: 'narrative-gen', args: '--findings ${scored_findings}' } },
+      { id: 'n6', type: 'agent', position: { x: 1050, y: 200 }, data: { label: 'Export PDF', agent: 'scribe', tool: 'pdf-export', args: '--report ${narrative} --format professional' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2', animated: true },
+      { id: 'e2', source: 'n2', target: 'n3' },
+      { id: 'e3', source: 'n2', target: 'n4' },
+      { id: 'e4', source: 'n3', target: 'n5' },
+      { id: 'e5', source: 'n4', target: 'n5' },
+      { id: 'e6', source: 'n5', target: 'n6' },
+    ],
+    config: { autoStart: false, retryOnError: false, maxRetries: 1, timeout: 3600, parallelExecution: false },
+  },
 ]
 
 function statusIcon(status: WorkflowType['status']) {
@@ -58,10 +177,10 @@ function Workflows() {
       id: Date.now().toString(),
       name: data.name || 'New Workflow',
       description: data.description || '',
-      nodes: [],
-      edges: [],
+      nodes: data.nodes || [],
+      edges: data.edges || [],
       status: 'draft',
-      config: {
+      config: data.config || {
         autoStart: false,
         retryOnError: true,
         maxRetries: 3,
@@ -336,16 +455,83 @@ function CreateWorkflowModal({
   const [description, setDescription] = useState('')
   const [autoStart, setAutoStart] = useState(false)
   const [parallelExecution, setParallelExecution] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+
+  const handleTemplateSelect = (tpl: WorkflowTemplate) => {
+    setSelectedTemplate(tpl.id)
+    setName(tpl.name)
+    setDescription(tpl.description)
+    setAutoStart(tpl.config.autoStart)
+    setParallelExecution(tpl.config.parallelExecution)
+  }
+
+  const handleCreate = () => {
+    const tpl = WORKFLOW_TEMPLATES.find((t) => t.id === selectedTemplate)
+    onCreate({
+      name,
+      description,
+      nodes: tpl?.nodes,
+      edges: tpl?.edges,
+      config: {
+        autoStart,
+        parallelExecution,
+        retryOnError: tpl?.config.retryOnError ?? true,
+        maxRetries: tpl?.config.maxRetries ?? 3,
+        timeout: tpl?.config.timeout ?? 3600,
+      },
+    })
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="bg-surface rounded-xl border border-border w-full max-w-lg">
+      <div className="bg-surface rounded-xl border border-border w-full max-w-2xl max-h-[85vh] overflow-y-auto">
         <div className="p-6 border-b border-border">
           <h2 className="text-xl font-bold">Create Workflow</h2>
-          <p className="text-text-secondary">Define a new automation workflow</p>
+          <p className="text-text-secondary">Start from a template or build from scratch</p>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5">
+          {/* Templates */}
+          <div>
+            <label className="block text-sm font-medium mb-3">Start from Template</label>
+            <div className="grid grid-cols-2 gap-3">
+              {WORKFLOW_TEMPLATES.map((tpl) => {
+                const Icon = tpl.icon
+                return (
+                  <button
+                    key={tpl.id}
+                    onClick={() => handleTemplateSelect(tpl)}
+                    className={`text-left p-4 rounded-lg border transition-all ${
+                      selectedTemplate === tpl.id
+                        ? 'bg-[#f0c040]/10 border-[#f0c040]/40'
+                        : 'bg-surface-light border-border hover:border-[#f0c040]/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="w-4 h-4 text-[#f0c040]" />
+                      <span className="font-medium text-sm">{tpl.name}</span>
+                    </div>
+                    <p className="text-xs text-text-secondary leading-relaxed">{tpl.description}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-text-secondary">
+                      <span>{tpl.nodes.length} nodes</span>
+                      <span className="opacity-40">|</span>
+                      <span>{tpl.edges.length} connections</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedTemplate && (
+              <button
+                onClick={() => { setSelectedTemplate(null); setName(''); setDescription('') }}
+                className="mt-2 text-xs text-text-secondary hover:text-white transition-colors"
+              >
+                Clear template selection (blank workflow)
+              </button>
+            )}
+          </div>
+
+          {/* Name */}
           <div>
             <label className="block text-sm font-medium mb-2">Name</label>
             <input
@@ -357,6 +543,7 @@ function CreateWorkflowModal({
             />
           </div>
 
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium mb-2">Description</label>
             <textarea
@@ -364,10 +551,11 @@ function CreateWorkflowModal({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe what this workflow does..."
               className="w-full bg-surface-light border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-primary resize-none"
-              rows={3}
+              rows={2}
             />
           </div>
 
+          {/* Config toggles */}
           <div className="flex gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -395,7 +583,7 @@ function CreateWorkflowModal({
             Cancel
           </button>
           <button
-            onClick={() => onCreate({ name, description, config: { autoStart, parallelExecution, retryOnError: true, maxRetries: 3, timeout: 3600 } })}
+            onClick={handleCreate}
             disabled={!name}
             className="px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 rounded-lg transition-colors"
           >
