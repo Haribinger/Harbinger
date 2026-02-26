@@ -1,36 +1,44 @@
 import { create } from 'zustand'
 
-// API Base URL from env
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080'
+const API_BASE = (import.meta as any).env?.VITE_API_URL || ''
+
+type LLMProvider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'gemini' | 'mistral' | 'google' | 'custom'
 
 interface SetupState {
-  // Setup steps
+  // Steps
   currentStep: number
   totalSteps: number
   isComplete: boolean
 
-  // Configuration
+  // Step 1: App config
   appName: string
   appUrl: string
 
-  // GitHub OAuth
+  // Step 2: AI Provider
+  llmProvider: LLMProvider
+  llmApiKey: string
+  llmModel: string
+  ollamaUrl: string
+  ollamaStatus: 'untested' | 'connected' | 'error'
+
+  // Step 3: GitHub Auth
   githubClientId: string
   githubClientSecret: string
-
-  // Admin account
-  adminEmail: string
-  adminPassword: string
-  adminPasswordConfirm: string
-
-  // GitHub PAT for automation
   githubPat: string
   githubOwner: string
   githubRepo: string
 
-  // LLM Configuration
-  llmProvider: 'anthropic' | 'openai' | 'google'
-  llmApiKey: string
-  llmModel: string
+  // Step 4: Channels (Discord, Telegram)
+  discordBotToken: string
+  discordGuildId: string
+  discordChannelId: string
+  telegramBotToken: string
+  telegramChatId: string
+
+  // Step 5: Admin account
+  adminEmail: string
+  adminPassword: string
+  adminPasswordConfirm: string
 
   // Actions
   setStep: (step: number) => void
@@ -38,19 +46,27 @@ interface SetupState {
   prevStep: () => void
   setComplete: (complete: boolean) => void
 
+  // Setters
   setAppName: (name: string) => void
   setAppUrl: (url: string) => void
+  setLlmProvider: (provider: LLMProvider) => void
+  setLlmApiKey: (key: string) => void
+  setLlmModel: (model: string) => void
+  setOllamaUrl: (url: string) => void
+  setOllamaStatus: (status: 'untested' | 'connected' | 'error') => void
   setGitHubClientId: (id: string) => void
   setGitHubClientSecret: (secret: string) => void
-  setAdminEmail: (email: string) => void
-  setAdminPassword: (password: string) => void
-  setAdminPasswordConfirm: (password: string) => void
   setGitHubPat: (pat: string) => void
   setGitHubOwner: (owner: string) => void
   setGitHubRepo: (repo: string) => void
-  setLlmProvider: (provider: 'anthropic' | 'openai' | 'google') => void
-  setLlmApiKey: (key: string) => void
-  setLlmModel: (model: string) => void
+  setDiscordBotToken: (token: string) => void
+  setDiscordGuildId: (id: string) => void
+  setDiscordChannelId: (id: string) => void
+  setTelegramBotToken: (token: string) => void
+  setTelegramChatId: (id: string) => void
+  setAdminEmail: (email: string) => void
+  setAdminPassword: (password: string) => void
+  setAdminPasswordConfirm: (password: string) => void
 
   // Validation
   isStepValid: () => boolean
@@ -59,144 +75,162 @@ interface SetupState {
   // API
   submitSetup: () => Promise<{ success: boolean; error?: string }>
   checkNeedsSetup: () => Promise<boolean>
+  testOllama: () => Promise<boolean>
 }
 
 export const useSetupStore = create<SetupState>((set, get) => ({
   currentStep: 0,
-  totalSteps: 5,
+  totalSteps: 7,
   isComplete: false,
 
+  // App config
   appName: 'Harbinger',
   appUrl: '',
 
+  // AI Provider
+  llmProvider: 'ollama',
+  llmApiKey: '',
+  llmModel: '',
+  ollamaUrl: 'http://localhost:11434',
+  ollamaStatus: 'untested',
+
+  // GitHub Auth
   githubClientId: '',
   githubClientSecret: '',
-
-  adminEmail: '',
-  adminPassword: '',
-  adminPasswordConfirm: '',
-
   githubPat: '',
   githubOwner: '',
   githubRepo: '',
 
-  llmProvider: 'anthropic',
-  llmApiKey: '',
-  llmModel: '',
+  // Channels
+  discordBotToken: '',
+  discordGuildId: '',
+  discordChannelId: '',
+  telegramBotToken: '',
+  telegramChatId: '',
+
+  // Admin
+  adminEmail: '',
+  adminPassword: '',
+  adminPasswordConfirm: '',
 
   setStep: (step) => set({ currentStep: step }),
   nextStep: () => {
     const { currentStep, totalSteps } = get()
-    if (currentStep < totalSteps - 1) {
-      set({ currentStep: currentStep + 1 })
-    }
+    if (currentStep < totalSteps - 1) set({ currentStep: currentStep + 1 })
   },
   prevStep: () => {
     const { currentStep } = get()
-    if (currentStep > 0) {
-      set({ currentStep: currentStep - 1 })
-    }
+    if (currentStep > 0) set({ currentStep: currentStep - 1 })
   },
   setComplete: (complete) => set({ isComplete: complete }),
 
+  // Setters
   setAppName: (name) => set({ appName: name }),
   setAppUrl: (url) => set({ appUrl: url }),
-  setGitHubClientId: (id) => set({ githubClientId: id }),
-  setGitHubClientSecret: (secret) => set({ githubClientSecret: secret }),
-  setAdminEmail: (email) => set({ adminEmail: email }),
-  setAdminPassword: (password) => set({ adminPassword: password }),
-  setAdminPasswordConfirm: (password) => set({ adminPasswordConfirm: password }),
-  setGitHubPat: (pat) => set({ githubPat: pat }),
-  setGitHubOwner: (owner) => set({ githubOwner: owner }),
-  setGitHubRepo: (repo) => set({ githubRepo: repo }),
   setLlmProvider: (provider) => set({ llmProvider: provider }),
   setLlmApiKey: (key) => set({ llmApiKey: key }),
   setLlmModel: (model) => set({ llmModel: model }),
+  setOllamaUrl: (url) => set({ ollamaUrl: url }),
+  setOllamaStatus: (status) => set({ ollamaStatus: status }),
+  setGitHubClientId: (id) => set({ githubClientId: id }),
+  setGitHubClientSecret: (secret) => set({ githubClientSecret: secret }),
+  setGitHubPat: (pat) => set({ githubPat: pat }),
+  setGitHubOwner: (owner) => set({ githubOwner: owner }),
+  setGitHubRepo: (repo) => set({ githubRepo: repo }),
+  setDiscordBotToken: (token) => set({ discordBotToken: token }),
+  setDiscordGuildId: (id) => set({ discordGuildId: id }),
+  setDiscordChannelId: (id) => set({ discordChannelId: id }),
+  setTelegramBotToken: (token) => set({ telegramBotToken: token }),
+  setTelegramChatId: (id) => set({ telegramChatId: id }),
+  setAdminEmail: (email) => set({ adminEmail: email }),
+  setAdminPassword: (password) => set({ adminPassword: password }),
+  setAdminPasswordConfirm: (password) => set({ adminPasswordConfirm: password }),
 
   isStepValid: () => {
-    const state = get()
-    switch (state.currentStep) {
-      case 0: // Welcome - always valid
-        return true
-      case 1: // App config
-        return state.appName.length > 0 && state.appUrl.length > 0
-      case 2: // GitHub OAuth
-        return state.githubClientId.length > 0 && state.githubClientSecret.length > 0
-      case 3: // Admin account
+    const s = get()
+    switch (s.currentStep) {
+      case 0: return true // Welcome
+      case 1: return s.appName.length > 0 // App config — URL optional for local
+      case 2: return true // AI provider — all optional, Ollama needs no key
+      case 3: return true // GitHub — optional
+      case 4: return true // Channels — optional
+      case 5: // Admin account
         return (
-          state.adminEmail.length > 0 &&
-          state.adminPassword.length >= 8 &&
-          state.adminPassword === state.adminPasswordConfirm
+          s.adminEmail.length > 0 &&
+          s.adminPassword.length >= 8 &&
+          s.adminPassword === s.adminPasswordConfirm
         )
-      case 4: // GitHub PAT & LLM
-        return (
-          state.githubPat.length > 0 &&
-          state.githubOwner.length > 0 &&
-          state.githubRepo.length > 0 &&
-          state.llmApiKey.length > 0
-        )
-      default:
-        return false
+      case 6: return true // Review
+      default: return false
     }
   },
 
   getStepError: () => {
-    const state = get()
-    switch (state.currentStep) {
+    const s = get()
+    switch (s.currentStep) {
       case 1:
-        if (!state.appName) return 'App name is required'
-        if (!state.appUrl) return 'App URL is required'
+        if (!s.appName) return 'App name is required'
         return null
-      case 2:
-        if (!state.githubClientId) return 'GitHub Client ID is required'
-        if (!state.githubClientSecret) return 'GitHub Client Secret is required'
-        return null
-      case 3:
-        if (!state.adminEmail) return 'Admin email is required'
-        if (state.adminPassword.length < 8) return 'Password must be at least 8 characters'
-        if (state.adminPassword !== state.adminPasswordConfirm) return 'Passwords do not match'
-        return null
-      case 4:
-        if (!state.githubPat) return 'GitHub PAT is required'
-        if (!state.githubOwner) return 'GitHub owner is required'
-        if (!state.githubRepo) return 'GitHub repo is required'
-        if (!state.llmApiKey) return 'LLM API key is required'
+      case 5:
+        if (!s.adminEmail) return 'Admin email is required'
+        if (s.adminPassword.length < 8) return 'Password must be at least 8 characters'
+        if (s.adminPassword !== s.adminPasswordConfirm) return 'Passwords do not match'
         return null
       default:
         return null
     }
   },
 
+  testOllama: async () => {
+    const url = get().ollamaUrl
+    try {
+      const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5000) })
+      if (!res.ok) throw new Error('not ok')
+      const data = await res.json()
+      const models: string[] = data.models?.map((m: { name: string }) => m.name) ?? []
+      set({ ollamaStatus: models.length > 0 ? 'connected' : 'error' })
+      return models.length > 0
+    } catch {
+      set({ ollamaStatus: 'error' })
+      return false
+    }
+  },
+
   submitSetup: async () => {
-    const state = get()
+    const s = get()
     try {
       const response = await fetch(`${API_BASE}/api/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          appName: state.appName,
-          appUrl: state.appUrl,
-          githubClientId: state.githubClientId,
-          githubClientSecret: state.githubClientSecret,
-          adminEmail: state.adminEmail,
-          adminPassword: state.adminPassword,
-          githubPat: state.githubPat,
-          githubOwner: state.githubOwner,
-          githubRepo: state.githubRepo,
-          llmProvider: state.llmProvider,
-          llmApiKey: state.llmApiKey,
-          llmModel: state.llmModel,
+          appName: s.appName,
+          appUrl: s.appUrl || 'http://localhost:3000',
+          githubClientId: s.githubClientId,
+          githubClientSecret: s.githubClientSecret,
+          adminEmail: s.adminEmail,
+          adminPassword: s.adminPassword,
+          githubPat: s.githubPat,
+          githubOwner: s.githubOwner,
+          githubRepo: s.githubRepo,
+          llmProvider: s.llmProvider,
+          llmApiKey: s.llmApiKey,
+          llmModel: s.llmModel,
+          ollamaUrl: s.ollamaUrl,
+          discordBotToken: s.discordBotToken,
+          discordGuildId: s.discordGuildId,
+          discordChannelId: s.discordChannelId,
+          telegramBotToken: s.telegramBotToken,
+          telegramChatId: s.telegramChatId,
         }),
       })
-
       const data = await response.json()
       if (data.ok) {
         set({ isComplete: true })
         return { success: true }
       }
       return { success: false, error: data.error || 'Setup failed' }
-    } catch (error) {
-      return { success: false, error: 'Network error' }
+    } catch {
+      return { success: false, error: 'Network error — is the backend running?' }
     }
   },
 
@@ -206,7 +240,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
       const data = await response.json()
       return data.needsSetup === true
     } catch {
-      return true // Assume setup needed on error
+      return true
     }
   },
 }))

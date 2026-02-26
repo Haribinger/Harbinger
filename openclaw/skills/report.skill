@@ -1,0 +1,99 @@
+# Harbinger Report Skill — SCRIBE
+
+> Teaches OpenClaw how to generate security reports via Harbinger's SCRIBE agent.
+
+## When to Use
+
+User says things like:
+- "Write up the findings"
+- "SCRIBE, generate a report"
+- "Create a bug bounty submission"
+- "Write the critical findings report"
+- "Prepare a HackerOne report"
+
+## How It Works
+
+1. Find the SCRIBE agent
+2. Gather all findings from completed jobs
+3. Create a report job
+4. Generate formatted output (Markdown, PDF, platform-ready)
+5. Present report to user
+
+## API Calls
+
+### Get SCRIBE
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find where `type == "report"` or `name` contains "SCRIBE".
+
+### Gather all findings
+```
+GET {{HARBINGER_API}}/api/jobs
+```
+Filter for `status == "completed"` jobs to extract findings.
+
+### Create report job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "report",
+  "target": "{{target_domain}}",
+  "parameters": {
+    "format": "markdown|pdf|hackerone|bugcrowd",
+    "include_jobs": ["{{job_id_1}}", "{{job_id_2}}"],
+    "severity_filter": "critical,high",
+    "include_poc": true,
+    "include_remediation": true
+  }
+}
+```
+
+### Get report output
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=2000
+```
+
+## Report Sections
+
+1. **Executive Summary** — High-level overview, scope, risk rating
+2. **Methodology** — Tools used, approach taken
+3. **Findings** — Each vuln with CVSS, PoC, impact, remediation
+4. **Attack Chain** — How findings connect (recon → exploit path)
+5. **Recommendations** — Prioritized fix list
+6. **Appendix** — Raw tool output, screenshots
+
+## Output Format
+
+```
+SCRIBE REPORT GENERATED — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Format: {{format}}
+Findings included: {{count}}
+  Critical: {{count}}
+  High: {{count}}
+  Medium: {{count}}
+  Low: {{count}}
+
+Report saved to: {{path}}
+Platform-ready: {{yes/no}}
+
+Preview:
+  # Security Assessment — {{target}}
+  ## Executive Summary
+  {{summary}}
+```
+
+## Platform Formats
+
+| Platform | Format |
+|----------|--------|
+| HackerOne | Markdown with CVSS, PoC steps, impact |
+| Bugcrowd | VRT-mapped findings with severity |
+| Intigriti | Structured with asset scope |
+| VDP | Show source where found and rules and url and can you see how many researchers are active or how many reports |
+| ROI of target | Try to make sure target is not a high target like google, facebook, x, etc .. make sure reports are < 1000|
+| PDF | Professional formatted with branding |

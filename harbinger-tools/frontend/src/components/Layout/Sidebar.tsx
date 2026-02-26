@@ -15,6 +15,7 @@ import {
   Target,
   Cpu,
   Zap,
+  Radio,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { path: '/redteam', label: 'Red Team', icon: Swords },
   { path: '/skills', label: 'Skills Hub', icon: BookOpen },
   { path: '/bounty-hub', label: 'Bounty Hub', icon: Target },
+  { path: '/openclaw', label: 'OpenClaw', icon: Radio },
 ]
 
 const bottomNavItems: NavItem[] = [

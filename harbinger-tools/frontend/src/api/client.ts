@@ -27,7 +27,17 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('harbinger-token')
+        // Check both storage locations — manual localStorage key and zustand persist key
+        let token = localStorage.getItem('harbinger-token')
+        if (!token) {
+          try {
+            const persisted = localStorage.getItem('harbinger-auth')
+            if (persisted) {
+              const parsed = JSON.parse(persisted)
+              token = parsed?.state?.token || null
+            }
+          } catch { /* ignore parse errors */ }
+        }
         if (token) {
           config.headers.Authorization = `Bearer ${token}`
         }

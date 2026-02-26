@@ -47,19 +47,43 @@ function templatePath(userPath, templatesDir) {
 
 function printUsage() {
   console.log(`
+\x1b[1;33m  ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗███╗   ██╗ ██████╗ ███████╗██████╗\x1b[0m
+\x1b[1;33m  ██║  ██║██╔══██╗██╔══██╗██╔══██╗██║████╗  ██║██╔════╝ ██╔════╝██╔══██╗\x1b[0m
+\x1b[1;33m  ███████║███████║██████╔╝██████╔╝██║██╔██╗ ██║██║  ███╗█████╗  ██████╔╝\x1b[0m
+\x1b[1;33m  ██╔══██║██╔══██║██╔══██╗██╔══██╗██║██║╚██╗██║██║   ██║██╔══╝  ██╔══██╗\x1b[0m
+\x1b[1;33m  ██║  ██║██║  ██║██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝███████╗██║  ██║\x1b[0m
+\x1b[1;33m  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝\x1b[0m
+
 Usage: harbinger <command>
 
-Commands:
+\x1b[1mSetup & Configuration\x1b[0m
   init                              Scaffold a new harbinger project
-  setup                             Run unified setup (Platform + Agent wizards)
+  setup                             Run unified setup wizard (AI, Auth, Channels)
   setup-platform                    Configure Platform only (Bug Bounty UI)
-  setup-telegram                    Reconfigure Telegram webhook
+  setup-telegram                    Reconfigure Telegram bot webhook
+  setup-discord                     Configure Discord bot integration
   reset-auth                        Regenerate AUTH_SECRET (invalidates all sessions)
-  reset [file]                      Restore a template file (or list available templates)
-  diff [file]                       Show differences between project files and package templates
-  set-agent-secret <KEY> [VALUE]    Set a GitHub secret with AGENT_ prefix (also updates .env)
+
+\x1b[1mAgent Management\x1b[0m
+  agents                            List all registered agents
+  agents:templates                  Show available agent templates
+  agents:spawn <id>                 Spawn an agent container
+  agents:stop <id>                  Stop an agent container
+  agents:logs <id>                  View agent container logs
+  agents:create <template>          Create new agent from template
+
+\x1b[1mPlatform Status\x1b[0m
+  status                            Show platform health and service status
+  channels                          List configured channels (Discord, Telegram, Slack)
+
+\x1b[1mSecrets & Variables\x1b[0m
+  set-agent-secret <KEY> [VALUE]    Set a GitHub secret with AGENT_ prefix
   set-agent-llm-secret <KEY> [VALUE]  Set a GitHub secret with AGENT_LLM_ prefix
   set-var <KEY> [VALUE]             Set a GitHub repository variable
+
+\x1b[1mProject Management\x1b[0m
+  reset [file]                      Restore a template file (or list available)
+  diff [file]                       Show differences vs. package templates
 `);
 }
 
@@ -553,6 +577,292 @@ async function setVar(key, value) {
   }
 }
 
+// ---- API helpers for new commands ----
+
+function getApiBase() {
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf-8');
+    const match = content.match(/^HARBINGER_API=(.+)$/m);
+    if (match) return match[1].trim();
+  }
+  return process.env.HARBINGER_API || 'http://localhost:8080';
+}
+
+function getToken() {
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf-8');
+    // Try GH_TOKEN for auth
+    const match = content.match(/^GH_TOKEN=(.+)$/m);
+    if (match) return match[1].trim();
+  }
+  return process.env.GH_TOKEN || '';
+}
+
+async function apiFetch(endpoint, options = {}) {
+  const base = getApiBase();
+  const token = getToken();
+  const url = `${base}${endpoint}`;
+  try {
+    const resp = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+    return await resp.json();
+  } catch (err) {
+    console.error(`\n  \x1b[31m[x]\x1b[0m Cannot reach ${url}`);
+    console.error(`      Is the backend running? Try: cd backend && go run ./cmd/\n`);
+    process.exit(1);
+  }
+}
+
+async function showStatus() {
+  console.log('\n  \x1b[1;33m[*]\x1b[0m Harbinger Platform Status\n');
+
+  const base = getApiBase();
+  // Health check
+  try {
+    const resp = await fetch(`${base}/health`);
+    const data = await resp.json();
+    console.log(`  \x1b[32m[+]\x1b[0m API: ${base} — online`);
+  } catch {
+    console.log(`  \x1b[31m[x]\x1b[0m API: ${base} — offline`);
+    console.log(`      Start with: cd backend && go run ./cmd/\n`);
+    return;
+  }
+
+  // Services health
+  try {
+    const health = await apiFetch('/api/dashboard/health');
+    if (Array.isArray(health)) {
+      for (const svc of health) {
+        const icon = svc.status === 'connected' ? '\x1b[32m[+]\x1b[0m' : '\x1b[31m[x]\x1b[0m';
+        console.log(`  ${icon} ${svc.name}: :${svc.port} — ${svc.status}`);
+      }
+    }
+  } catch {}
+
+  // Agent count
+  try {
+    const agents = await apiFetch('/api/agents');
+    const list = Array.isArray(agents) ? agents : (agents?.items || []);
+    console.log(`\n  \x1b[36m[*]\x1b[0m Agents: ${list.length} registered`);
+    const running = list.filter(a => a.status === 'running' || a.status === 'online' || a.status === 'working');
+    if (running.length > 0) {
+      console.log(`  \x1b[32m[+]\x1b[0m Active: ${running.length}`);
+    }
+  } catch {}
+
+  // Channels
+  try {
+    const ch = await apiFetch('/api/channels');
+    const active = [];
+    if (ch.discord?.enabled) active.push('Discord');
+    if (ch.telegram?.enabled) active.push('Telegram');
+    if (ch.slack?.enabled) active.push('Slack');
+    console.log(`  \x1b[36m[*]\x1b[0m Channels: ${active.length > 0 ? active.join(', ') : 'none configured'}`);
+  } catch {}
+
+  console.log('');
+}
+
+async function listAgents() {
+  console.log('\n  \x1b[1;33m[*]\x1b[0m Registered Agents\n');
+  const data = await apiFetch('/api/agents');
+  const agents = Array.isArray(data) ? data : (data?.items || []);
+
+  if (agents.length === 0) {
+    console.log('  No agents registered. Create one with: harbinger agents:create <template>\n');
+    return;
+  }
+
+  const pad = (s, n) => String(s).padEnd(n);
+  console.log(`  ${pad('ID', 10)} ${pad('NAME', 16)} ${pad('TYPE', 12)} ${pad('STATUS', 12)} CODENAME`);
+  console.log(`  ${'─'.repeat(10)} ${'─'.repeat(16)} ${'─'.repeat(12)} ${'─'.repeat(12)} ${'─'.repeat(16)}`);
+  for (const a of agents) {
+    const statusColor = ['running', 'online', 'working'].includes(a.status) ? '\x1b[32m' :
+                        a.status === 'error' ? '\x1b[31m' : '\x1b[33m';
+    console.log(`  ${pad(a.id?.slice(0, 8) || '?', 10)} ${pad(a.name || '?', 16)} ${pad(a.type || '?', 12)} ${statusColor}${pad(a.status || '?', 12)}\x1b[0m ${a.codename || ''}`);
+  }
+  console.log('');
+}
+
+async function listTemplates() {
+  console.log('\n  \x1b[1;33m[*]\x1b[0m Agent Templates\n');
+  const data = await apiFetch('/api/agents/templates');
+  const templates = Array.isArray(data) ? data : [];
+
+  if (templates.length === 0) {
+    console.log('  No templates available.\n');
+    return;
+  }
+
+  for (const t of templates) {
+    console.log(`  \x1b[36m${t.name}\x1b[0m (${t.type})`);
+    console.log(`    ${t.description || ''}`);
+    if (t.capabilities?.length) console.log(`    Capabilities: ${t.capabilities.join(', ')}`);
+    console.log('');
+  }
+}
+
+async function spawnAgent(agentId) {
+  if (!agentId) {
+    console.error('\n  Usage: harbinger agents:spawn <id>\n');
+    process.exit(1);
+  }
+  console.log(`\n  \x1b[33m[*]\x1b[0m Spawning agent ${agentId}...`);
+  const result = await apiFetch(`/api/agents/${agentId}/spawn`, { method: 'POST' });
+  if (result.ok || result.containerId) {
+    console.log(`  \x1b[32m[+]\x1b[0m Agent spawned! Container: ${result.containerId || 'pending'}\n`);
+  } else {
+    console.error(`  \x1b[31m[x]\x1b[0m Failed: ${result.error || JSON.stringify(result)}\n`);
+  }
+}
+
+async function stopAgent(agentId) {
+  if (!agentId) {
+    console.error('\n  Usage: harbinger agents:stop <id>\n');
+    process.exit(1);
+  }
+  console.log(`\n  \x1b[33m[*]\x1b[0m Stopping agent ${agentId}...`);
+  const result = await apiFetch(`/api/agents/${agentId}/stop`, { method: 'POST' });
+  if (result.ok) {
+    console.log(`  \x1b[32m[+]\x1b[0m Agent stopped.\n`);
+  } else {
+    console.error(`  \x1b[31m[x]\x1b[0m Failed: ${result.error || JSON.stringify(result)}\n`);
+  }
+}
+
+async function agentLogs(agentId) {
+  if (!agentId) {
+    console.error('\n  Usage: harbinger agents:logs <id>\n');
+    process.exit(1);
+  }
+  const result = await apiFetch(`/api/agents/${agentId}/logs`);
+  if (result.logs) {
+    console.log(result.logs);
+  } else if (Array.isArray(result)) {
+    for (const line of result) console.log(line.message || line);
+  } else {
+    console.log(JSON.stringify(result, null, 2));
+  }
+}
+
+async function createAgent(templateName) {
+  if (!templateName) {
+    console.error('\n  Usage: harbinger agents:create <template-name>\n');
+    console.error('  Run "harbinger agents:templates" to see available templates.\n');
+    process.exit(1);
+  }
+
+  // Get templates
+  const templates = await apiFetch('/api/agents/templates');
+  const tmpl = (Array.isArray(templates) ? templates : []).find(
+    t => t.name?.toLowerCase() === templateName.toLowerCase() ||
+         t.type?.toLowerCase() === templateName.toLowerCase() ||
+         t.id === templateName
+  );
+
+  if (!tmpl) {
+    console.error(`\n  \x1b[31m[x]\x1b[0m Template "${templateName}" not found.`);
+    console.error('  Available: ' + (Array.isArray(templates) ? templates : []).map(t => t.name || t.type).join(', '));
+    console.log('');
+    process.exit(1);
+  }
+
+  console.log(`\n  \x1b[33m[*]\x1b[0m Creating agent from template: ${tmpl.name}...`);
+  const result = await apiFetch('/api/agents', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: tmpl.name,
+      type: tmpl.type,
+      description: tmpl.description,
+      codename: tmpl.codename || tmpl.name?.toUpperCase(),
+      color: tmpl.color || '#f0c040',
+      capabilities: tmpl.capabilities || [],
+      config: tmpl.config || {},
+    }),
+  });
+
+  if (result.id || result.ok) {
+    console.log(`  \x1b[32m[+]\x1b[0m Agent created: ${result.id || result.name}\n`);
+  } else {
+    console.error(`  \x1b[31m[x]\x1b[0m Failed: ${result.error || JSON.stringify(result)}\n`);
+  }
+}
+
+async function listChannels() {
+  console.log('\n  \x1b[1;33m[*]\x1b[0m Configured Channels\n');
+  const ch = await apiFetch('/api/channels');
+
+  for (const [name, config] of Object.entries(ch)) {
+    const c = config;
+    const icon = c.enabled ? '\x1b[32m[+]\x1b[0m' : '\x1b[31m[-]\x1b[0m';
+    const status = c.enabled ? `\x1b[32m${c.status}\x1b[0m` : '\x1b[31mdisabled\x1b[0m';
+    console.log(`  ${icon} ${name.charAt(0).toUpperCase() + name.slice(1)}: ${status}${c.hasToken ? '' : ' (no token)'}`);
+  }
+  console.log('');
+}
+
+function setupDiscord() {
+  // Check if setup script exists, otherwise inline
+  const setupScript = path.join(__dirname, '..', 'setup', 'setup-discord.mjs');
+  if (fs.existsSync(setupScript)) {
+    try {
+      execSync(`node ${setupScript}`, { stdio: 'inherit', cwd: process.cwd() });
+      return;
+    } catch {
+      process.exit(1);
+    }
+  }
+
+  // Inline Discord setup
+  (async () => {
+    const { text, isCancel } = await import('@clack/prompts');
+    console.log('\n  \x1b[1;33m[*]\x1b[0m Discord Bot Setup\n');
+    console.log('  1. Go to https://discord.com/developers/applications');
+    console.log('  2. Create New Application → Bot → Copy Token');
+    console.log('  3. Enable Message Content Intent');
+    console.log('  4. Invite bot to server with Message + Slash Commands permissions\n');
+
+    const botToken = await text({ message: 'Bot Token:', placeholder: 'MTIz...' });
+    if (isCancel(botToken)) { console.log('\nCancelled.\n'); process.exit(0); }
+
+    const guildId = await text({ message: 'Guild/Server ID:', placeholder: 'Right-click server → Copy ID' });
+    if (isCancel(guildId)) { console.log('\nCancelled.\n'); process.exit(0); }
+
+    const channelId = await text({ message: 'Channel ID:', placeholder: 'Right-click channel → Copy ID' });
+    if (isCancel(channelId)) { console.log('\nCancelled.\n'); process.exit(0); }
+
+    // Write to .env
+    const { updateEnvVariable } = await import(path.join(__dirname, '..', 'setup', 'lib', 'auth.mjs')).catch(() => ({
+      updateEnvVariable: (key, val) => {
+        const envPath = path.join(process.cwd(), '.env');
+        let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+        const re = new RegExp(`^${key}=.*$`, 'm');
+        if (re.test(content)) {
+          content = content.replace(re, `${key}=${val}`);
+        } else {
+          content += `\n${key}=${val}`;
+        }
+        fs.writeFileSync(envPath, content);
+      },
+    }));
+
+    updateEnvVariable('DISCORD_BOT_TOKEN', botToken);
+    updateEnvVariable('DISCORD_GUILD_ID', guildId);
+    updateEnvVariable('DISCORD_CHANNEL_ID', channelId);
+
+    console.log('\n  \x1b[32m[+]\x1b[0m Discord bot configured!');
+    console.log('  Restart the backend for changes to take effect.\n');
+  })();
+}
+
 switch (command) {
   case 'init':
     await init();
@@ -566,6 +876,9 @@ switch (command) {
   case 'setup-telegram':
     setupTelegram();
     break;
+  case 'setup-discord':
+    setupDiscord();
+    break;
   case 'reset-auth':
     await resetAuth();
     break;
@@ -574,6 +887,30 @@ switch (command) {
     break;
   case 'diff':
     diff(args[0]);
+    break;
+  case 'status':
+    await showStatus();
+    break;
+  case 'agents':
+    await listAgents();
+    break;
+  case 'agents:templates':
+    await listTemplates();
+    break;
+  case 'agents:spawn':
+    await spawnAgent(args[0]);
+    break;
+  case 'agents:stop':
+    await stopAgent(args[0]);
+    break;
+  case 'agents:logs':
+    await agentLogs(args[0]);
+    break;
+  case 'agents:create':
+    await createAgent(args[0]);
+    break;
+  case 'channels':
+    await listChannels();
     break;
   case 'set-agent-secret':
     await setAgentSecret(args[0], args[1]);

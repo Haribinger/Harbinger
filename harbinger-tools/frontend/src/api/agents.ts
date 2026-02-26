@@ -3,7 +3,9 @@ import type { Agent, AgentPersonality } from '../types'
 
 export interface CreateAgentRequest {
   name: string
+  type?: string
   description?: string
+  capabilities?: string[]
   personalityId?: string
   model?: string
   provider?: string
@@ -11,10 +13,14 @@ export interface CreateAgentRequest {
   maxTokens?: number
   systemPrompt?: string
   tools?: string[]
+  config?: Record<string, unknown>
 }
 
 export interface AgentResponse extends Agent {
   lastActivity?: string
+  container_id?: string
+  created_at?: string
+  updated_at?: string
   stats?: {
     messagesSent: number
     tokensUsed: number
@@ -67,5 +73,39 @@ export const agentsApi = {
   // Clone agent
   clone: async (id: string, name: string): Promise<AgentResponse> => {
     return apiClient.post<AgentResponse>(`/api/agents/${id}/clone`, { name })
+  },
+
+  // Spawn agent — creates Docker container
+  spawn: async (id: string): Promise<{ ok: boolean; container_id?: string; image?: string; error?: string }> => {
+    return apiClient.post(`/api/agents/${id}/spawn`)
+  },
+
+  // Stop agent — kills Docker container
+  stop: async (id: string): Promise<{ ok: boolean }> => {
+    return apiClient.post(`/api/agents/${id}/stop`)
+  },
+
+  // Get agent status with container details
+  getStatus: async (id: string): Promise<{ agent_id: string; running: boolean; container?: any; agent?: any }> => {
+    return apiClient.get(`/api/agents/${id}/status`)
+  },
+
+  // Get agent container logs
+  getLogs: async (id: string, tail = 200): Promise<string> => {
+    const resp = await apiClient.instance.get(`/api/agents/${id}/logs`, {
+      params: { tail },
+      responseType: 'text',
+    })
+    return resp.data
+  },
+
+  // Send heartbeat
+  heartbeat: async (id: string): Promise<void> => {
+    await apiClient.post(`/api/agents/${id}/heartbeat`)
+  },
+
+  // Get agent templates
+  getTemplates: async (): Promise<{ ok: boolean; templates: any[]; count: number }> => {
+    return apiClient.get('/api/agents/templates')
   },
 }

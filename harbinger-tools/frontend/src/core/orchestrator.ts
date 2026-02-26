@@ -1,140 +1,234 @@
-type EventHandler = (...args: any[]) => void;
+import { agentsApi } from '../api/agents'
+
+type EventHandler = (...args: any[]) => void
 
 class SimpleEventEmitter {
-  private listeners: Map<string, Set<EventHandler>> = new Map();
+  private listeners: Map<string, Set<EventHandler>> = new Map()
 
   on(event: string, handler: EventHandler): void {
     if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
+      this.listeners.set(event, new Set())
     }
-    this.listeners.get(event)!.add(handler);
+    this.listeners.get(event)!.add(handler)
   }
 
   off(event: string, handler: EventHandler): void {
-    this.listeners.get(event)?.delete(handler);
+    this.listeners.get(event)?.delete(handler)
   }
 
   emit(event: string, ...args: any[]): void {
     this.listeners.get(event)?.forEach((handler) => {
       try {
-        handler(...args);
+        handler(...args)
       } catch (err) {
-        console.error(`[Orchestrator] Event handler error for "${event}":`, err);
+        console.error(`[Orchestrator] Event handler error for "${event}":`, err)
       }
-    });
+    })
   }
 
   removeAllListeners(event?: string): void {
     if (event) {
-      this.listeners.delete(event);
+      this.listeners.delete(event)
     } else {
-      this.listeners.clear();
+      this.listeners.clear()
     }
   }
 }
 
 interface AgentConfig {
-  id: string;
-  type: string;
-  status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped';
-  personality: string;
-  codename: string;
-  currentTask: string;
-  toolsCount: number;
-  findingsCount: number;
+  id: string
+  type: string
+  status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped' | 'running' | 'idle'
+  personality: string
+  codename: string
+  currentTask: string
+  toolsCount: number
+  findingsCount: number
+  containerId?: string
 }
 
 class AgentOrchestrator extends SimpleEventEmitter {
-  private agents: Map<string, AgentConfig> = new Map();
+  private agents: Map<string, AgentConfig> = new Map()
+  private heartbeatTimers: Map<string, ReturnType<typeof setInterval>> = new Map()
 
   constructor() {
-    super();
+    super()
   }
 
-  spawnAgent(agentType: string, personality: string, codename: string): AgentConfig {
-    const id = `agent-${Date.now()}`;
-    const newAgent: AgentConfig = {
-      id,
-      type: agentType,
-      status: 'spawned',
-      personality,
-      codename,
-      currentTask: 'Initializing',
-      toolsCount: 0,
-      findingsCount: 0,
-    };
-    this.agents.set(id, newAgent);
-    this.emit('agentStatusChange', newAgent);
-    console.log(`Agent ${id} spawned.`);
-    return newAgent;
+  /** Spawn an agent — calls backend POST /api/agents/{id}/spawn which creates a Docker container */
+  async spawnAgent(agentId: string): Promise<AgentConfig | null> {
+    try {
+      const result = await agentsApi.spawn(agentId)
+      if (!result.ok) {
+        console.error(`[Orchestrator] Spawn failed:`, result.error)
+        this.emit('error', { agentId, error: result.error })
+        return null
+      }
+
+      // Fetch fresh agent state from backend
+      const status = await agentsApi.getStatus(agentId)
+      const config: AgentConfig = {
+        id: agentId,
+        type: status.agent?.type || 'unknown',
+        status: 'running',
+        personality: status.agent?.name || '',
+        codename: status.agent?.name || '',
+        currentTask: 'Container started',
+        toolsCount: status.agent?.capabilities?.length || 0,
+        findingsCount: 0,
+        containerId: result.container_id,
+      }
+
+      this.agents.set(agentId, config)
+      this.emit('agentStatusChange', config)
+
+      // Start heartbeat polling for this agent
+      this.startHeartbeat(agentId)
+
+      console.log(`[Orchestrator] Agent ${agentId} spawned → container ${result.container_id}`)
+      return config
+    } catch (err: any) {
+      console.error('[Orchestrator] Spawn error:', err)
+      this.emit('error', { agentId, error: err.message })
+      return null
+    }
   }
 
-  stopAgent(agentId: string): void {
-    const agent = this.agents.get(agentId);
-    if (agent) {
-      agent.status = 'stopped';
-      this.emit('agentStatusChange', agent);
-      this.agents.delete(agentId);
-      console.log(`Agent ${agentId} stopped.`);
+  /** Create a new agent in the DB (for the create modal) */
+  async createAndSpawn(name: string, type: string, description: string, capabilities: string[]): Promise<AgentConfig | null> {
+    try {
+      const agent = await agentsApi.create({ name, type, description, capabilities })
+      return this.spawnAgent(agent.id)
+    } catch (err: any) {
+      console.error('[Orchestrator] Create+Spawn error:', err)
+      return null
+    }
+  }
+
+  /** Stop an agent — calls backend POST /api/agents/{id}/stop */
+  async stopAgent(agentId: string): Promise<void> {
+    try {
+      await agentsApi.stop(agentId)
+      const config = this.agents.get(agentId)
+      if (config) {
+        config.status = 'stopped'
+        config.containerId = undefined
+        this.emit('agentStatusChange', config)
+      }
+      this.stopHeartbeat(agentId)
+      this.agents.delete(agentId)
+      console.log(`[Orchestrator] Agent ${agentId} stopped`)
+    } catch (err: any) {
+      console.error('[Orchestrator] Stop error:', err)
     }
   }
 
   updateAgentStatus(agentId: string, status: AgentConfig['status'], currentTask?: string): void {
-    const agent = this.agents.get(agentId);
+    const agent = this.agents.get(agentId)
     if (agent) {
-      agent.status = status;
+      agent.status = status
       if (currentTask) {
-        agent.currentTask = currentTask;
+        agent.currentTask = currentTask
       }
-      this.emit('agentStatusChange', agent);
+      this.emit('agentStatusChange', agent)
     }
   }
 
   getAgent(agentId: string): AgentConfig | undefined {
-    return this.agents.get(agentId);
+    return this.agents.get(agentId)
   }
 
   getAllAgents(): AgentConfig[] {
-    return Array.from(this.agents.values());
+    return Array.from(this.agents.values())
   }
 
-  handleHeartbeat(agentId: string): void {
-    const agent = this.agents.get(agentId);
-    if (agent) {
-      agent.status = 'heartbeat';
-      this.emit('agentStatusChange', agent);
+  /** Poll agent status from backend and emit events */
+  private startHeartbeat(agentId: string): void {
+    this.stopHeartbeat(agentId) // Clear existing
+    const timer = setInterval(async () => {
+      try {
+        await agentsApi.heartbeat(agentId)
+        const config = this.agents.get(agentId)
+        if (config) {
+          config.status = 'running'
+          this.emit('agentStatusChange', config)
+        }
+      } catch {
+        // Agent may have stopped
+        const config = this.agents.get(agentId)
+        if (config) {
+          config.status = 'stopped'
+          this.emit('agentStatusChange', config)
+          this.stopHeartbeat(agentId)
+        }
+      }
+    }, 15000) // Every 15 seconds
+    this.heartbeatTimers.set(agentId, timer)
+  }
+
+  private stopHeartbeat(agentId: string): void {
+    const timer = this.heartbeatTimers.get(agentId)
+    if (timer) {
+      clearInterval(timer)
+      this.heartbeatTimers.delete(agentId)
     }
+  }
+
+  /** Get agent logs from backend (streamed from Docker) */
+  async getAgentLogs(agentId: string, tail = 200): Promise<string> {
+    try {
+      return await agentsApi.getLogs(agentId, tail)
+    } catch {
+      return '[No logs available]'
+    }
+  }
+
+  /** Handle heartbeat (called from agent-runtime) */
+  handleHeartbeat(agentId: string): void {
+    const config = this.agents.get(agentId)
+    if (config) {
+      config.status = 'running'
+      this.emit('agentStatusChange', config)
+    }
+    // Also send to backend
+    agentsApi.heartbeat(agentId).catch(() => {})
   }
 
   handoffTask(fromAgentId: string, toAgentId: string, task: string): void {
-    const fromAgent = this.agents.get(fromAgentId);
-    const toAgent = this.agents.get(toAgentId);
+    const fromAgent = this.agents.get(fromAgentId)
+    const toAgent = this.agents.get(toAgentId)
 
     if (fromAgent && toAgent) {
-      fromAgent.status = 'handoff';
-      fromAgent.currentTask = `Handoff to ${toAgent.codename}`;
-      this.emit('agentStatusChange', fromAgent);
+      fromAgent.status = 'handoff'
+      fromAgent.currentTask = `Handoff to ${toAgent.codename}`
+      this.emit('agentStatusChange', fromAgent)
 
-      toAgent.status = 'working';
-      toAgent.currentTask = task;
-      this.emit('agentStatusChange', toAgent);
+      toAgent.status = 'working'
+      toAgent.currentTask = task
+      this.emit('agentStatusChange', toAgent)
 
-      console.log(`Task handoff from ${fromAgent.codename} to ${toAgent.codename}: ${task}`);
-      this.emit('taskHandoff', { fromAgentId, toAgentId, task });
+      console.log(`[Orchestrator] Handoff: ${fromAgent.codename} → ${toAgent.codename}: ${task}`)
+      this.emit('taskHandoff', { fromAgentId, toAgentId, task })
     }
   }
 
-  // Agent-to-agent communication (findings sharing, task delegation)
   shareFindings(fromAgentId: string, toAgentId: string, findings: any): void {
-    const fromAgent = this.agents.get(fromAgentId);
-    const toAgent = this.agents.get(toAgentId);
+    const fromAgent = this.agents.get(fromAgentId)
+    const toAgent = this.agents.get(toAgentId)
 
     if (fromAgent && toAgent) {
-      console.log(`Agent ${fromAgent.codename} sharing findings with ${toAgent.codename}.`);
-      // In a real scenario, this would involve more complex data transfer
-      this.emit('findingsShared', { fromAgentId, toAgentId, findings });
+      console.log(`[Orchestrator] ${fromAgent.codename} sharing findings with ${toAgent.codename}`)
+      this.emit('findingsShared', { fromAgentId, toAgentId, findings })
     }
+  }
+
+  /** Clean up all timers on unmount */
+  destroy(): void {
+    for (const [id] of this.heartbeatTimers) {
+      this.stopHeartbeat(id)
+    }
+    this.removeAllListeners()
   }
 }
 
-export const agentOrchestrator = new AgentOrchestrator();
+export const agentOrchestrator = new AgentOrchestrator()

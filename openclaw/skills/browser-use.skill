@@ -1,0 +1,171 @@
+# browser-use — Agent Browser Control via Chrome DevTools Protocol
+# Every agent has eyes. You see what they see. All local, all free.
+
+## Overview
+Harbinger agents can control real Chrome browser instances via CDP.
+No API keys. No rate limits. No black boxes. Just local Chrome.
+
+Every agent gets its own browser — navigate, screenshot, click, type,
+read console, inspect network traffic. True visual transparency.
+
+## Architecture
+```
+AGENT (any)
+  ↓ POST /api/browser/sessions
+BROWSER MANAGER (Go backend)
+  ↓ Chrome DevTools Protocol
+CHROME INSTANCE (headless or visible)
+  ↓ screenshots stream back
+DASHBOARD (BrowserManager page — user sees everything)
+```
+
+## Browser Session Lifecycle
+
+### 1. Create a browser session
+```
+POST {{HARBINGER_API}}/api/browser/sessions
+{
+  "name": "BREACH recon on target.com",
+  "url": "https://target.com",
+  "agentId": "{{AGENT_ID}}",
+  "headless": false,
+  "viewport": {"width": 1920, "height": 1080}
+}
+```
+Returns: `{ "id": "browser-xxx", "status": "active", "cdpEndpoint": "ws://..." }`
+
+### 2. Navigate to a page
+```
+POST {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/navigate
+{"url": "https://target.com/admin"}
+```
+
+### 3. Take a screenshot (visual proof)
+```
+POST {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/screenshot
+{"fullPage": true}
+```
+Returns: `{ "data": "base64-png-data...", "timestamp": "..." }`
+
+### 4. Execute JavaScript in page context
+```
+POST {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/execute
+{"script": "document.querySelectorAll('input[type=password]').length"}
+```
+Returns: `{ "result": 2 }`
+
+### 5. Click elements
+```
+POST {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/click
+{"selector": "#login-button"}
+```
+
+### 6. Type into inputs
+```
+POST {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/type
+{"selector": "#username", "text": "admin"}
+```
+
+### 7. Read console logs
+```
+GET {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/console
+```
+Returns: `[{"level": "error", "message": "Uncaught TypeError...", "timestamp": 1708900000}]`
+
+### 8. Inspect network traffic
+```
+GET {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/network
+```
+Returns: `[{"method": "POST", "url": "/api/login", "status": 401, "size": 234, "time": 120}]`
+
+### 9. Get page source
+```
+GET {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}/source
+```
+Returns: `{ "html": "<!DOCTYPE html>..." }`
+
+### 10. Close session
+```
+DELETE {{HARBINGER_API}}/api/browser/sessions/{{SESSION_ID}}
+```
+
+## Agent-Specific Browser Patterns
+
+### PATHFINDER — Recon Browser
+- Open target homepage, screenshot landing page
+- Navigate to robots.txt, sitemap.xml
+- Check response headers in network tab
+- Enumerate visible links and forms
+- Screenshot admin panels, login pages
+
+### BREACH — Exploit Browser
+- Navigate to endpoints with payloads in URL params
+- Monitor console for XSS proof-of-concept execution
+- Watch network for leaked tokens in responses
+- Screenshot successful exploits for reports
+- Type payloads into form inputs
+
+### PHANTOM — Cloud Browser
+- Navigate to cloud consoles (AWS, GCP, Azure)
+- Screenshot exposed S3 buckets, open endpoints
+- Check for misconfigured CORS via console errors
+- Test presigned URL access
+
+### SPECTER — OSINT Browser
+- Navigate to social profiles, company pages
+- Screenshot LinkedIn, GitHub, domain whois
+- Collect metadata from loaded resources
+- Archive pages via screenshot timeline
+
+### CIPHER — Binary Browser
+- Download and inspect web-served binaries
+- Check content-type headers for served firmware
+- Navigate to API docs for reverse engineering targets
+
+### SCRIBE — Evidence Browser
+- Screenshot all findings for final report
+- Capture full-page screenshots of vulnerable pages
+- Build visual timeline of exploitation chain
+- Archive network requests as evidence
+
+## Dashboard Integration
+All browser sessions appear in the BrowserManager page:
+- Live session list with agent indicators
+- Visual viewport preview with screenshot feed
+- Console log viewer with level filtering
+- Network request inspector with method/status/size/time
+- One-click screenshot capture
+
+## Visual Workflows
+Agents with browsers can chain visual actions:
+```
+1. PATHFINDER opens target.com → screenshots landing page
+2. PATHFINDER finds /admin → broadcasts to BREACH
+3. BREACH opens /admin → types SQLi in login form
+4. BREACH screenshots error revealing db structure
+5. All screenshots + console logs → SCRIBE report
+```
+
+## Stats Endpoint
+```
+GET {{HARBINGER_API}}/api/browsers/stats
+```
+Returns: `{ "totalSessions": 4, "activeSessions": 3, "agentSessions": 3 }`
+
+## Which Agents Have Browsers
+```
+GET {{HARBINGER_API}}/api/browsers/agents
+```
+Returns: `{ "agentBrowsers": { "pathfinder-id": [...], "breach-id": [...] } }`
+
+## Key Principles
+- No Brave API keys — use Chrome directly
+- No OpenAI credits — local LLMs drive the agents
+- No rate limits — it's your machine
+- No black boxes — you see every screenshot, every request
+- True transparency — console, network, DOM all visible
+
+## Triggers
+- channel: all
+- events: browser.created, browser.screenshot, browser.navigate, browser.execute
+- priority: high

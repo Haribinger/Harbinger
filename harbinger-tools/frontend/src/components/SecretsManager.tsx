@@ -64,6 +64,18 @@ const PROVIDER_INFO: Record<Provider, { name: string; icon: React.ElementType; d
     description: 'Local LLMs - Llama, Mistral, etc.',
     color: 'text-purple-400',
   },
+  lmstudio: {
+    name: 'LM Studio',
+    icon: Server,
+    description: 'Local models via LM Studio',
+    color: 'text-emerald-400',
+  },
+  gpt4all: {
+    name: 'GPT4All',
+    icon: Cpu,
+    description: 'Local models via GPT4All',
+    color: 'text-indigo-400',
+  },
   custom: {
     name: 'Custom',
     icon: Globe,

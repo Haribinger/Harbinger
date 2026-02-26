@@ -23,6 +23,7 @@ import { useAgentStore } from '../../store/agentStore'
 import { useDockerStore } from '../../store/dockerStore'
 import { useBrowserStore } from '../../store/browserStore'
 import { useWorkflowStore } from '../../store/workflowStore'
+import { useChannelStore } from '../../store/channelStore'
 import { dashboardApi, type ActivityItem, type ServiceHealth } from '../../api/dashboard'
 
 // Design tokens — Obsidian Command / REDCLAW aesthetic
@@ -41,14 +42,21 @@ const C = {
 
 const FONT = 'JetBrains Mono, Fira Code, monospace'
 
-// The 6 canonical Harbinger agents
-const AGENT_ROSTER = [
-  { codename: 'PATHFINDER', role: 'RECON', color: '#3b82f6', icon: Crosshair },
-  { codename: 'BREACH',     role: 'WEB',   color: '#ef4444', icon: Zap },
-  { codename: 'PHANTOM',    role: 'CLOUD', color: '#a855f7', icon: Radio },
-  { codename: 'SPECTER',    role: 'OSINT', color: '#22c55e', icon: Target },
-  { codename: 'CIPHER',     role: 'BIN/RE', color: '#f59e0b', icon: Terminal },
-  { codename: 'SCRIBE',     role: 'REPORT', color: '#f0c040', icon: FileText },
+// Default roster icons by type — used for agents from DB
+const TYPE_ICON: Record<string, typeof Crosshair> = {
+  recon: Crosshair, web: Zap, cloud: Radio, osint: Target,
+  binary: Terminal, report: FileText, network: Globe, mobile: Shield,
+  api: Database, custom: Bot, default: Bot,
+}
+
+// Fallback when no agents in DB yet
+const SEED_ROSTER = [
+  { codename: 'PATHFINDER', role: 'RECON', color: '#3b82f6' },
+  { codename: 'BREACH',     role: 'WEB',   color: '#ef4444' },
+  { codename: 'PHANTOM',    role: 'CLOUD', color: '#a855f7' },
+  { codename: 'SPECTER',    role: 'OSINT', color: '#22c55e' },
+  { codename: 'CIPHER',     role: 'BIN/RE', color: '#f59e0b' },
+  { codename: 'SCRIBE',     role: 'REPORT', color: '#f0c040' },
 ]
 
 // Quick operations grid
@@ -76,12 +84,33 @@ function Dashboard() {
   const { containers } = useDockerStore()
   const { sessions } = useBrowserStore()
   const { workflows } = useWorkflowStore()
+  const { channels, fetchChannels } = useChannelStore()
 
   const [clock, setClock] = useState(formatTime())
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [health, setHealth] = useState<ServiceHealth[]>([])
   const [activityErr, setActivityErr] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(formatTime())
+
+  // Build roster from DB agents, fallback to seed roster
+  const agentRoster = agents.length > 0
+    ? agents.slice(0, 12).map(a => ({
+        codename: a.codename || a.name,
+        role: (a.type || 'custom').toUpperCase(),
+        color: a.color || '#f0c040',
+        icon: TYPE_ICON[a.type || 'default'] || Bot,
+        status: a.status,
+        currentTask: a.currentTask,
+      }))
+    : SEED_ROSTER.map(s => ({
+        ...s,
+        icon: TYPE_ICON[s.role.toLowerCase()] || Bot,
+        status: 'idle' as const,
+        currentTask: '',
+      }))
+
+  // Active channels
+  const activeChannels = Object.entries(channels).filter(([, c]) => c.enabled).map(([k]) => k)
 
   // Live clock
   useEffect(() => {
@@ -97,9 +126,10 @@ function Dashboard() {
       dashboardApi.getServiceHealth()
         .then(setHealth)
         .catch(() => {}),
+      fetchChannels(),
     ])
     setLastRefresh(formatTime())
-  }, [])
+  }, [fetchChannels])
 
   // Fetch on mount, then every 30s
   useEffect(() => {
@@ -161,9 +191,9 @@ function Dashboard() {
         </div>
         <div className="flex items-center gap-6">
           {[
-            { label: 'AGENTS READY', val: `${AGENT_ROSTER.length}` },
+            { label: 'AGENTS', val: `${agents.length || agentRoster.length}` },
             { label: 'ACTIVE SCANS', val: `${runningScans}` },
-            { label: 'FINDINGS',     val: '0' },
+            { label: 'CHANNELS', val: `${activeChannels.length}` },
           ].map((s) => (
             <div key={s.label} className="flex items-center gap-2">
               <span style={{ color: C.dim, fontSize: '10px', letterSpacing: '0.1em' }}>{s.label}</span>
@@ -174,15 +204,25 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* ── AGENT ROSTER ── */}
+      {/* ── AGENT ROSTER — Dynamic ── */}
       <div>
-        <div style={{ color: C.dim, fontSize: '9px', letterSpacing: '0.2em', marginBottom: '6px' }}>
-          AGENT ROSTER — SWARM STATUS
+        <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
+          <div style={{ color: C.dim, fontSize: '9px', letterSpacing: '0.2em' }}>
+            AGENT ROSTER — {agentRoster.length} AGENTS
+          </div>
+          <div className="flex items-center gap-3">
+            {activeChannels.map(ch => (
+              <div key={ch} className="flex items-center gap-1">
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: C.success, display: 'inline-block' }} className="animate-pulse" />
+                <span style={{ color: C.muted, fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{ch}</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-6 gap-2">
-          {AGENT_ROSTER.map((a) => {
-            const live = agents.find((ag) => ag.codename === a.codename || ag.name === a.codename)
-            const online = live?.status === 'online' || live?.status === 'heartbeat' || live?.status === 'working'
+        <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${Math.min(agentRoster.length, 6)}, 1fr)` }}>
+          {agentRoster.map((a) => {
+            const online = a.status === 'online' || a.status === 'heartbeat' || a.status === 'working' || a.status === 'running'
+            const Icon = a.icon
             return (
               <motion.button
                 key={a.codename}
@@ -199,7 +239,7 @@ function Dashboard() {
                 }}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <a.icon size={12} style={{ color: a.color }} />
+                  <Icon size={12} style={{ color: a.color }} />
                   <span
                     style={{
                       width: '6px', height: '6px', borderRadius: '50%',
@@ -214,7 +254,7 @@ function Dashboard() {
                 </div>
                 <div style={{ color: C.dim, fontSize: '9px', marginTop: '2px' }}>{a.role}</div>
                 <div style={{ color: online ? C.success : C.dim, fontSize: '9px', marginTop: '4px' }}>
-                  {online ? (live?.currentTask || 'ACTIVE') : 'IDLE'}
+                  {online ? (a.currentTask || 'ACTIVE') : 'IDLE'}
                 </div>
               </motion.button>
             )

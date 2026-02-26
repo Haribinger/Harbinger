@@ -1,0 +1,101 @@
+# Harbinger Orchestrate Skill — Multi-Agent Pipeline
+
+> Teaches OpenClaw how to orchestrate full multi-agent operations through Harbinger.
+
+## When to Use
+
+User says things like:
+- "Full operation on target.com"
+- "Deploy all agents"
+- "Run the full pipeline"
+- "Launch a complete assessment"
+- "Attack target.com with everything"
+
+## Pipeline Stages
+
+```
+Stage 1: RECON (PATHFINDER)
+    ↓ subdomains, live hosts, services
+Stage 2: WEB SCAN (BREACH)
+    ↓ vulnerabilities, PoCs
+Stage 3: CLOUD AUDIT (PHANTOM) [if applicable]
+    ↓ misconfigurations
+Stage 4: OSINT (SPECTER) [parallel with Stage 2-3]
+    ↓ employee intel, breach data
+Stage 5: REPORT (SCRIBE)
+    ↓ compiled assessment report
+```
+
+## How It Works
+
+### Step 1: Initialize Operation
+```
+POST {{HARBINGER_API}}/api/workflows
+Content-Type: application/json
+
+{
+  "name": "Full Assessment — {{target}}",
+  "description": "Multi-agent operation targeting {{target}}",
+  "target": "{{target}}",
+  "stages": ["recon", "web-scan", "cloud-audit", "osint", "report"]
+}
+```
+
+### Step 2: Launch PATHFINDER
+Follow `recon.skill` instructions. Wait for completion.
+
+### Step 3: Feed results forward
+Take PATHFINDER's output (subdomains, live hosts) and create jobs for:
+- BREACH (web-scan.skill) — target all live HTTP hosts
+- PHANTOM (cloud-audit.skill) — if cloud assets detected
+- SPECTER (osint.skill) — target domain for employee/breach intel
+
+Launch these in parallel when possible.
+
+### Step 4: Monitor all agents
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Poll all running agents. Report status to user:
+
+```
+OPERATION STATUS — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PATHFINDER  [COMPLETE]  42 subdomains, 12 live hosts
+BREACH      [RUNNING]   3/12 hosts scanned, 2 vulns found
+PHANTOM     [RUNNING]   Checking AWS configs...
+SPECTER     [COMPLETE]  23 emails, 4 breach entries
+SCRIBE      [STANDBY]   Waiting for scan completion
+```
+
+### Step 5: Generate Report
+Once all scanning agents complete, trigger SCRIBE (report.skill) with all findings.
+
+### Step 6: Final Report
+```
+OPERATION COMPLETE — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Duration: {{time}}
+Agents deployed: {{count}}
+Total findings: {{count}}
+  Critical: {{count}}
+  High: {{count}}
+
+Report: {{path}}
+Dashboard: http://localhost:5173/agents
+```
+
+## Abort Command
+
+If user says "abort" or "stop everything":
+```
+POST {{HARBINGER_API}}/api/agents/{{id}}/stop
+```
+For each running agent. Update workflow status to "aborted".
+
+## Parallel Execution Rules
+
+- PATHFINDER always runs first (recon feeds everything)
+- BREACH + PHANTOM + SPECTER can run in parallel after recon
+- SCRIBE always runs last (needs all findings)
+- If any agent fails, continue with remaining agents

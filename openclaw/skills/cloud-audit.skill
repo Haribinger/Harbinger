@@ -1,0 +1,88 @@
+# Harbinger Cloud Audit Skill — PHANTOM
+
+> Teaches OpenClaw how to run cloud misconfiguration detection via Harbinger's PHANTOM agent.
+
+## When to Use
+
+User says things like:
+- "Check AWS for misconfigurations"
+- "PHANTOM, audit our cloud"
+- "Scan for exposed S3 buckets"
+- "Cloud security audit"
+- "Check Azure/GCP config"
+
+## How It Works
+
+1. Find the PHANTOM agent
+2. Spawn if not running
+3. Create a cloud-audit job with provider and scope
+4. Monitor execution
+5. Report misconfigurations
+
+## API Calls
+
+### Get PHANTOM
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find where `type == "cloud"` or `name` contains "PHANTOM".
+
+### Spawn
+```
+POST {{HARBINGER_API}}/api/agents/{{agent_id}}/spawn
+```
+
+### Create cloud-audit job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "cloud-audit",
+  "target": "{{cloud_provider}}",
+  "parameters": {
+    "provider": "aws|azure|gcp",
+    "checks": ["s3_public", "iam_overprivileged", "security_groups", "metadata_exposure", "logging_disabled"],
+    "region": "all",
+    "timeout": 900
+  }
+}
+```
+
+### Monitor
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=500
+```
+
+## Tools PHANTOM Uses
+
+| Tool | Purpose |
+|------|---------|
+| ScoutSuite | Multi-cloud security auditing |
+| Prowler | AWS/Azure/GCP security assessment |
+| Pacu | AWS exploitation framework |
+| cloudfox | Cloud penetration testing |
+
+## Output Format
+
+```
+PHANTOM CLOUD AUDIT — {{provider}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Misconfigurations: {{total}}
+
+CRITICAL:
+  [!] Public S3 bucket: {{bucket_name}}
+  [!] IAM role with admin access: {{role}}
+
+HIGH:
+  [!] Security group allows 0.0.0.0/0 on port 22
+  [!] CloudTrail logging disabled
+
+MEDIUM:
+  [*] MFA not enforced for IAM users
+  [*] Default VPC in use
+
+Assets discovered: {{count}}
+Regions scanned: {{list}}
+```

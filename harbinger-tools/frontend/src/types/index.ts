@@ -9,8 +9,9 @@ export interface Agent {
   personality?: string | AgentPersonality
   /** Agent type for spawn (e.g. recon-scout, exploit-dev). Used in create flow. */
   type?: string
-  status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped' | 'online' | 'busy' | 'offline' | 'error'
+  status: 'spawned' | 'initializing' | 'heartbeat' | 'working' | 'handoff' | 'reporting' | 'stopped' | 'online' | 'busy' | 'offline' | 'error' | 'running' | 'idle'
   codename: string
+  containerId?: string
   currentTask: string
   toolsCount: number
   findingsCount: number
@@ -33,6 +34,12 @@ export interface AgentConfig {
   topP?: number
   frequencyPenalty?: number
   presencePenalty?: number
+  // Custom agent config
+  docker_image?: string
+  system_prompt?: string
+  memory_mb?: number
+  cpu_count?: number
+  [key: string]: unknown
 }
 
 // Message Types

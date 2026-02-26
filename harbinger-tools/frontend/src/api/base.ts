@@ -1,5 +1,5 @@
-// API Base configuration
-export const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:8080'
+// API Base configuration — empty string uses relative URLs (via Vite proxy in dev, nginx in prod)
+export const API_BASE = (import.meta as any).env.VITE_API_URL || ''
 
 // Helper function for API calls
 export async function apiFetch<T = any>(

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 // Provider IDs — matches what the backend and Settings page use
-export type Provider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'gemini' | 'mistral' | 'google' | 'custom'
+export type Provider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'gpt4all' | 'gemini' | 'mistral' | 'google' | 'custom'
 
 export const PROVIDER_MODELS: Record<Provider, string[]> = {
   google: [
@@ -34,6 +34,8 @@ export const PROVIDER_MODELS: Record<Provider, string[]> = {
     'gemma2-9b-it',
   ],
   ollama: [],       // populated at runtime via fetchOllamaModels
+  lmstudio: [],     // populated at runtime (OpenAI-compatible at localhost:1234)
+  gpt4all: [],      // populated at runtime (OpenAI-compatible at localhost:4891)
   gemini: [
     'gemini-2.0-flash-exp',
     'gemini-1.5-pro',
@@ -105,6 +107,8 @@ const defaultProviders: Record<Provider, ProviderConfig> = {
   openai:    { id: 'openai',    apiKey: '', defaultModel: 'gpt-4o', enabled: false },
   groq:      { id: 'groq',      apiKey: '', defaultModel: 'llama-3.3-70b-versatile', enabled: false },
   ollama:    { id: 'ollama',    apiKey: '', baseUrl: 'http://localhost:11434', defaultModel: 'llama3.2', enabled: false },
+  lmstudio:  { id: 'lmstudio', apiKey: '', baseUrl: 'http://localhost:1234/v1', defaultModel: '', enabled: false },
+  gpt4all:   { id: 'gpt4all',  apiKey: '', baseUrl: 'http://localhost:4891/v1', defaultModel: '', enabled: false },
   gemini:    { id: 'gemini',    apiKey: '', defaultModel: 'gemini-2.0-flash-exp', enabled: false },
   mistral:   { id: 'mistral',   apiKey: '', defaultModel: 'mistral-large-latest', enabled: false },
   google:    { id: 'google',    apiKey: '', defaultModel: 'gemini-2.0-flash-exp', enabled: false },

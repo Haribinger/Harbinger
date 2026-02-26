@@ -1,0 +1,142 @@
+# Theme Creator Skill
+
+> For any Harbinger agent (SAM, SAGE, or custom). Create and apply custom UI themes from natural language descriptions.
+
+## Overview
+
+Harbinger uses CSS custom properties (variables) for all UI colors. Themes are JSON objects with 18+ color tokens that control every surface, text color, accent, and UI element in the command center.
+
+## Theme Token Structure
+
+```json
+{
+  "id": "custom-unique-id",
+  "name": "Theme Display Name",
+  "description": "Short description of the theme aesthetic",
+  "author": "Agent Name or User",
+  "version": "1.0.0",
+  "fontFamily": "mono",
+  "tags": ["dark", "custom"],
+  "builtin": false,
+  "tokens": {
+    "background": "#0a0a0f",
+    "surface": "#0d0d15",
+    "surfaceLight": "#1a1a2e",
+    "surfaceDark": "#070710",
+    "textPrimary": "#ffffff",
+    "textSecondary": "#9ca3af",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "accent": "#f0c040",
+    "accentHover": "#f5d060",
+    "danger": "#ef4444",
+    "success": "#22c55e",
+    "warning": "#f59e0b",
+    "info": "#06b6d4",
+    "scrollbarTrack": "#0d0d15",
+    "scrollbarThumb": "#3f3f5a",
+    "scrollbarThumbHover": "#555575",
+    "terminalBg": "#0d0d15",
+    "glassBg": "rgba(13, 13, 21, 0.8)",
+    "glassBorder": "rgba(255, 255, 255, 0.08)"
+  }
+}
+```
+
+## Token Descriptions
+
+| Token | Purpose | Constraints |
+|-------|---------|-------------|
+| `background` | Main page background | Darkest color, used for the body |
+| `surface` | Card/panel backgrounds | Slightly lighter than background |
+| `surfaceLight` | Hover states, inputs | Lighter than surface |
+| `surfaceDark` | Deeper insets | Darker than surface |
+| `textPrimary` | Main text | High contrast against background |
+| `textSecondary` | Muted text, labels | ~50-60% contrast against background |
+| `border` | All borders and dividers | Subtle, often rgba |
+| `accent` | Primary accent — buttons, highlights, active states | Most important brand color |
+| `accentHover` | Accent hover state | Lighter/brighter version of accent |
+| `danger` | Errors, critical findings | Red family |
+| `success` | Connected, completed, good | Green family |
+| `warning` | Warnings, attention needed | Yellow/orange family |
+| `info` | Informational badges | Blue/cyan family |
+| `scrollbarTrack` | Scrollbar track | Match surface |
+| `scrollbarThumb` | Scrollbar handle | Visible but subtle |
+| `scrollbarThumbHover` | Scrollbar handle on hover | Brighter than thumb |
+| `terminalBg` | Terminal/code block background | Can match background or be slightly different |
+| `glassBg` | Glassmorphism overlay | rgba with 0.8 alpha |
+| `glassBorder` | Glassmorphism border | rgba, subtle |
+
+## Font Family Options
+
+- `"mono"` — JetBrains Mono, Fira Code — for hacker/terminal aesthetic
+- `"sans"` — Inter, system sans — for clean/modern aesthetic
+- `"system"` — OS default sans — for maximum readability
+
+## Design Rules
+
+1. **Contrast**: `textPrimary` must have >= 4.5:1 contrast against `background`
+2. **Hierarchy**: background < surface < surfaceLight (each progressively lighter for dark themes)
+3. **Accent visibility**: `accent` must be clearly visible on both `background` and `surface`
+4. **Semantic colors**: danger=red, success=green, warning=yellow, info=blue (users expect these)
+5. **Dark-first**: Harbinger is a security command center — themes should be dark by default
+6. **Cohesion**: All colors should feel like they belong together
+
+## API Endpoints
+
+### Save Theme
+```
+POST /api/themes
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{full theme JSON object}
+```
+
+### Generate Prompt
+```
+POST /api/themes/generate
+Content-Type: application/json
+
+{"description": "ocean blue with glowing cyan accents"}
+```
+
+### Assign to Agent
+```
+POST /api/themes/agent
+Content-Type: application/json
+
+{"agentId": "pathfinder", "themeId": "custom-xyz"}
+```
+
+### Set Schedule
+```
+POST /api/themes/schedule
+Content-Type: application/json
+
+{
+  "dayThemeId": "arctic-frost",
+  "nightThemeId": "obsidian-command",
+  "dayStart": "08:00",
+  "nightStart": "20:00",
+  "enabled": true
+}
+```
+
+## Built-in Themes
+
+| ID | Name | Accent |
+|----|------|--------|
+| obsidian-command | Obsidian Command | #f0c040 (gold) |
+| retro-terminal | Retro Terminal | #00ff41 (green) |
+| cyberpunk-neon | Cyberpunk Neon | #ff00c8 (pink) |
+| arctic-frost | Arctic Frost | #38bdf8 (blue) |
+| blood-moon | Blood Moon | #dc2626 (red) |
+| midnight-purple | Midnight Purple | #8b5cf6 (purple) |
+
+## Workflow
+
+1. User describes desired theme in natural language
+2. Agent generates theme JSON matching the token structure above
+3. Theme is saved via `POST /api/themes` and/or imported in the UI
+4. User can preview, adjust individual tokens, and apply
+5. Optionally assign theme to specific agents or set up day/night scheduling

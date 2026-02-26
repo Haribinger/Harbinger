@@ -1,0 +1,102 @@
+# Harbinger Web Scan Skill — BREACH
+
+> Teaches OpenClaw how to run web vulnerability scanning via Harbinger's BREACH agent.
+
+## When to Use
+
+User says things like:
+- "Test for SQLi on target.com"
+- "Scan for XSS vulnerabilities"
+- "BREACH, hack example.com"
+- "Run nuclei on the live hosts"
+- "Find web vulnerabilities"
+- "Test everything PATHFINDER found"
+
+## How It Works
+
+1. Find the BREACH agent
+2. Spawn if not running
+3. Create a web-scan job (optionally feeding PATHFINDER results)
+4. Monitor progress via logs
+5. Report vulnerabilities with severity
+
+## API Calls
+
+### Step 1: Get BREACH agent
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find where `type == "web"` or `name` contains "BREACH".
+
+### Step 2: Spawn
+```
+POST {{HARBINGER_API}}/api/agents/{{agent_id}}/spawn
+```
+
+### Step 3: Create web-scan job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "web-scan",
+  "target": "{{target}}",
+  "parameters": {
+    "scan_types": ["xss", "sqli", "ssrf", "idor", "open_redirect", "nuclei_templates"],
+    "targets": ["{{url_1}}", "{{url_2}}"],
+    "depth": "thorough",
+    "rate_limit": 50,
+    "timeout": 600
+  }
+}
+```
+
+If feeding from PATHFINDER results, include `targets` from the recon output's live hosts.
+
+### Step 4: Monitor
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=500
+GET {{HARBINGER_API}}/api/jobs?agent_id={{agent_id}}
+```
+
+## Tools BREACH Uses
+
+| Tool | Purpose |
+|------|---------|
+| nuclei | Template-based vuln scanning (9000+ templates) |
+| sqlmap | SQL injection detection and exploitation |
+| dalfox | XSS scanning and verification |
+| ffuf | Directory/parameter fuzzing |
+| recx | Custom web recon framework |
+| httpx | HTTP probing |
+
+## Output Format
+
+```
+BREACH SCAN COMPLETE — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Vulnerabilities found: {{total}}
+
+CRITICAL ({{count}}):
+  [!] {{vuln_type}} at {{url}} — {{details}}
+
+HIGH ({{count}}):
+  [!] {{vuln_type}} at {{url}} — {{details}}
+
+MEDIUM ({{count}}):
+  [*] {{vuln_type}} at {{url}} — {{details}}
+
+LOW/INFO ({{count}}):
+  [i] {{details}}
+
+Recommend: Generate report with SCRIBE? [Y/N]
+```
+
+## Chaining
+
+BREACH typically receives targets from PATHFINDER:
+1. PATHFINDER discovers subdomains + live hosts
+2. Results feed into BREACH as target list
+3. BREACH scans each live HTTP endpoint
+4. Findings feed into SCRIBE for reporting

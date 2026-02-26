@@ -1,0 +1,85 @@
+# Harbinger OSINT Skill — SPECTER
+
+> Teaches OpenClaw how to run OSINT intelligence gathering via Harbinger's SPECTER agent.
+
+## When to Use
+
+User says things like:
+- "Who works at target.com?"
+- "SPECTER, investigate john@target.com"
+- "Find leaked credentials for target.com"
+- "Social media recon on target"
+- "OSINT on this person/company"
+
+## How It Works
+
+1. Find the SPECTER agent
+2. Spawn if not running
+3. Create an OSINT job
+4. Monitor progress
+5. Report intelligence gathered
+
+## API Calls
+
+### Get SPECTER
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find where `type == "osint"` or `name` contains "SPECTER".
+
+### Spawn
+```
+POST {{HARBINGER_API}}/api/agents/{{agent_id}}/spawn
+```
+
+### Create OSINT job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "osint",
+  "target": "{{target}}",
+  "parameters": {
+    "modules": ["email_enum", "employee_discovery", "social_media", "breach_check", "domain_intel"],
+    "depth": "thorough",
+    "timeout": 600
+  }
+}
+```
+
+### Monitor
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=500
+```
+
+## Tools SPECTER Uses
+
+| Tool | Purpose |
+|------|---------|
+| theHarvester | Email/subdomain/IP discovery |
+| Sherlock | Username enumeration across platforms |
+| SpiderFoot | Automated OSINT collection |
+| Holehe | Email account existence check |
+
+## Output Format
+
+```
+SPECTER OSINT REPORT — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Emails found: {{count}}
+Employees identified: {{count}}
+Social profiles: {{count}}
+Breach entries: {{count}}
+
+KEY FINDINGS:
+  [!] {{email}} found in {{breach_name}} ({{date}})
+  [*] {{employee_count}} employees on LinkedIn
+  [*] {{social_profiles}} social media profiles matched
+
+INTELLIGENCE SUMMARY:
+  {{paragraph_summary}}
+
+Recommend: Feed to BREACH for targeted attacks? [Y/N]
+```

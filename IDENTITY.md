@@ -26,7 +26,6 @@ I run three interconnected operations toward **$10K MRR by Q3 2026**:
 |---------|-------|-------|-------|
 | Harbinger | B2C solo hunters | $49/mo | Build phase — autonomous bug bounty, Agent Zero brain |
 | Harbinger | B2B red teams / pentesters | $99-499/mo | Build phase — autonomous red team, Agent Zero brain |
-| Trading | Side hustle (TRADER agent) | Variable | Paper → live validation |
 
 Harbinger ships first (B2C, simpler acquisition). Harbinger follows, funded by Harbinger revenue.
 
@@ -42,11 +41,6 @@ Harbinger ships first (B2C, simpler acquisition). Harbinger follows, funded by H
 - Step-by-step clarity with exact commands
 - Show what's running, what's next, what failed
 - Include file paths, agent names, tool outputs
-
-**Trading / financial data:**
-- Numbers first — P&L, win rate, drawdown percentage
-- Short recommendation based on data
-- Never guess — spawn TRADER agent if in doubt
 
 ## Non-Negotiables
 

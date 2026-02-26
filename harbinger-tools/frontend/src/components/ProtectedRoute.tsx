@@ -10,26 +10,54 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { token, isAuthenticated, logout } = useAuthStore()
   const location = useLocation()
-  const [isValidating, setIsValidating] = useState(true)
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    // Check if token is expired
-    if (token && isTokenExpired(token)) {
-      logout()
+    // Wait a tick for zustand persist to rehydrate from localStorage
+    // then check token validity
+    const check = () => {
+      const state = useAuthStore.getState()
+      if (state.token && isTokenExpired(state.token)) {
+        state.logout()
+      }
+      setIsReady(true)
     }
-    setIsValidating(false)
-  }, [token, logout])
 
-  if (isValidating) {
+    // If the store already has a token, we're rehydrated
+    if (token !== null) {
+      check()
+      return
+    }
+
+    // Otherwise wait for persist rehydration (max 200ms)
+    const timer = setTimeout(check, 100)
+    // Also listen for store changes (rehydration triggers a state update)
+    const unsub = useAuthStore.subscribe(() => {
+      clearTimeout(timer)
+      check()
+    })
+
+    return () => {
+      clearTimeout(timer)
+      unsub()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isReady) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div style={{
+        minHeight: '100vh',
+        background: '#0a0a0f',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <Loader2 className="w-8 h-8 text-primary animate-spin" style={{ color: '#f0c040' }} />
       </div>
     )
   }
 
   if (!isAuthenticated) {
-    // Redirect to login, but save the attempted URL
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
@@ -37,11 +65,43 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 }
 
 export function PublicRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, token } = useAuthStore()
   const location = useLocation()
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsReady(true)
+    if (token !== null || isAuthenticated) {
+      check()
+      return
+    }
+    // Wait for persist rehydration
+    const timer = setTimeout(check, 100)
+    const unsub = useAuthStore.subscribe(() => {
+      clearTimeout(timer)
+      check()
+    })
+    return () => {
+      clearTimeout(timer)
+      unsub()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isReady) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0a0a0f',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#f0c040' }} />
+      </div>
+    )
+  }
 
   if (isAuthenticated) {
-    // Redirect to dashboard if already logged in
     const from = location.state?.from?.pathname || '/'
     return <Navigate to={from} replace />
   }

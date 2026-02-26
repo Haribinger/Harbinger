@@ -1,0 +1,171 @@
+# channel-awareness — Cross-Channel Agent Coordination
+# Agents think together, talk naturally, know users, adapt personality
+
+## Overview
+The Harbinger swarm is channel-aware and self-organizing:
+- Agents share context and coordinate findings
+- Conversations flow naturally across Discord, Telegram, Slack, WebChat
+- User preferences persist across channels
+- Each agent maintains unique personality and voice
+- All activity is visualized in the dashboard
+
+## Agent Message Bus
+Agents communicate through a shared bus. Any agent can broadcast or direct-message:
+
+### Broadcast to all agents
+```
+POST {{HARBINGER_API}}/api/agents/broadcast
+{
+  "fromAgent": "{{AGENT_ID}}",
+  "fromAgentName": "PATHFINDER",
+  "toAgent": "broadcast",
+  "type": "finding",
+  "content": "Critical: SQL injection on api.target.com/users?id=1",
+  "data": {
+    "severity": "critical",
+    "target": "api.target.com",
+    "endpoint": "/users",
+    "parameter": "id",
+    "type": "sqli"
+  }
+}
+```
+
+### Direct handoff to specific agent
+```
+POST {{HARBINGER_API}}/api/agents/broadcast
+{
+  "fromAgent": "{{PATHFINDER_ID}}",
+  "fromAgentName": "PATHFINDER",
+  "toAgent": "{{BREACH_ID}}",
+  "type": "handoff",
+  "content": "Recon complete. Handing off 12 live hosts for vulnerability testing.",
+  "data": {
+    "hosts": ["api.target.com", "staging.target.com", ...],
+    "priority": ["api.target.com:8080"]
+  }
+}
+```
+
+### Request help from another agent
+```
+POST {{HARBINGER_API}}/api/agents/broadcast
+{
+  "fromAgent": "{{BREACH_ID}}",
+  "fromAgentName": "BREACH",
+  "toAgent": "{{CIPHER_ID}}",
+  "type": "request",
+  "content": "Found a custom binary at /api/firmware/v2. Need RE analysis.",
+  "data": {"url": "https://api.target.com/firmware/v2", "format": "ELF"}
+}
+```
+
+## Shared Context
+Agents maintain shared context so they all know what's happening:
+```
+GET {{HARBINGER_API}}/api/agents/context
+```
+Returns:
+```json
+{
+  "activeTarget": "target.com",
+  "findings": [{"severity": "critical", "count": 2}, {"severity": "high", "count": 5}],
+  "agentStatuses": {
+    "PATHFINDER": {"status": "idle", "lastAction": "recon complete"},
+    "BREACH": {"status": "working", "lastAction": "testing api.target.com"},
+    "PHANTOM": {"status": "working", "lastAction": "AWS scan"}
+  },
+  "conversationCount": 47,
+  "activeChannels": ["discord", "telegram", "webchat"]
+}
+```
+
+## User Context Tracking
+When a user messages from ANY channel, check their history:
+```
+GET {{HARBINGER_API}}/api/channels/user-context?userId={{USER_ID}}
+```
+Returns:
+```json
+{
+  "userId": "discord:123456789",
+  "username": "hacker42",
+  "preferredChannel": "discord",
+  "responseStyle": "brief",
+  "lastSeen": {
+    "discord": 1708900000,
+    "telegram": 1708895000
+  },
+  "watchingAgents": ["pathfinder-id", "breach-id"],
+  "recentTopics": ["target.com recon", "api testing"]
+}
+```
+
+## Channel-Specific Formatting Rules
+
+### Discord
+- Max 2000 chars per message
+- Use Discord markdown: **bold**, *italic*, `code`, ```codeblock```
+- Use emoji for status indicators
+- Keep messages brief in channels, detailed in threads
+- Link to dashboard for full details
+
+### Telegram
+- HTML formatting: <b>bold</b>, <i>italic</i>, <code>code</code>
+- Supports longer messages
+- Use inline buttons for actions
+- Voice message transcription supported
+
+### Slack
+- mrkdwn format: *bold*, _italic_, `code`, ```codeblock```
+- Thread replies for detailed discussions
+- Block Kit for rich formatting
+- Slash commands: /harbinger status, /harbinger scan
+
+### WebChat
+- Full markdown with interactive elements
+- Unlimited length
+- Real-time streaming
+- Embedded visualizations
+
+## Agent Personality Voice Guide
+
+Each agent's responses should reflect their personality:
+
+| Agent | Tone | Metaphors | Emoji |
+|-------|------|-----------|-------|
+| PATHFINDER | Scout, explorer | Map, terrain, paths | 🕵️ 🗺️ |
+| BREACH | Lock-picker, hacker | Doors, locks, keys | 🔥 🔓 |
+| PHANTOM | Ghost, shadow | Shadows, clouds, mist | ☁️ 👻 |
+| SPECTER | Intel analyst | Threads, connections | 🔍 🕸️ |
+| CIPHER | Cryptographer | Codes, patterns, math | 🔢 🧩 |
+| SCRIBE | Journalist | Stories, reports, facts | 📝 📊 |
+
+## Coordination Patterns
+
+### Recon → Exploit Pipeline
+1. PATHFINDER broadcasts recon results
+2. BREACH picks up targets automatically
+3. PHANTOM checks cloud infrastructure
+4. SPECTER runs OSINT in parallel
+5. All findings aggregated by SCRIBE
+6. User notified on their preferred channel
+
+### Finding Escalation
+1. Any agent finds critical vulnerability
+2. Broadcasts to all agents + all channels
+3. SCRIBE generates immediate alert
+4. Dashboard shows red indicator
+5. All connected channels get notification
+
+### User Request Routing
+1. User asks "scan target.com" in any channel
+2. System routes to PATHFINDER
+3. PATHFINDER starts recon, broadcasts progress
+4. Other agents auto-join based on findings
+5. Updates sent to the channel the user asked from
+
+## Triggers
+- channel: all
+- events: message, finding, agent_status_change, handoff
+- priority: high

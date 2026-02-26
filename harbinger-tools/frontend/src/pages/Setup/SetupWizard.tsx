@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   Check,
   ChevronRight,
@@ -11,74 +11,87 @@ import {
   Shield,
   Sparkles,
   Loader2,
-  ExternalLink,
   Copy,
   CheckCircle2,
+  Bot,
+  Container,
+  MessageSquare,
+  Zap,
+  Globe,
+  Database,
+  RefreshCw,
+  ExternalLink,
+  Hash,
+  Send,
 } from 'lucide-react'
 import { useSetupStore } from '../../store/setupStore'
 import { useNavigate } from 'react-router-dom'
 
+const C = {
+  bg: '#0a0a0f',
+  surface: '#0d0d15',
+  surfaceLight: '#141420',
+  border: '#1a1a2e',
+  accent: '#f0c040',
+  danger: '#ef4444',
+  success: '#22c55e',
+  text: '#ffffff',
+  textMuted: '#9ca3af',
+}
+
 const steps = [
   { id: 'welcome', title: 'Welcome', icon: Sparkles },
-  { id: 'config', title: 'App Configuration', icon: Settings },
-  { id: 'oauth', title: 'GitHub OAuth', icon: Github },
+  { id: 'config', title: 'Configuration', icon: Settings },
+  { id: 'ai', title: 'AI Provider', icon: Bot },
+  { id: 'github', title: 'GitHub Auth', icon: Github },
+  { id: 'channels', title: 'Channels', icon: MessageSquare },
   { id: 'admin', title: 'Admin Account', icon: User },
-  { id: 'complete', title: 'Complete Setup', icon: Check },
+  { id: 'review', title: 'Launch', icon: Shield },
 ]
+
+const PROVIDERS = [
+  { id: 'ollama', name: 'Ollama (Local)', icon: Container, color: '#a855f7', desc: 'Run models locally — no API key, no cost, full privacy', recommended: true },
+  { id: 'anthropic', name: 'Anthropic', icon: Bot, color: '#f97316', desc: 'Claude models — Opus, Sonnet, Haiku' },
+  { id: 'openai', name: 'OpenAI', icon: Bot, color: '#22c55e', desc: 'GPT-4o, GPT-4, o1 reasoning' },
+  { id: 'groq', name: 'Groq', icon: Zap, color: '#eab308', desc: 'Ultra-fast inference — Llama, Mixtral' },
+  { id: 'gemini', name: 'Google Gemini', icon: Database, color: '#3b82f6', desc: 'Gemini 2.0 Flash, Pro' },
+  { id: 'mistral', name: 'Mistral AI', icon: Shield, color: '#ef4444', desc: 'Mistral Large, Codestral' },
+  { id: 'google', name: 'Google AI Studio', icon: Globe, color: '#06b6d4', desc: 'Gemini via AI Studio API' },
+  { id: 'custom', name: 'Custom Endpoint', icon: Globe, color: '#6b7280', desc: 'Any OpenAI-compatible API' },
+] as const
 
 function SetupWizard() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [isTestingOllama, setIsTestingOllama] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const {
-    currentStep,
-    totalSteps,
-    isComplete,
-    nextStep,
-    prevStep,
-    submitSetup,
-    checkNeedsSetup,
-    isStepValid,
-    getStepError,
-  } = useSetupStore()
-
-  // Form fields
-  const {
-    appName,
-    appUrl,
-    githubClientId,
-    githubClientSecret,
-    adminEmail,
-    adminPassword,
-    adminPasswordConfirm,
-    githubPat,
-    githubOwner,
-    githubRepo,
-    llmProvider,
-    llmApiKey,
-    llmModel,
-    setAppName,
-    setAppUrl,
-    setGitHubClientId,
-    setGitHubClientSecret,
-    setAdminEmail,
-    setAdminPassword,
-    setAdminPasswordConfirm,
-    setGitHubPat,
-    setGitHubOwner,
-    setGitHubRepo,
-    setLlmProvider,
-    setLlmApiKey,
-    setLlmModel,
+    currentStep, totalSteps, isComplete,
+    nextStep, prevStep, submitSetup, checkNeedsSetup, isStepValid, getStepError, testOllama,
+    // App config
+    appName, appUrl, setAppName, setAppUrl,
+    // AI
+    llmProvider, llmApiKey, llmModel, ollamaUrl, ollamaStatus,
+    setLlmProvider, setLlmApiKey, setLlmModel, setOllamaUrl,
+    // GitHub
+    githubClientId, githubClientSecret, githubPat, githubOwner, githubRepo,
+    setGitHubClientId, setGitHubClientSecret, setGitHubPat, setGitHubOwner, setGitHubRepo,
+    // Channels
+    discordBotToken, discordGuildId, discordChannelId,
+    telegramBotToken, telegramChatId,
+    setDiscordBotToken, setDiscordGuildId, setDiscordChannelId,
+    setTelegramBotToken, setTelegramChatId,
+    // Admin
+    adminEmail, adminPassword, adminPasswordConfirm,
+    setAdminEmail, setAdminPassword, setAdminPasswordConfirm,
   } = useSetupStore()
 
   useEffect(() => {
     checkNeedsSetup().then((needsSetup) => {
-      if (!needsSetup) {
-        navigate('/login')
-      }
+      if (!needsSetup) navigate('/login')
       setIsLoading(false)
     })
   }, [checkNeedsSetup, navigate])
@@ -93,51 +106,58 @@ function SetupWizard() {
   }
 
   const handleSubmit = async () => {
-    if (!isStepValid()) {
-      setSubmitError(getStepError())
-      return
-    }
     setSubmitError(null)
+    setIsSubmitting(true)
     const result = await submitSetup()
+    setIsSubmitting(false)
     if (!result.success) {
       setSubmitError(result.error || 'Setup failed')
     }
   }
 
+  const handleTestOllama = async () => {
+    setIsTestingOllama(true)
+    await testOllama()
+    setIsTestingOllama(false)
+  }
+
   const copyRedirectUrl = () => {
-    navigator.clipboard.writeText(`${appUrl}/api/auth/github/callback`)
+    const url = appUrl || 'http://localhost:3000'
+    navigator.clipboard.writeText(`${url}/api/auth/github/callback`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg }}>
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: C.accent }} />
       </div>
     )
   }
 
   if (isComplete) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md text-center"
-        >
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-green-500/20 flex items-center justify-center">
-            <CheckCircle2 className="w-10 h-10 text-green-500" />
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.bg }}>
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ background: '#22c55e20' }}>
+            <CheckCircle2 className="w-10 h-10" style={{ color: C.success }} />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-4">Setup Complete!</h1>
-          <p className="text-text-secondary mb-8">
-            Your Harbinger instance is now configured. You can now sign in with your admin account.
+          <h1 className="text-3xl font-bold mb-4" style={{ color: C.text, fontFamily: 'monospace' }}>HARBINGER ONLINE</h1>
+          <p style={{ color: C.textMuted }} className="mb-2">Your command center is configured and ready.</p>
+          <p style={{ color: C.textMuted }} className="mb-8 text-sm">
+            {llmProvider === 'ollama' ? 'Local AI agents powered by Ollama' : `AI powered by ${PROVIDERS.find(p => p.id === llmProvider)?.name}`}
+            {discordBotToken && ' · Discord connected'}
+            {telegramBotToken && ' · Telegram connected'}
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
+            className="px-8 py-3 rounded-xl font-medium transition-colors font-mono"
+            style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
+            onMouseEnter={e => (e.currentTarget.style.background = `${C.accent}15`)}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            Go to Login
+            ENTER COMMAND CENTER
           </button>
         </motion.div>
       </div>
@@ -145,43 +165,32 @@ function SetupWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Progress */}
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.bg }}>
+      <div className="w-full max-w-3xl">
+        {/* Progress bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center">
+              <div key={step.id} className="flex items-center flex-1">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    index < currentStep
-                      ? 'bg-green-500 text-white'
-                      : index === currentStep
-                        ? 'bg-[#f0c040] text-[#0a0a0f]'
-                        : 'bg-surface-light text-text-secondary'
-                  }`}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-mono flex-shrink-0"
+                  style={{
+                    background: index < currentStep ? C.success : index === currentStep ? C.accent : C.surfaceLight,
+                    color: index <= currentStep ? C.bg : C.textMuted,
+                    border: index === currentStep ? `2px solid ${C.accent}` : '1px solid transparent',
+                  }}
                 >
-                  {index < currentStep ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <step.icon className="w-5 h-5" />
-                  )}
+                  {index < currentStep ? <Check className="w-4 h-4" /> : <step.icon className="w-4 h-4" />}
                 </div>
                 {index < steps.length - 1 && (
-                  <div
-                    className={`w-full h-1 mx-2 ${
-                      index < currentStep ? 'bg-green-500' : 'bg-surface-light'
-                    }`}
-                  />
+                  <div className="flex-1 h-0.5 mx-1.5" style={{ background: index < currentStep ? C.success : C.border }} />
                 )}
               </div>
             ))}
           </div>
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-white">{steps[currentStep].title}</h2>
-            <p className="text-text-secondary text-sm">
-              Step {currentStep + 1} of {totalSteps}
-            </p>
+            <h2 className="text-lg font-semibold font-mono" style={{ color: C.text }}>{steps[currentStep].title}</h2>
+            <p className="text-xs font-mono" style={{ color: C.textMuted }}>Step {currentStep + 1} of {totalSteps}</p>
           </div>
         </div>
 
@@ -190,290 +199,367 @@ function SetupWizard() {
           key={currentStep}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          className="bg-surface border border-border rounded-2xl p-8"
+          className="rounded-2xl p-8"
+          style={{ background: C.surface, border: `1px solid ${C.border}` }}
         >
-          {/* Error */}
           {submitError && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
+            <div className="mb-6 p-4 rounded-xl flex items-center gap-3 text-sm" style={{ background: '#ef444420', border: '1px solid #ef444430', color: C.danger }}>
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="text-sm">{submitError}</span>
+              {submitError}
             </div>
           )}
 
-          {/* Step Content */}
+          {/* Step 0: Welcome */}
           {currentStep === 0 && (
             <div className="text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#f0c040]/10 border border-[#f0c040]/30 flex items-center justify-center">
-                <Sparkles className="w-10 h-10 text-[#f0c040]" />
-              </div>
-              <h1 className="text-3xl font-bold text-white mb-4">Welcome to Harbinger</h1>
-              <p className="text-text-secondary mb-6 max-w-md mx-auto">
-                Let's set up your bug bounty intelligence platform. This wizard will guide you through
-                configuring your instance in just a few steps.
+              <pre className="text-xs mb-6 leading-tight" style={{ color: C.accent, fontFamily: 'monospace' }}>
+{`    ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗███╗   ██╗ ██████╗ ███████╗██████╗
+    ██║  ██║██╔══██╗██╔══██╗██╔══██╗██║████╗  ██║██╔════╝ ██╔════╝██╔══██╗
+    ███████║███████║██████╔╝██████╔╝██║██╔██╗ ██║██║  ███╗█████╗  ██████╔╝
+    ██╔══██║██╔══██║██╔══██╗██╔══██╗██║██║╚██╗██║██║   ██║██╔══╝  ██╔══██╗
+    ██║  ██║██║  ██║██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝███████╗██║  ██║
+    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝`}
+              </pre>
+              <h1 className="text-2xl font-bold mb-4 font-mono" style={{ color: C.text }}>Autonomous Security Command Center</h1>
+              <p className="mb-6 max-w-lg mx-auto text-sm" style={{ color: C.textMuted }}>
+                Deploy your own AI-powered security team. Runs locally, connects anywhere.
               </p>
-              <div className="space-y-2 text-sm text-text-secondary">
-                <p>• Configure GitHub OAuth for authentication</p>
-                <p>• Set up your admin account</p>
-                <p>• Connect to GitHub for automation</p>
-                <p>• Configure AI/LLM settings</p>
+              <div className="grid grid-cols-2 gap-3 max-w-md mx-auto text-left text-sm">
+                {[
+                  { icon: Bot, label: 'Any AI — Ollama, Claude, GPT, Groq, Gemini' },
+                  { icon: Github, label: 'GitHub OAuth, Device Flow, or PAT' },
+                  { icon: MessageSquare, label: 'Discord + Telegram integration' },
+                  { icon: Container, label: 'Docker agents with per-agent containers' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: C.surfaceLight }}>
+                    <item.icon className="w-4 h-4 flex-shrink-0" style={{ color: C.accent }} />
+                    <span className="text-xs" style={{ color: C.textMuted }}>{item.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
+          {/* Step 1: App Configuration */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">App Name</label>
-                <input
-                  type="text"
-                  value={appName}
-                  onChange={(e) => setAppName(e.target.value)}
-                  placeholder="My Harbinger"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-                <p className="text-xs text-text-secondary mt-1">This will be displayed in the UI</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">App URL</label>
-                <input
-                  type="url"
-                  value={appUrl}
-                  onChange={(e) => setAppUrl(e.target.value)}
-                  placeholder="https://harbinger.example.com"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-                <p className="text-xs text-text-secondary mt-1">
-                  The public URL where this instance will be hosted
-                </p>
-              </div>
+              <InputField label="Instance Name" value={appName} onChange={setAppName} placeholder="Harbinger" description="Displayed in the UI header" />
+              <InputField label="App URL" value={appUrl} onChange={setAppUrl} placeholder="http://localhost:3000" description="Leave blank for local-only access" optional />
             </div>
           )}
 
+          {/* Step 2: AI Provider */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+              <p className="text-sm mb-2" style={{ color: C.textMuted }}>
+                Choose which AI powers your agents. Ollama runs locally — no API key needed.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {PROVIDERS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setLlmProvider(p.id as any)}
+                    className="relative p-3 rounded-xl text-left transition-all"
+                    style={{
+                      background: llmProvider === p.id ? `${p.color}15` : C.surfaceLight,
+                      border: `1px solid ${llmProvider === p.id ? p.color : C.border}`,
+                    }}
+                  >
+                    {'recommended' in p && p.recommended && (
+                      <span className="absolute -top-2 -right-2 text-[9px] px-1.5 py-0.5 rounded-full font-mono" style={{ background: C.accent, color: C.bg }}>LOCAL</span>
+                    )}
+                    <p.icon className="w-4 h-4 mb-1" style={{ color: p.color }} />
+                    <p className="text-xs font-medium" style={{ color: C.text }}>{p.name}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Ollama config */}
+              {llmProvider === 'ollama' && (
+                <div className="space-y-4 p-4 rounded-xl" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Container className="w-5 h-5" style={{ color: '#a855f7' }} />
+                    <span className="font-medium text-sm" style={{ color: C.text }}>Ollama Configuration</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={ollamaUrl}
+                      onChange={(e) => setOllamaUrl(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      className="flex-1 rounded-lg px-4 py-2.5 text-sm focus:outline-none font-mono"
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                    />
+                    <button
+                      onClick={handleTestOllama}
+                      disabled={isTestingOllama}
+                      className="px-4 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isTestingOllama ? 'animate-spin' : ''}`} />
+                      Test
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: ollamaStatus === 'connected' ? C.success : ollamaStatus === 'error' ? C.danger : C.textMuted }} />
+                    <span className="text-xs" style={{ color: ollamaStatus === 'connected' ? C.success : C.textMuted }}>
+                      {ollamaStatus === 'connected' ? 'Connected to Ollama' : ollamaStatus === 'error' ? 'Cannot reach Ollama — is it running?' : 'Click Test to verify connection'}
+                    </span>
+                  </div>
+                  <p className="text-xs" style={{ color: C.textMuted }}>
+                    Install Ollama: <code className="px-1 py-0.5 rounded" style={{ background: C.bg }}>curl -fsSL https://ollama.com/install.sh | sh</code>
+                    <br />Then pull a model: <code className="px-1 py-0.5 rounded" style={{ background: C.bg }}>ollama pull llama3.2</code>
+                  </p>
+                </div>
+              )}
+
+              {/* API key for cloud providers */}
+              {llmProvider !== 'ollama' && (
+                <div className="space-y-4">
+                  <InputField
+                    label="API Key"
+                    value={llmApiKey}
+                    onChange={setLlmApiKey}
+                    placeholder={
+                      llmProvider === 'anthropic' ? 'sk-ant-api03-...' :
+                      llmProvider === 'openai' ? 'sk-...' :
+                      llmProvider === 'groq' ? 'gsk_...' :
+                      'Enter API key...'
+                    }
+                    type="password"
+                    optional
+                  />
+                  <InputField
+                    label="Model"
+                    value={llmModel}
+                    onChange={setLlmModel}
+                    placeholder="Leave blank for default"
+                    optional
+                  />
+                </div>
+              )}
+
+              {llmProvider === 'custom' && (
+                <InputField label="Base URL" value={ollamaUrl} onChange={setOllamaUrl} placeholder="https://api.example.com/v1" />
+              )}
+            </div>
+          )}
+
+          {/* Step 3: GitHub Auth */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl" style={{ background: '#f0c04010', border: `1px solid ${C.accent}30` }}>
                 <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: C.accent }} />
                   <div>
-                    <p className="text-sm text-amber-400 font-medium mb-1">Create a GitHub OAuth App</p>
-                    <p className="text-xs text-amber-300/70">
-                      Go to{' '}
-                      <a
-                        href="https://github.com/settings/developers"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        GitHub Developer Settings
-                      </a>{' '}
-                      → OAuth Apps → New OAuth App
+                    <p className="text-sm font-medium" style={{ color: C.accent }}>Authentication Options</p>
+                    <p className="text-xs mt-1" style={{ color: C.textMuted }}>
+                      All fields are optional. The login page supports 3 methods:<br/>
+                      <strong>OAuth</strong> (redirect flow) · <strong>Device Flow</strong> (no callback needed) · <strong>Token</strong> (PAT or server GH_TOKEN)
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Authorization Callback URL</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={appUrl ? `${appUrl}/api/auth/github/callback` : 'Set App URL first'}
-                    className="flex-1 bg-surface-light border border-border rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
-                  />
-                  <button
-                    onClick={copyRedirectUrl}
-                    disabled={!appUrl}
-                    className="px-4 py-3 bg-surface-light border border-border rounded-xl hover:bg-surface-light/80 transition-colors disabled:opacity-50"
-                  >
-                    {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-                  </button>
+              <div className="p-4 rounded-xl space-y-4" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                <h3 className="font-medium text-sm flex items-center gap-2" style={{ color: C.text }}>
+                  <Github className="w-4 h-4" /> OAuth App (Optional)
+                </h3>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: C.textMuted }}>Callback URL</label>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={appUrl ? `${appUrl}/api/auth/github/callback` : 'http://localhost:3000/api/auth/github/callback'}
+                      className="flex-1 rounded-lg px-3 py-2 text-xs font-mono cursor-not-allowed"
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, color: `${C.text}80` }}
+                    />
+                    <button onClick={copyRedirectUrl} className="px-3 py-2 rounded-lg" style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+                      {copied ? <Check className="w-4 h-4" style={{ color: C.success }} /> : <Copy className="w-4 h-4" style={{ color: C.textMuted }} />}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-text-secondary mt-1">
-                  Copy this into your GitHub OAuth App settings
-                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField label="Client ID" value={githubClientId} onChange={setGitHubClientId} placeholder="Iv23lixxx..." compact />
+                  <InputField label="Client Secret" value={githubClientSecret} onChange={setGitHubClientSecret} placeholder="••••••••" type="password" compact />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Client ID</label>
-                <input
-                  type="text"
-                  value={githubClientId}
-                  onChange={(e) => setGitHubClientId(e.target.value)}
-                  placeholder="Iv23lixxx..."
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Client Secret</label>
-                <input
-                  type="password"
-                  value={githubClientSecret}
-                  onChange={(e) => setGitHubClientSecret(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-                <p className="text-xs text-text-secondary mt-1">This will be encrypted and stored securely</p>
+              <div className="p-4 rounded-xl space-y-4" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                <h3 className="font-medium text-sm flex items-center gap-2" style={{ color: C.text }}>
+                  <Github className="w-4 h-4" /> Personal Access Token / Automation
+                </h3>
+                <InputField label="GitHub PAT" value={githubPat} onChange={setGitHubPat} placeholder="ghp_xxxxxxxxxxxx" type="password" description="Needs repo + workflow scopes" compact />
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField label="Owner" value={githubOwner} onChange={setGitHubOwner} placeholder="username" compact />
+                  <InputField label="Repository" value={githubRepo} onChange={setGitHubRepo} placeholder="harbinger" compact />
+                </div>
               </div>
             </div>
           )}
 
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Admin Email</label>
-                <input
-                  type="email"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Password</label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-                <p className="text-xs text-text-secondary mt-1">Must be at least 8 characters</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Confirm Password</label>
-                <input
-                  type="password"
-                  value={adminPasswordConfirm}
-                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-surface-light border border-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
-                />
-              </div>
-            </div>
-          )}
-
+          {/* Step 4: Channels */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              <div className="bg-surface-light rounded-xl p-4 space-y-4">
-                <h3 className="font-medium text-white flex items-center gap-2">
-                  <Github className="w-5 h-5" />
-                  GitHub Automation
-                </h3>
+              <p className="text-sm" style={{ color: C.textMuted }}>
+                Connect messaging channels to receive alerts and control agents remotely. All optional.
+              </p>
 
-                <div>
-                  <label className="block text-sm text-text-secondary mb-2">Personal Access Token</label>
-                  <input
-                    type="password"
-                    value={githubPat}
-                    onChange={(e) => setGitHubPat(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxx"
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                  />
-                  <p className="text-xs text-text-secondary mt-1">Needs repo and workflow scopes</p>
+              {/* Discord */}
+              <div className="p-4 rounded-xl space-y-4" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center gap-2">
+                  <Hash className="w-5 h-5" style={{ color: '#5865F2' }} />
+                  <span className="font-medium text-sm" style={{ color: C.text }}>Discord</span>
+                  {discordBotToken && <div className="w-2 h-2 rounded-full ml-auto" style={{ background: C.success }} />}
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-text-secondary mb-2">GitHub Owner</label>
-                    <input
-                      type="text"
-                      value={githubOwner}
-                      onChange={(e) => setGitHubOwner(e.target.value)}
-                      placeholder="username"
-                      className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-text-secondary mb-2">Repository Name</label>
-                    <input
-                      type="text"
-                      value={githubRepo}
-                      onChange={(e) => setGitHubRepo(e.target.value)}
-                      placeholder="my-harbinger"
-                      className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                    />
-                  </div>
+                <InputField label="Bot Token" value={discordBotToken} onChange={setDiscordBotToken} placeholder="MTIz..." type="password" compact />
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField label="Guild ID" value={discordGuildId} onChange={setDiscordGuildId} placeholder="Server ID" compact />
+                  <InputField label="Channel ID" value={discordChannelId} onChange={setDiscordChannelId} placeholder="Channel ID" compact />
                 </div>
+                <a
+                  href="https://discord.com/developers/applications"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs flex items-center gap-1"
+                  style={{ color: '#5865F2' }}
+                >
+                  Create Discord Bot <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
 
-              <div className="bg-surface-light rounded-xl p-4 space-y-4">
-                <h3 className="font-medium text-white">AI Configuration</h3>
-
-                <div>
-                  <label className="block text-sm text-text-secondary mb-2">LLM Provider</label>
-                  <select
-                    value={llmProvider}
-                    onChange={(e) => setLlmProvider(e.target.value as 'anthropic' | 'openai' | 'google')}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                  >
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (GPT)</option>
-                    <option value="google">Google (Gemini)</option>
-                  </select>
+              {/* Telegram */}
+              <div className="p-4 rounded-xl space-y-4" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center gap-2">
+                  <Send className="w-5 h-5" style={{ color: '#0088cc' }} />
+                  <span className="font-medium text-sm" style={{ color: C.text }}>Telegram</span>
+                  {telegramBotToken && <div className="w-2 h-2 rounded-full ml-auto" style={{ background: C.success }} />}
                 </div>
+                <InputField label="Bot Token" value={telegramBotToken} onChange={setTelegramBotToken} placeholder="123456:ABC-DEF..." type="password" compact />
+                <InputField label="Chat ID" value={telegramChatId} onChange={setTelegramChatId} placeholder="-1001234567890" compact />
+                <a
+                  href="https://t.me/BotFather"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs flex items-center gap-1"
+                  style={{ color: '#0088cc' }}
+                >
+                  Create bot with @BotFather <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
 
-                <div>
-                  <label className="block text-sm text-text-secondary mb-2">API Key</label>
-                  <input
-                    type="password"
-                    value={llmApiKey}
-                    onChange={(e) => setLlmApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                  />
-                </div>
+          {/* Step 5: Admin Account */}
+          {currentStep === 5 && (
+            <div className="space-y-6">
+              <InputField label="Admin Email" value={adminEmail} onChange={setAdminEmail} placeholder="admin@example.com" type="email" />
+              <InputField label="Password" value={adminPassword} onChange={setAdminPassword} placeholder="••••••••" type="password" description="Minimum 8 characters" />
+              <InputField label="Confirm Password" value={adminPasswordConfirm} onChange={setAdminPasswordConfirm} placeholder="••••••••" type="password" />
+            </div>
+          )}
 
-                <div>
-                  <label className="block text-sm text-text-secondary mb-2">Model (optional)</label>
-                  <input
-                    type="text"
-                    value={llmModel}
-                    onChange={(e) => setLlmModel(e.target.value)}
-                    placeholder="claude-sonnet-4-5-20251001"
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                  />
-                  <p className="text-xs text-text-secondary mt-1">Leave blank for provider default</p>
-                </div>
+          {/* Step 6: Review */}
+          {currentStep === 6 && (
+            <div className="space-y-4">
+              <h3 className="font-medium font-mono mb-4" style={{ color: C.text }}>MISSION BRIEFING</h3>
+              <div className="space-y-2 text-sm">
+                <ReviewRow label="Instance" value={appName} />
+                <ReviewRow label="URL" value={appUrl || 'http://localhost:3000'} />
+                <ReviewRow label="AI Provider" value={PROVIDERS.find(p => p.id === llmProvider)?.name || llmProvider} status="configured" />
+                {llmProvider === 'ollama' && <ReviewRow label="Ollama" value={ollamaUrl} status={ollamaStatus === 'connected' ? 'configured' : 'pending'} />}
+                <ReviewRow label="GitHub OAuth" value={githubClientId ? 'Configured' : 'Skipped'} status={githubClientId ? 'configured' : 'skipped'} />
+                <ReviewRow label="GitHub PAT" value={githubPat ? 'Set' : 'Not set'} status={githubPat ? 'configured' : 'skipped'} />
+                <ReviewRow label="Discord" value={discordBotToken ? 'Connected' : 'Not configured'} status={discordBotToken ? 'configured' : 'skipped'} />
+                <ReviewRow label="Telegram" value={telegramBotToken ? 'Connected' : 'Not configured'} status={telegramBotToken ? 'configured' : 'skipped'} />
+                <ReviewRow label="Admin" value={adminEmail} status="configured" />
               </div>
             </div>
           )}
 
           {/* Navigation */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-border">
+          <div className="flex justify-between mt-8 pt-6" style={{ borderTop: `1px solid ${C.border}` }}>
             <button
               onClick={prevStep}
               disabled={currentStep === 0}
-              className="flex items-center gap-2 px-6 py-3 text-text-secondary hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 text-sm transition-colors disabled:opacity-30 font-mono"
+              style={{ color: C.textMuted }}
             >
-              <ChevronLeft className="w-5 h-5" />
-              Back
+              <ChevronLeft className="w-4 h-4" /> Back
             </button>
 
             {currentStep === totalSteps - 1 ? (
               <button
                 onClick={handleSubmit}
-                className="flex items-center gap-2 px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-colors font-mono disabled:opacity-50"
+                style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
               >
-                Complete Setup
-                <Check className="w-5 h-5" />
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isSubmitting ? 'DEPLOYING...' : 'DEPLOY HARBINGER'}
               </button>
             ) : (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-2 px-8 py-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-xl font-medium transition-colors"
+                className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-colors font-mono"
+                style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
               >
-                Continue
-                <ChevronRight className="w-5 h-5" />
+                Continue <ChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
         </motion.div>
+      </div>
+    </div>
+  )
+}
+
+// Reusable input
+function InputField({ label, value, onChange, placeholder, description, type = 'text', optional, compact }: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  description?: string
+  type?: string
+  optional?: boolean
+  compact?: boolean
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1" style={{ color: C.text }}>
+        {label} {optional && <span style={{ color: C.textMuted }}>(optional)</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full rounded-lg px-4 focus:outline-none text-sm font-mono ${compact ? 'py-2' : 'py-2.5'}`}
+        style={{
+          background: C.surfaceLight,
+          border: `1px solid ${C.border}`,
+          color: C.text,
+        }}
+      />
+      {description && <p className="text-xs mt-1" style={{ color: C.textMuted }}>{description}</p>}
+    </div>
+  )
+}
+
+// Review summary row
+function ReviewRow({ label, value, status }: { label: string; value: string; status?: 'configured' | 'pending' | 'skipped' }) {
+  return (
+    <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: C.surfaceLight }}>
+      <span className="text-xs font-mono" style={{ color: C.textMuted }}>{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-mono" style={{ color: C.text }}>{value}</span>
+        {status && (
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ background: status === 'configured' ? C.success : status === 'pending' ? C.accent : C.textMuted }}
+          />
+        )}
       </div>
     </div>
   )

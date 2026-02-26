@@ -1,0 +1,14 @@
+{
+  "providers": {
+    "custom": {
+      "baseUrl": "http://127.0.0.1:11434",
+      "apiKey": "CUSTOM_API_KEY",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "kimi-k2.5:cloud"
+        }
+      ]
+    }
+  }
+}

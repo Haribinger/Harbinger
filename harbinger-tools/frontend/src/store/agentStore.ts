@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Agent, AgentPersonality, Message, ChatSession } from '../types'
+import type { Agent, AgentConfig, AgentPersonality, Message, ChatSession } from '../types'
+import { agentsApi } from '../api/agents'
+import { agentOrchestrator } from '../core/orchestrator'
 
 interface AgentState {
   agents: Agent[]
@@ -32,132 +34,61 @@ interface AgentState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
 
+  fetchAgents: () => Promise<void>
   spawnAgent: (agentType: string, personality: string, codename: string) => Promise<void>
+  spawnAgentById: (agentId: string) => Promise<void>
   stopAgent: (agentId: string) => Promise<void>
   getAgentHeartbeat: (agentId: string) => Promise<boolean>
   handoffTask: (fromAgentId: string, toAgentId: string, task: string) => Promise<void>
+  createAgentInDB: (name: string, type: string, description: string, capabilities: string[], config?: AgentConfig) => Promise<Agent | null>
+  deleteAgentFromDB: (id: string) => Promise<void>
+  cloneAgent: (sourceId: string, newName: string) => Promise<Agent | null>
+}
+
+// Map DB status strings to frontend status union
+function mapDBStatus(s: string): Agent['status'] {
+  const map: Record<string, Agent['status']> = {
+    idle: 'idle',
+    running: 'running',
+    stopped: 'stopped',
+    busy: 'busy',
+    error: 'error',
+    spawned: 'spawned',
+    working: 'working',
+    heartbeat: 'heartbeat',
+  }
+  return map[s] || 'idle'
+}
+
+// Map agent type to Obsidian Command color — supports unlimited types
+function typeToColor(type: string): string {
+  const colors: Record<string, string> = {
+    recon: '#3b82f6',
+    web: '#ef4444',
+    cloud: '#a855f7',
+    osint: '#06b6d4',
+    binary: '#f97316',
+    report: '#22c55e',
+    'binary-re': '#f97316',
+    reporting: '#22c55e',
+    network: '#14b8a6',
+    mobile: '#ec4899',
+    api: '#84cc16',
+    fuzzing: '#f59e0b',
+    crypto: '#8b5cf6',
+    'social-engineering': '#06b6d4',
+    custom: '#6366f1',
+  }
+  return colors[type] || '#6366f1'
 }
 
 export const useAgentStore = create<AgentState>()(
   persist(
     (set) => ({
-      // Six canonical Harbinger agents — pre-seeded, user can clone/extend
-      agents: [
-        {
-          id: 'agent-pathfinder',
-          name: 'PATHFINDER',
-          description: 'Reconnaissance Scout — subdomain enumeration, port scanning, asset discovery, attack surface mapping',
-          color: '#3b82f6',
-          type: 'recon',
-          personality: 'pathfinder',
-          status: 'stopped' as const,
-          codename: 'PATHFINDER',
-          currentTask: '',
-          toolsCount: 18,
-          findingsCount: 0,
-          capabilities: ['subdomain-enum', 'port-scan', 'http-probe', 'cloud-discovery', 'tech-detection'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.3, maxTokens: 4096 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'agent-breach',
-          name: 'BREACH',
-          description: 'Web Hacker — XSS, SQLi, SSRF, BOLA/IDOR, API exploitation, WAF evasion',
-          color: '#ef4444',
-          type: 'web',
-          personality: 'breach',
-          status: 'stopped' as const,
-          codename: 'BREACH',
-          currentTask: '',
-          toolsCount: 12,
-          findingsCount: 0,
-          capabilities: ['xss', 'sqli', 'ssrf', 'idor', 'api-testing', 'graphql', 'waf-bypass'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.7, maxTokens: 4096 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'agent-phantom',
-          name: 'PHANTOM',
-          description: 'Cloud Infiltrator — AWS/Azure/GCP misconfiguration, IAM escalation, S3 enumeration, metadata exploitation',
-          color: '#a855f7',
-          type: 'cloud',
-          personality: 'phantom',
-          status: 'stopped' as const,
-          codename: 'PHANTOM',
-          currentTask: '',
-          toolsCount: 8,
-          findingsCount: 0,
-          capabilities: ['aws-audit', 'azure-audit', 'gcp-audit', 'iam-escalation', 's3-enum', 'ssrf-cloud'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.4, maxTokens: 4096 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'agent-specter',
-          name: 'SPECTER',
-          description: 'OSINT Detective — email enumeration, person lookup, social footprinting, credential leak detection',
-          color: '#22c55e',
-          type: 'osint',
-          personality: 'specter',
-          status: 'stopped' as const,
-          codename: 'SPECTER',
-          currentTask: '',
-          toolsCount: 10,
-          findingsCount: 0,
-          capabilities: ['email-enum', 'person-lookup', 'social-footprint', 'leak-check', 'dork-search'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.5, maxTokens: 4096 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'agent-cipher',
-          name: 'CIPHER',
-          description: 'Binary RE — Ghidra, radare2, pwntools, exploit development, ROP chains, memory corruption',
-          color: '#f59e0b',
-          type: 'binary-re',
-          personality: 'cipher',
-          status: 'stopped' as const,
-          codename: 'CIPHER',
-          currentTask: '',
-          toolsCount: 9,
-          findingsCount: 0,
-          capabilities: ['ghidra', 'radare2', 'pwntools', 'rop-chains', 'format-strings', 'heap-exploits'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.6, maxTokens: 8192 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'agent-scribe',
-          name: 'SCRIBE',
-          description: 'Report Writer — CVSS scoring, PoC documentation, platform-specific reports for HackerOne/Bugcrowd/Intigriti',
-          color: '#f0c040',
-          type: 'reporting',
-          personality: 'scribe',
-          status: 'stopped' as const,
-          codename: 'SCRIBE',
-          currentTask: '',
-          toolsCount: 6,
-          findingsCount: 0,
-          capabilities: ['cvss-scoring', 'poc-writing', 'hackerone', 'bugcrowd', 'intigriti', 'markdown'],
-          tools: [],
-          mcps: [],
-          config: { model: 'claude-opus-4-6', temperature: 0.8, maxTokens: 8192 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ],
+      // Dynamic — populated from DB via fetchAgents(). No hardcoded agents.
+      // The 6 canonical agents (PATHFINDER, BREACH, etc.) are seeded into PostgreSQL
+      // by seedDefaultAgents() in database.go when the DB is first created.
+      agents: [],
       personalities: [
         // ── Harbinger canonical agent personalities ──
         {
@@ -404,64 +335,236 @@ Provide specific line numbers and actionable suggestions.`,
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
 
-      spawnAgent: async (agentType, personality, codename) => {
-        console.log(`Spawning agent of type ${agentType} with personality ${personality} and codename ${codename}`);
-        const now = new Date().toISOString();
-        const newAgent: Agent = {
-          id: `agent-${Date.now()}`,
-          name: codename,
-          description: '',
-          color: '#6366f1',
-          type: agentType,
-          personality,
-          status: 'spawned',
-          codename,
-          currentTask: 'Initializing',
-          toolsCount: 0,
-          findingsCount: 0,
-          capabilities: [],
-          tools: [],
-          mcps: [],
-          config: { model: '', temperature: 0.7, maxTokens: 4096 },
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({ agents: [...state.agents, newAgent] }));
+      fetchAgents: async () => {
+        try {
+          set({ isLoading: true })
+          const dbAgents = await agentsApi.getAll()
+          if (dbAgents.length > 0) {
+            // Merge DB agents into local state — use DB as source of truth for known agents
+            const { agents: localAgents } = useAgentStore.getState()
+            const dbAgentIds = new Set(dbAgents.map(a => a.id))
+
+            // Map DB agents to the frontend Agent type
+            const mappedDBAgents: Agent[] = dbAgents.map(a => {
+              const existing = localAgents.find(l => l.name === a.name || l.id === a.id)
+              return {
+                id: a.id,
+                name: a.name || (existing?.name ?? ''),
+                description: a.description || (existing?.description ?? ''),
+                color: existing?.color || typeToColor(a.type || 'recon'),
+                type: a.type || existing?.type || 'recon',
+                personality: existing?.personality || a.name?.toLowerCase(),
+                status: mapDBStatus(a.status),
+                codename: a.name,
+                currentTask: existing?.currentTask || '',
+                toolsCount: a.capabilities?.length || (existing?.toolsCount ?? 0),
+                findingsCount: existing?.findingsCount || 0,
+                capabilities: a.capabilities || (existing?.capabilities ?? []),
+                containerId: a.container_id || a.containerId,
+                tools: existing?.tools || [],
+                mcps: existing?.mcps || [],
+                config: existing?.config || { model: 'claude-opus-4-6', temperature: 0.5, maxTokens: 4096 },
+                createdAt: a.created_at || a.createdAt || (existing?.createdAt ?? new Date().toISOString()),
+                updatedAt: a.updated_at || a.updatedAt || (existing?.updatedAt ?? new Date().toISOString()),
+              }
+            })
+
+            // Keep local-only agents (those not in DB — like pre-seeded ones before DB existed)
+            const localOnly = localAgents.filter(l => !dbAgentIds.has(l.id) && !dbAgents.some(d => d.name === l.name))
+
+            set({ agents: [...mappedDBAgents, ...localOnly] })
+          }
+        } catch (err) {
+          console.warn('[AgentStore] Failed to fetch from API, using local state:', err)
+        } finally {
+          set({ isLoading: false })
+        }
       },
+
+      spawnAgent: async (agentType, personality, codename) => {
+        // First try to create in DB, then spawn Docker container
+        try {
+          const agent = await agentsApi.create({
+            name: codename,
+            type: agentType,
+            description: `${codename} — ${agentType} agent`,
+            capabilities: [],
+          })
+          // Now spawn the Docker container
+          const result = await agentsApi.spawn(agent.id)
+          const now = new Date().toISOString()
+          const newAgent: Agent = {
+            id: agent.id,
+            name: codename,
+            description: agent.description || '',
+            color: typeToColor(agentType),
+            type: agentType,
+            personality,
+            status: result.ok ? 'running' : 'idle',
+            codename,
+            currentTask: result.ok ? 'Container started' : '',
+            toolsCount: 0,
+            findingsCount: 0,
+            capabilities: agent.capabilities || [],
+            containerId: result.container_id,
+            tools: [],
+            mcps: [],
+            config: { model: 'claude-opus-4-6', temperature: 0.7, maxTokens: 4096 },
+            createdAt: now,
+            updatedAt: now,
+          }
+          set((state) => ({ agents: [...state.agents, newAgent] }))
+        } catch (err) {
+          console.error('[AgentStore] Spawn failed, creating local-only:', err)
+          const now = new Date().toISOString()
+          const newAgent: Agent = {
+            id: `agent-${Date.now()}`,
+            name: codename,
+            description: '',
+            color: typeToColor(agentType),
+            type: agentType,
+            personality,
+            status: 'idle',
+            codename,
+            currentTask: '',
+            toolsCount: 0,
+            findingsCount: 0,
+            capabilities: [],
+            tools: [],
+            mcps: [],
+            config: { model: 'claude-opus-4-6', temperature: 0.7, maxTokens: 4096 },
+            createdAt: now,
+            updatedAt: now,
+          }
+          set((state) => ({ agents: [...state.agents, newAgent] }))
+        }
+      },
+
+      spawnAgentById: async (agentId) => {
+        try {
+          const result = await agentsApi.spawn(agentId)
+          if (result.ok) {
+            set((state) => ({
+              agents: state.agents.map((a) =>
+                a.id === agentId ? { ...a, status: 'running' as const, containerId: result.container_id, currentTask: 'Container started' } : a
+              ),
+            }))
+          }
+        } catch (err) {
+          console.error('[AgentStore] Spawn by ID failed:', err)
+        }
+      },
+
       stopAgent: async (agentId) => {
-        console.log(`Stopping agent ${agentId}`);
+        try {
+          await agentsApi.stop(agentId)
+        } catch (err) {
+          console.warn('[AgentStore] API stop failed, updating local:', err)
+        }
         set((state) => ({
           agents: state.agents.map((a) =>
-            a.id === agentId ? { ...a, status: 'stopped' } : a
+            a.id === agentId ? { ...a, status: 'stopped' as const, containerId: undefined, currentTask: '' } : a
           ),
-        }));
+        }))
       },
+
       getAgentHeartbeat: async (agentId) => {
-        console.log(`Checking heartbeat for agent ${agentId}`);
-        // Simulate heartbeat check
-        const agent = useAgentStore.getState().agents.find(a => a.id === agentId);
-        if (agent) {
+        try {
+          await agentsApi.heartbeat(agentId)
           set((state) => ({
             agents: state.agents.map((a) =>
-              a.id === agentId ? { ...a, status: 'heartbeat' } : a
+              a.id === agentId ? { ...a, status: 'running' as const } : a
             ),
-          }));
-          return true;
+          }))
+          return true
+        } catch {
+          return false
         }
-        return false;
       },
+
       handoffTask: async (fromAgentId, toAgentId, task) => {
-        console.log(`Handoff task from ${fromAgentId} to ${toAgentId}: ${task}`);
+        agentOrchestrator.handoffTask(fromAgentId, toAgentId, task)
         set((state) => ({
           agents: state.agents.map((a) => {
             if (a.id === fromAgentId) {
-              return { ...a, status: 'handoff', currentTask: `Handoff to ${toAgentId}` };
+              return { ...a, status: 'handoff' as const, currentTask: `Handoff to ${toAgentId}` }
             } else if (a.id === toAgentId) {
-              return { ...a, status: 'working', currentTask: task };
+              return { ...a, status: 'working' as const, currentTask: task }
             }
-            return a;
+            return a
           }),
-        }));
+        }))
+      },
+
+      createAgentInDB: async (name, type, description, capabilities, config) => {
+        try {
+          const dbAgent = await agentsApi.create({ name, type, description, capabilities, config })
+          const now = new Date().toISOString()
+          const newAgent: Agent = {
+            id: dbAgent.id,
+            name: dbAgent.name,
+            description: dbAgent.description || description,
+            color: typeToColor(type),
+            type,
+            status: 'idle',
+            codename: name,
+            currentTask: '',
+            toolsCount: capabilities.length,
+            findingsCount: 0,
+            capabilities: dbAgent.capabilities || capabilities,
+            tools: [],
+            mcps: [],
+            config: config || { model: 'claude-opus-4-6', temperature: 0.5, maxTokens: 4096 },
+            createdAt: now,
+            updatedAt: now,
+          }
+          set((state) => ({ agents: [...state.agents, newAgent] }))
+          return newAgent
+        } catch (err) {
+          console.error('[AgentStore] DB create failed:', err)
+          return null
+        }
+      },
+
+      cloneAgent: async (sourceId, newName) => {
+        try {
+          const cloned = await agentsApi.clone(sourceId, newName)
+          const now = new Date().toISOString()
+          // Find source agent's config to inherit
+          const source = useAgentStore.getState().agents.find(a => a.id === sourceId)
+          const newAgent: Agent = {
+            id: cloned.id,
+            name: cloned.name,
+            description: cloned.description || '',
+            color: typeToColor(cloned.type || 'custom'),
+            type: cloned.type || 'custom',
+            status: 'idle',
+            codename: newName,
+            currentTask: '',
+            toolsCount: cloned.capabilities?.length || 0,
+            findingsCount: 0,
+            capabilities: cloned.capabilities || [],
+            tools: [],
+            mcps: [],
+            config: source?.config || { model: 'claude-opus-4-6', temperature: 0.5, maxTokens: 4096 },
+            createdAt: now,
+            updatedAt: now,
+          }
+          set((state) => ({ agents: [...state.agents, newAgent] }))
+          return newAgent
+        } catch (err) {
+          console.error('[AgentStore] Clone failed:', err)
+          return null
+        }
+      },
+
+      deleteAgentFromDB: async (id) => {
+        try {
+          await agentsApi.delete(id)
+        } catch (err) {
+          console.warn('[AgentStore] API delete failed:', err)
+        }
+        set((state) => ({ agents: state.agents.filter((a) => a.id !== id) }))
       },
     }),
     {

@@ -1,0 +1,22 @@
+model: configurable
+temperature: 0.5
+docker_image: harbinger/reporter-agent:latest
+memory_mb: 512
+cpu_count: 1
+proxy_chain: none
+auto_handoff: false
+handoff_to: []
+receives_from: [pathfinder, breach, phantom, specter, cipher, scribe, sam, sage]
+schedule: "0 8 * * *"
+capabilities:
+  - web-scraping
+  - rss-fetching
+  - task-management
+  - content-generation
+  - markdown
+  - multi-channel-notify
+browser: true
+channels:
+  - discord
+  - telegram
+  - webchat

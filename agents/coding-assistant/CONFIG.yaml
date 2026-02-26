@@ -1,0 +1,22 @@
+model: configurable
+temperature: 0.3
+docker_image: harbinger/coding-agent:latest
+memory_mb: 2048
+cpu_count: 2
+proxy_chain: none
+auto_handoff: true
+handoff_to: [scribe]
+receives_from: [pathfinder, breach, phantom]
+capabilities:
+  - code-generation
+  - code-review
+  - debugging
+  - refactoring
+  - documentation
+  - eslint
+  - prettier
+  - typescript
+  - gofmt
+  - black
+  - pylint
+browser: true

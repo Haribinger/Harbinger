@@ -1,0 +1,85 @@
+# Harbinger Binary RE Skill — CIPHER
+
+> Teaches OpenClaw how to run binary reverse engineering via Harbinger's CIPHER agent.
+
+## When to Use
+
+User says things like:
+- "Reverse engineer this binary"
+- "CIPHER, analyze malware.exe"
+- "Decompile this firmware"
+- "Find vulnerabilities in this binary"
+- "Exploit development for CVE-XXXX"
+
+## How It Works
+
+1. Find the CIPHER agent
+2. Spawn if not running
+3. Create a binary-re job with file path or URL
+4. Monitor analysis
+5. Report decompilation and vulnerability findings
+
+## API Calls
+
+### Get CIPHER
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find where `type == "binary"` or `name` contains "CIPHER".
+
+### Spawn
+```
+POST {{HARBINGER_API}}/api/agents/{{agent_id}}/spawn
+```
+
+### Create binary-re job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "binary-re",
+  "target": "{{file_path_or_url}}",
+  "parameters": {
+    "analysis_type": ["decompile", "strings", "imports", "vuln_scan", "exploit_check"],
+    "arch": "auto",
+    "timeout": 1200
+  }
+}
+```
+
+### Monitor
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=500
+```
+
+## Tools CIPHER Uses
+
+| Tool | Purpose |
+|------|---------|
+| Ghidra | Decompilation and analysis |
+| radare2 | Binary analysis framework |
+| pwntools | Exploit development |
+| binwalk | Firmware extraction |
+
+## Output Format
+
+```
+CIPHER ANALYSIS — {{filename}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Architecture: {{arch}}
+Format: {{format}}
+Protections: {{nx/aslr/canary/pie}}
+
+Functions: {{count}}
+Strings of interest: {{count}}
+Vulnerabilities: {{count}}
+
+KEY FINDINGS:
+  [!] Buffer overflow in {{function}} at offset {{offset}}
+  [!] Hardcoded credential: {{string}}
+  [*] Suspicious network call to {{ip}}
+
+Recommend: Generate exploit PoC? [Y/N]
+```

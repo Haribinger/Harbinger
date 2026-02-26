@@ -3,48 +3,56 @@
 @tailwind utilities;
 
 :root {
-  /* Legacy variables (kept for backwards-compat with inline CSS) */
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --secondary: #ec4899;
-  --background: #0f0f1a;
-  --surface: #1a1a2e;
-  --surface-light: #252542;
-  --text-primary: #ffffff;
-  --text-secondary: #a1a1aa;
-  --accent-cyan: #06b6d4;
-  --accent-green: #10b981;
-  --accent-orange: #f59e0b;
-  --accent-red: #ef4444;
-  --border: rgba(255, 255, 255, 0.1);
+  /* ─── Theme-controlled CSS variables ─────────────────────────────────
+     These are set dynamically by themeStore.applyTheme().
+     Defaults here match the "Obsidian Command" built-in theme. */
 
-  /* Tailwind-linked CSS variables (dark theme default) */
-  --color-background: #0f0f1a;
-  --color-surface: #1a1a2e;
-  --color-surface-light: #252542;
-  --color-surface-dark: #12121f;
+  /* Core surfaces */
+  --color-background: #0a0a0f;
+  --color-surface: #0d0d15;
+  --color-surface-light: #1a1a2e;
+  --color-surface-dark: #070710;
   --color-text-primary: #ffffff;
-  --color-text-secondary: #a1a1aa;
-  --color-border: rgba(255, 255, 255, 0.1);
-}
+  --color-text-secondary: #9ca3af;
+  --color-border: rgba(255, 255, 255, 0.08);
 
-:root.light {
-  /* Legacy overrides */
-  --background: #f0f2f5;
-  --surface: #ffffff;
-  --surface-light: #f8f9fa;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --border: rgba(0, 0, 0, 0.1);
+  /* Accent */
+  --color-accent: #f0c040;
+  --color-accent-hover: #f5d060;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-info: #06b6d4;
 
-  /* Tailwind-linked overrides */
-  --color-background: #f0f2f5;
-  --color-surface: #ffffff;
-  --color-surface-light: #f8f9fa;
-  --color-surface-dark: #e9ecef;
-  --color-text-primary: #111827;
-  --color-text-secondary: #6b7280;
-  --color-border: rgba(0, 0, 0, 0.1);
+  /* Scrollbar */
+  --scrollbar-track: #0d0d15;
+  --scrollbar-thumb: #3f3f5a;
+  --scrollbar-thumb-hover: #555575;
+
+  /* Terminal */
+  --terminal-bg: #0d0d15;
+
+  /* Glass */
+  --glass-bg: rgba(13, 13, 21, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  /* Font (overridable by theme) */
+  --theme-font: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Legacy aliases (kept for inline-style compatibility) */
+  --primary: var(--color-accent);
+  --primary-dark: var(--color-accent-hover);
+  --secondary: #ec4899;
+  --background: var(--color-background);
+  --surface: var(--color-surface);
+  --surface-light: var(--color-surface-light);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --accent-cyan: var(--color-info);
+  --accent-green: var(--color-success);
+  --accent-orange: var(--color-warning);
+  --accent-red: var(--color-danger);
+  --border: var(--color-border);
 }
 
 * {
@@ -59,9 +67,9 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--background);
-  color: var(--text-primary);
+  font-family: var(--theme-font);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
   overflow: hidden;
 }
 
@@ -72,25 +80,25 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface);
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f5a;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555575;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Animations */
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
   50% {
-    box-shadow: 0 0 40px rgba(99, 102, 241, 0.6);
+    box-shadow: 0 0 40px color-mix(in srgb, var(--color-accent) 60%, transparent);
   }
 }
 
@@ -150,15 +158,15 @@ body {
 
 /* Glassmorphism */
 .glass {
-  background: rgba(26, 26, 46, 0.8);
+  background: var(--glass-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
 }
 
 /* Terminal Styling */
 .terminal {
-  background: #0d0d15;
+  background: var(--terminal-bg);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
   line-height: 1.5;
@@ -166,11 +174,11 @@ body {
 
 /* Code Blocks */
 pre {
-  background: #1a1a2e;
+  background: var(--color-surface-light);
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
 }
 
 code {
@@ -180,7 +188,7 @@ code {
 
 /* Custom Focus Ring */
 *:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -191,7 +199,12 @@ code {
 }
 
 .btn-primary {
-  @apply btn bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10;
+  @apply btn bg-transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .btn-secondary {
@@ -199,12 +212,16 @@ code {
 }
 
 .btn-danger {
-  @apply btn bg-red-600 hover:bg-red-500 text-white;
+  @apply btn text-white;
+  background: var(--color-danger);
+}
+.btn-danger:hover {
+  filter: brightness(1.1);
 }
 
 .btn-ghost {
   @apply btn hover:bg-surface-light hover:text-white;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 /* Card Styles */
@@ -213,17 +230,23 @@ code {
 }
 
 .card-hover {
-  @apply card transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10;
+  @apply card transition-all duration-200 hover:shadow-lg;
+  --tw-shadow-color: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.card-hover:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
 }
 
 /* Input Styles */
 .input {
   @apply bg-surface-light border border-border rounded-lg px-4 py-2
-         text-white focus:border-primary focus:outline-none
-         transition-colors;
+         text-white focus:outline-none transition-colors;
+}
+.input:focus {
+  border-color: var(--color-accent);
 }
 .input::placeholder {
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 /* Status Indicators */
@@ -231,10 +254,10 @@ code {
   @apply w-2 h-2 rounded-full;
 }
 
-.status-online { @apply bg-green-500; }
-.status-busy { @apply bg-yellow-500; }
+.status-online { background: var(--color-success); }
+.status-busy { background: var(--color-warning); }
 .status-offline { @apply bg-gray-500; }
-.status-error { @apply bg-red-500; }
+.status-error { background: var(--color-danger); }
 
 /* Agent Avatar */
 .agent-avatar {
@@ -273,40 +296,4 @@ code {
    Tailwind config recompile.
    ========================================== */
 .text-text-primary { color: var(--color-text-primary, #ffffff); }
-.text-text-secondary { color: var(--color-text-secondary, #a1a1aa); }
-
-/* ==========================================
-   LIGHT THEME OVERRIDES
-   Applied when html.light class is set.
-   Higher specificity than Tailwind utilities
-   so these win without !important.
-   ========================================== */
-html.light body {
-  background-color: #f0f2f5;
-  color: #111827;
-}
-
-html.light .bg-background { background-color: #f0f2f5; }
-html.light .bg-surface { background-color: #ffffff; }
-html.light .bg-surface-light { background-color: #f8f9fa; }
-html.light .bg-surface-dark { background-color: #e9ecef; }
-
-html.light .text-white { color: #111827; }
-html.light .text-text-primary { color: #111827; }
-html.light .text-text-secondary { color: #6b7280; }
-
-html.light .border-border { border-color: rgba(0, 0, 0, 0.1); }
-
-html.light .glass {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-html.light pre {
-  background: #f8f9fa;
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-html.light ::-webkit-scrollbar-track { background: #f0f2f5; }
-html.light ::-webkit-scrollbar-thumb { background: #c1c1d4; }
-html.light ::-webkit-scrollbar-thumb:hover { background: #9999b0; }
+.text-text-secondary { color: var(--color-text-secondary, #9ca3af); }

@@ -1,0 +1,21 @@
+model: configurable
+temperature: 0.4
+docker_image: harbinger/learning-agent:latest
+memory_mb: 1024
+cpu_count: 1
+proxy_chain: none
+auto_handoff: false
+handoff_to: [brief]
+receives_from: [all]
+schedule: "0 2 * * *"
+capabilities:
+  - workflow-analysis
+  - code-optimization
+  - documentation
+  - memory-management
+  - self-improvement
+browser: false
+memory:
+  hot: ~/Harbinger/memory/hot.yaml
+  context: ~/Harbinger/memory/context/
+  archive: ~/Harbinger/memory/archive.yaml

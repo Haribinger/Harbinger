@@ -1,0 +1,89 @@
+# Harbinger Dashboard Skill — Status & Monitoring
+
+> Teaches OpenClaw how to query Harbinger's dashboard and report system status.
+
+## When to Use
+
+User says things like:
+- "Show me my swarm"
+- "How many agents are running?"
+- "What did you find?"
+- "Dashboard status"
+- "How many findings today?"
+- "System health check"
+- "Show me the attack surface"
+
+## API Calls
+
+### Get Dashboard Stats
+```
+GET {{HARBINGER_API}}/api/dashboard/stats
+```
+Returns: `{ "agents": N, "jobs": N, "findings": N, "workflows": N }`
+
+### Get Recent Activity
+```
+GET {{HARBINGER_API}}/api/dashboard/activity
+```
+Returns: list of recent events with timestamps
+
+### Get System Health
+```
+GET {{HARBINGER_API}}/api/dashboard/health
+```
+Returns: service health for PostgreSQL, Redis, Docker, Neo4j
+
+### List All Agents
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Returns: all agents with status, type, last activity
+
+### Get Running Containers
+```
+GET {{HARBINGER_API}}/api/docker/containers
+```
+Returns: Docker container details
+
+## Response Formats
+
+### Swarm Status
+```
+HARBINGER SWARM STATUS
+━━━━━━━━━━━━━━━━━━━━━
+Agents: {{total}} ({{running}} active, {{idle}} standby)
+Jobs: {{completed}}/{{total}} complete
+Findings: {{total}} ({{critical}} critical, {{high}} high)
+
+AGENT STATUS:
+  PATHFINDER  {{status}}  {{current_task}}
+  BREACH      {{status}}  {{current_task}}
+  PHANTOM     {{status}}  {{current_task}}
+  SPECTER     {{status}}  {{current_task}}
+  CIPHER      {{status}}  {{current_task}}
+  SCRIBE      {{status}}  {{current_task}}
+
+Services: PostgreSQL {{ok}} | Redis {{ok}} | Docker {{ok}} | Neo4j {{ok}}
+```
+
+### Findings Summary
+```
+FINDINGS SUMMARY
+━━━━━━━━━━━━━━━━
+Critical: {{count}} ████████░░
+High:     {{count}} ██████░░░░
+Medium:   {{count}} ████░░░░░░
+Low:      {{count}} ██░░░░░░░░
+Info:     {{count}} █░░░░░░░░░
+
+Recent:
+  [CRIT] {{finding}} — {{agent}} — {{time_ago}}
+  [HIGH] {{finding}} — {{agent}} — {{time_ago}}
+```
+
+### Open Frontend
+When the user wants visual status, tell them:
+- Dashboard: `http://localhost:5173/`
+- Agents: `http://localhost:5173/agents`
+- OpenClaw: `http://localhost:5173/openclaw`
+- Workflows: `http://localhost:5173/workflows`

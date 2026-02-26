@@ -1,0 +1,98 @@
+# Harbinger Recon Skill — PATHFINDER
+
+> Teaches OpenClaw how to run reconnaissance operations via Harbinger's PATHFINDER agent.
+
+## When to Use
+
+User says things like:
+- "Scan example.com"
+- "Run recon on target.com"
+- "Find subdomains for hackerone.com"
+- "PATHFINDER, enumerate example.com"
+- "What's the attack surface for target.com?"
+
+## How It Works
+
+1. Find the PATHFINDER agent by querying the Harbinger API
+2. Spawn the agent if not already running
+3. Create a recon job with the target
+4. Poll for results
+5. Report findings back to the user
+
+## API Calls
+
+### Step 1: Get PATHFINDER agent
+```
+GET {{HARBINGER_API}}/api/agents
+```
+Find the agent where `type == "recon"` or `name` contains "PATHFINDER".
+
+### Step 2: Spawn the agent (if not running)
+```
+POST {{HARBINGER_API}}/api/agents/{{agent_id}}/spawn
+```
+Response: `{ "ok": true, "container_id": "abc123" }`
+
+### Step 3: Create a recon job
+```
+POST {{HARBINGER_API}}/api/jobs
+Content-Type: application/json
+
+{
+  "agent_id": "{{agent_id}}",
+  "type": "recon",
+  "target": "{{target_domain}}",
+  "parameters": {
+    "modules": ["subdomain_enum", "port_scan", "service_detection", "http_probe"],
+    "depth": "standard",
+    "timeout": 300
+  }
+}
+```
+
+### Step 4: Poll job status
+```
+GET {{HARBINGER_API}}/api/jobs?agent_id={{agent_id}}
+```
+Wait until `status == "completed"` or `status == "failed"`.
+
+### Step 5: Get container logs for live output
+```
+GET {{HARBINGER_API}}/api/agents/{{agent_id}}/logs?tail=500
+```
+
+## Tools PATHFINDER Uses
+
+| Tool | Purpose |
+|------|---------|
+| subfinder | Subdomain enumeration |
+| httpx | HTTP probing and technology detection |
+| naabu | Port scanning |
+| dnsx | DNS resolution and validation |
+| shef | Custom recon framework |
+| ceye | Blind interaction detection |
+
+## Output Format
+
+Report findings as:
+```
+PATHFINDER RECON COMPLETE — {{target}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Subdomains found: {{count}}
+Live hosts: {{count}}
+Open ports: {{list}}
+Technologies: {{list}}
+
+Top findings:
+  - {{finding_1}}
+  - {{finding_2}}
+  ...
+
+Recommend: Deploy BREACH for web vuln scanning? [Y/N]
+```
+
+## Error Handling
+
+- If PATHFINDER agent not found: "PATHFINDER agent not configured. Create it at http://localhost:5173/agents"
+- If spawn fails: "Container failed to start. Check Docker: `docker ps`"
+- If job times out: "Recon timed out after 5 minutes. Target may be heavily filtered."

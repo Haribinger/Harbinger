@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -179,6 +180,12 @@ var playbooks = []Playbook{
 		Steps:       []string{"Create scheduled task", "Verify execution"},
 	},
 }
+
+// agentContainers tracks running agent Docker container IDs by agent DB ID.
+var agentContainers = struct {
+	sync.RWMutex
+	m map[string]string // agentID -> containerID
+}{m: make(map[string]string)}
 
 type Config struct {
 	AppName           string
@@ -755,6 +762,12 @@ func loadDotEnv(path string) {
 		}
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
+		// Strip surrounding quotes (single or double)
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
 		// Docker-injected vars always take precedence
 		if os.Getenv(key) == "" {
 			os.Setenv(key, val)
@@ -763,14 +776,165 @@ func loadDotEnv(path string) {
 }
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	githubOK := cfg.GitHubClientID != "" && cfg.GitHubClientSecret != ""
+	jwtOK := cfg.JWTSecret != "change-me-in-production"
+	// Setup is needed only if GitHub OAuth AND a GH_TOKEN are both missing — user has no way to log in
+	hasAnyAuth := githubOK || cfg.GitHubToken != ""
 	writeJSON(w, http.StatusOK, map[string]any{
-		"needsSetup": false,
+		"needsSetup": !hasAnyAuth,
 		"configured": map[string]any{
-			"github":   cfg.GitHubClientID != "",
+			"github":   githubOK,
+			"ghToken":  cfg.GitHubToken != "",
 			"database": cfg.DBHost != "",
-			"jwt":      cfg.JWTSecret != "change-me-in-production",
+			"jwt":      jwtOK,
 		},
 	})
+}
+
+// handleSetup accepts the setup wizard submission and applies configuration.
+func handleSetup(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AppName            string `json:"appName"`
+		AppURL             string `json:"appUrl"`
+		GitHubClientID     string `json:"githubClientId"`
+		GitHubClientSecret string `json:"githubClientSecret"`
+		AdminEmail         string `json:"adminEmail"`
+		AdminPassword      string `json:"adminPassword"`
+		GitHubPat          string `json:"githubPat"`
+		GitHubOwner        string `json:"githubOwner"`
+		GitHubRepo         string `json:"githubRepo"`
+		LLMProvider        string `json:"llmProvider"`
+		LLMApiKey          string `json:"llmApiKey"`
+		LLMModel           string `json:"llmModel"`
+		OllamaURL          string `json:"ollamaUrl"`
+		DiscordBotToken    string `json:"discordBotToken"`
+		DiscordGuildID     string `json:"discordGuildId"`
+		DiscordChannelID   string `json:"discordChannelId"`
+		TelegramBotToken   string `json:"telegramBotToken"`
+		TelegramChatID     string `json:"telegramChatId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+
+	// Apply configuration to running server
+	if body.GitHubClientID != "" {
+		cfg.GitHubClientID = body.GitHubClientID
+		os.Setenv("GITHUB_CLIENT_ID", body.GitHubClientID)
+	}
+	if body.GitHubClientSecret != "" {
+		cfg.GitHubClientSecret = body.GitHubClientSecret
+		os.Setenv("GITHUB_CLIENT_SECRET", body.GitHubClientSecret)
+	}
+	if body.AppURL != "" {
+		cfg.AppURL = body.AppURL
+		cfg.GitHubRedirectURL = body.AppURL + "/api/auth/github/callback"
+		os.Setenv("APP_URL", body.AppURL)
+	}
+	if body.GitHubPat != "" {
+		cfg.GitHubToken = body.GitHubPat
+		os.Setenv("GH_TOKEN", body.GitHubPat)
+	}
+
+	// Write to .env file so settings survive restarts
+	envLines := []string{}
+	if body.AppName != "" {
+		envLines = append(envLines, fmt.Sprintf("APP_NAME=%s", body.AppName))
+	}
+	if body.AppURL != "" {
+		envLines = append(envLines, fmt.Sprintf("APP_URL=%s", body.AppURL))
+	}
+	if body.GitHubClientID != "" {
+		envLines = append(envLines, fmt.Sprintf("GITHUB_CLIENT_ID=%s", body.GitHubClientID))
+	}
+	if body.GitHubClientSecret != "" {
+		envLines = append(envLines, fmt.Sprintf("GITHUB_CLIENT_SECRET=%s", body.GitHubClientSecret))
+	}
+	if body.GitHubPat != "" {
+		envLines = append(envLines, fmt.Sprintf("GH_TOKEN=%s", body.GitHubPat))
+	}
+	if body.LLMProvider != "" {
+		envLines = append(envLines, fmt.Sprintf("LLM_PROVIDER=%s", body.LLMProvider))
+	}
+	if body.LLMApiKey != "" {
+		keyVar := "ANTHROPIC_API_KEY"
+		switch body.LLMProvider {
+		case "openai":
+			keyVar = "OPENAI_API_KEY"
+		case "google", "gemini":
+			keyVar = "GOOGLE_API_KEY"
+		case "groq":
+			keyVar = "GROQ_API_KEY"
+		case "mistral":
+			keyVar = "MISTRAL_API_KEY"
+		case "ollama":
+			keyVar = "" // Ollama needs no key
+		}
+		if keyVar != "" {
+			envLines = append(envLines, fmt.Sprintf("%s=%s", keyVar, body.LLMApiKey))
+		}
+	}
+	if body.OllamaURL != "" {
+		envLines = append(envLines, fmt.Sprintf("OLLAMA_URL=%s", body.OllamaURL))
+	}
+
+	// Channel configs
+	if body.DiscordBotToken != "" {
+		envLines = append(envLines, fmt.Sprintf("DISCORD_BOT_TOKEN=%s", body.DiscordBotToken))
+		channelCfgMu.Lock()
+		channelCfg.Discord.BotToken = body.DiscordBotToken
+		channelCfg.Discord.Enabled = true
+		channelCfg.Discord.Status = "connected"
+		channelCfgMu.Unlock()
+		os.Setenv("DISCORD_BOT_TOKEN", body.DiscordBotToken)
+	}
+	if body.DiscordGuildID != "" {
+		envLines = append(envLines, fmt.Sprintf("DISCORD_GUILD_ID=%s", body.DiscordGuildID))
+		channelCfgMu.Lock()
+		channelCfg.Discord.GuildID = body.DiscordGuildID
+		channelCfgMu.Unlock()
+	}
+	if body.DiscordChannelID != "" {
+		envLines = append(envLines, fmt.Sprintf("DISCORD_CHANNEL_ID=%s", body.DiscordChannelID))
+		channelCfgMu.Lock()
+		channelCfg.Discord.ChannelID = body.DiscordChannelID
+		channelCfgMu.Unlock()
+	}
+	if body.TelegramBotToken != "" {
+		envLines = append(envLines, fmt.Sprintf("TELEGRAM_BOT_TOKEN=%s", body.TelegramBotToken))
+		channelCfgMu.Lock()
+		channelCfg.Telegram.BotToken = body.TelegramBotToken
+		channelCfg.Telegram.Enabled = true
+		channelCfg.Telegram.Status = "connected"
+		channelCfgMu.Unlock()
+		os.Setenv("TELEGRAM_BOT_TOKEN", body.TelegramBotToken)
+	}
+	if body.TelegramChatID != "" {
+		envLines = append(envLines, fmt.Sprintf("TELEGRAM_CHAT_ID=%s", body.TelegramChatID))
+		channelCfgMu.Lock()
+		channelCfg.Telegram.ChatID = body.TelegramChatID
+		channelCfgMu.Unlock()
+	}
+
+	if len(envLines) > 0 {
+		// Append to .env (don't overwrite existing entries)
+		envPath := ".env"
+		if _, err := os.Stat("../../.env"); err == nil {
+			envPath = "../../.env"
+		}
+		f, err := os.OpenFile(envPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err == nil {
+			f.WriteString("\n# Added by setup wizard\n")
+			for _, line := range envLines {
+				f.WriteString(line + "\n")
+			}
+			f.Close()
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Setup complete"})
 }
 
 func main() {
@@ -780,6 +944,15 @@ func main() {
 
 	cfg = loadConfig()
 
+	// Initialize PostgreSQL (falls back to in-memory if unavailable)
+	initDB(cfg)
+	if dbAvailable() {
+		seedDefaultAgents()
+	}
+
+	// Initialize channel configs from env
+	initChannels()
+
 	mux := http.NewServeMux()
 
 	// Public routes
@@ -787,6 +960,7 @@ func main() {
 	mux.HandleFunc("GET /health", handleHealthCheck)
 	mux.HandleFunc("GET /api/v1/health", handleHealthCheck)
 	mux.HandleFunc("GET /api/setup/status", handleSetupStatus)
+	mux.HandleFunc("POST /api/setup", handleSetup)
 	// GitHub OAuth endpoints
 	mux.HandleFunc("GET /api/auth/github", handleGitHubLogin)
 	mux.HandleFunc("GET /api/auth/github/login", handleGitHubLogin)
@@ -836,6 +1010,10 @@ func main() {
 	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", authMiddleware(handleContainerAction))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", authMiddleware(handleContainerLogs))
 	mux.HandleFunc("GET /api/v1/docker/images", authMiddleware(handleDockerImages))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/stats", authMiddleware(handleDockerContainerStats))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/inspect", authMiddleware(handleDockerContainerInspect))
+	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", authMiddleware(handleDockerDeleteContainer))
+	mux.HandleFunc("POST /api/v1/docker/images/pull", authMiddleware(handleDockerPullImage))
 	mux.HandleFunc("GET /api/v1/mcp", authMiddleware(handleMCPServers))
 	mux.HandleFunc("GET /api/v1/dashboard/stats", authMiddleware(handleDashboardStats))
 	mux.HandleFunc("GET /api/v1/dashboard/activity", authMiddleware(handleDashboardActivity))
@@ -849,6 +1027,194 @@ func main() {
 	mux.HandleFunc("GET /api/skills", authMiddleware(handleListSkills))
 	mux.HandleFunc("GET /api/skills/{id}", authMiddleware(handleGetSkill))
 
+	// Agent CRUD (v1)
+	mux.HandleFunc("GET /api/v1/agents", authMiddleware(handleListAgents))
+	mux.HandleFunc("POST /api/v1/agents", authMiddleware(handleCreateAgent))
+	mux.HandleFunc("GET /api/v1/agents/{id}", authMiddleware(handleGetAgentByID))
+	mux.HandleFunc("PATCH /api/v1/agents/{id}", authMiddleware(handleUpdateAgentByID))
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", authMiddleware(handleDeleteAgentByID))
+	mux.HandleFunc("POST /api/v1/agents/{id}/spawn", authMiddleware(handleSpawnAgent))
+	mux.HandleFunc("POST /api/v1/agents/{id}/stop", authMiddleware(handleStopAgent))
+	mux.HandleFunc("GET /api/v1/agents/{id}/status", authMiddleware(handleAgentStatus))
+	mux.HandleFunc("GET /api/v1/agents/{id}/logs", authMiddleware(handleAgentLogs))
+	mux.HandleFunc("POST /api/v1/agents/{id}/heartbeat", authMiddleware(handleAgentHeartbeat))
+	mux.HandleFunc("POST /api/v1/agents/{id}/clone", authMiddleware(handleCloneAgent))
+	mux.HandleFunc("GET /api/v1/agents/templates", authMiddleware(handleGetAgentTemplates))
+
+	// Jobs (v1)
+	mux.HandleFunc("GET /api/v1/jobs", authMiddleware(handleListJobs))
+	mux.HandleFunc("POST /api/v1/jobs", authMiddleware(handleCreateJob))
+	mux.HandleFunc("PATCH /api/v1/jobs/{id}", authMiddleware(handleUpdateJob))
+
+	// Workflows (v1)
+	mux.HandleFunc("GET /api/v1/workflows", authMiddleware(handleListWorkflows))
+	mux.HandleFunc("POST /api/v1/workflows", authMiddleware(handleCreateWorkflowAPI))
+	mux.HandleFunc("PATCH /api/v1/workflows/{id}", authMiddleware(handleUpdateWorkflowAPI))
+	mux.HandleFunc("DELETE /api/v1/workflows/{id}", authMiddleware(handleDeleteWorkflowAPI))
+
+	// Non-v1 aliases for frontend API calls (frontend uses /api/X, not /api/v1/X)
+	// Dashboard
+	mux.HandleFunc("GET /api/dashboard/stats", authMiddleware(handleDashboardStats))
+	mux.HandleFunc("GET /api/dashboard/activity", authMiddleware(handleDashboardActivity))
+	mux.HandleFunc("GET /api/dashboard/health", authMiddleware(handleDashboardHealth))
+	// Docker
+	mux.HandleFunc("GET /api/docker/containers", authMiddleware(handleDockerContainers))
+	mux.HandleFunc("POST /api/docker/containers", authMiddleware(handleCreateContainer))
+	mux.HandleFunc("POST /api/docker/containers/{id}/{action}", authMiddleware(handleContainerAction))
+	mux.HandleFunc("GET /api/docker/containers/{id}/logs", authMiddleware(handleContainerLogs))
+	mux.HandleFunc("GET /api/docker/images", authMiddleware(handleDockerImages))
+	// MCP
+	mux.HandleFunc("GET /api/mcp", authMiddleware(handleMCPServers))
+	mux.HandleFunc("GET /api/mcp/servers", authMiddleware(handleMCPServers))
+	// Enhanced Docker endpoints
+	mux.HandleFunc("GET /api/docker/containers/{id}/stats", authMiddleware(handleDockerContainerStats))
+	mux.HandleFunc("GET /api/docker/containers/{id}/inspect", authMiddleware(handleDockerContainerInspect))
+	mux.HandleFunc("DELETE /api/docker/containers/{id}", authMiddleware(handleDockerDeleteContainer))
+	mux.HandleFunc("POST /api/docker/images/pull", authMiddleware(handleDockerPullImage))
+	// VPS / C2 / Implants / Playbooks
+	mux.HandleFunc("GET /api/vps", authMiddleware(handleListVPSNodes))
+	mux.HandleFunc("POST /api/vps", authMiddleware(handleCreateVPSNode))
+	mux.HandleFunc("GET /api/c2", authMiddleware(handleListC2Servers))
+	mux.HandleFunc("POST /api/c2", authMiddleware(handleCreateC2Server))
+	mux.HandleFunc("GET /api/implants", authMiddleware(handleListImplants))
+	mux.HandleFunc("POST /api/implants", authMiddleware(handleCreateImplant))
+	mux.HandleFunc("GET /api/playbooks", authMiddleware(handleListPlaybooks))
+	mux.HandleFunc("GET /api/playbooks/{id}", authMiddleware(handleGetPlaybook))
+	// Proxies
+	mux.HandleFunc("GET /api/security/proxies", authMiddleware(handleListProxies))
+	mux.HandleFunc("POST /api/security/proxies", authMiddleware(handleAddProxy))
+	mux.HandleFunc("POST /api/security/proxies/test", authMiddleware(handleTestProxyChain))
+	mux.HandleFunc("PUT /api/security/proxies/chain", authMiddleware(handleUpdateProxyChainOrder))
+	// Auth (non-v1)
+	mux.HandleFunc("GET /api/auth/sessions", authMiddleware(handleListSessions))
+	mux.HandleFunc("GET /api/auth/audit", authMiddleware(handleGetAuditLog))
+	mux.HandleFunc("GET /api/auth/apikeys", authMiddleware(handleListApiKeys))
+	mux.HandleFunc("POST /api/auth/apikeys", authMiddleware(handleCreateApiKey))
+	// Agents (non-v1)
+	mux.HandleFunc("GET /api/agents", authMiddleware(handleListAgents))
+	mux.HandleFunc("POST /api/agents", authMiddleware(handleCreateAgent))
+	mux.HandleFunc("GET /api/agents/{id}", authMiddleware(handleGetAgentByID))
+	mux.HandleFunc("PATCH /api/agents/{id}", authMiddleware(handleUpdateAgentByID))
+	mux.HandleFunc("DELETE /api/agents/{id}", authMiddleware(handleDeleteAgentByID))
+	mux.HandleFunc("POST /api/agents/{id}/spawn", authMiddleware(handleSpawnAgent))
+	mux.HandleFunc("POST /api/agents/{id}/stop", authMiddleware(handleStopAgent))
+	mux.HandleFunc("GET /api/agents/{id}/status", authMiddleware(handleAgentStatus))
+	mux.HandleFunc("GET /api/agents/{id}/logs", authMiddleware(handleAgentLogs))
+	mux.HandleFunc("POST /api/agents/{id}/heartbeat", authMiddleware(handleAgentHeartbeat))
+	mux.HandleFunc("POST /api/agents/{id}/clone", authMiddleware(handleCloneAgent))
+	mux.HandleFunc("GET /api/agents/templates", authMiddleware(handleGetAgentTemplates))
+	// Jobs (non-v1)
+	mux.HandleFunc("GET /api/jobs", authMiddleware(handleListJobs))
+	mux.HandleFunc("POST /api/jobs", authMiddleware(handleCreateJob))
+	mux.HandleFunc("PATCH /api/jobs/{id}", authMiddleware(handleUpdateJob))
+	// Workflows (non-v1)
+	mux.HandleFunc("GET /api/workflows", authMiddleware(handleListWorkflows))
+	mux.HandleFunc("POST /api/workflows", authMiddleware(handleCreateWorkflowAPI))
+	mux.HandleFunc("PATCH /api/workflows/{id}", authMiddleware(handleUpdateWorkflowAPI))
+	mux.HandleFunc("DELETE /api/workflows/{id}", authMiddleware(handleDeleteWorkflowAPI))
+
+	// OpenClaw Integration
+	mux.HandleFunc("GET /api/openclaw/status", authMiddleware(handleOpenClawStatus))
+	mux.HandleFunc("POST /api/openclaw/webhook", handleOpenClawWebhook) // No auth — external webhook
+	mux.HandleFunc("POST /api/openclaw/command", authMiddleware(handleOpenClawCommand))
+	mux.HandleFunc("GET /api/openclaw/skills", authMiddleware(handleOpenClawSkills))
+	mux.HandleFunc("POST /api/openclaw/connect", authMiddleware(handleOpenClawConnect))
+	mux.HandleFunc("GET /api/openclaw/events", authMiddleware(handleOpenClawEvents))
+	mux.HandleFunc("POST /api/openclaw/ping", handleOpenClawPing) // No auth — gateway keepalive
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/openclaw/status", authMiddleware(handleOpenClawStatus))
+	mux.HandleFunc("POST /api/v1/openclaw/webhook", handleOpenClawWebhook)
+	mux.HandleFunc("POST /api/v1/openclaw/command", authMiddleware(handleOpenClawCommand))
+	mux.HandleFunc("GET /api/v1/openclaw/skills", authMiddleware(handleOpenClawSkills))
+	mux.HandleFunc("POST /api/v1/openclaw/connect", authMiddleware(handleOpenClawConnect))
+	mux.HandleFunc("GET /api/v1/openclaw/events", authMiddleware(handleOpenClawEvents))
+	mux.HandleFunc("POST /api/v1/openclaw/ping", handleOpenClawPing)
+
+	// Agent Communication Bus
+	mux.HandleFunc("POST /api/agents/broadcast", authMiddleware(handleAgentBroadcast))
+	mux.HandleFunc("GET /api/agents/messages", authMiddleware(handleGetAgentMessages))
+	mux.HandleFunc("GET /api/agents/context", authMiddleware(handleGetSharedContext))
+	mux.HandleFunc("POST /api/v1/agents/broadcast", authMiddleware(handleAgentBroadcast))
+	mux.HandleFunc("GET /api/v1/agents/messages", authMiddleware(handleGetAgentMessages))
+	mux.HandleFunc("GET /api/v1/agents/context", authMiddleware(handleGetSharedContext))
+
+	// Channel User Context & Conversations
+	mux.HandleFunc("POST /api/channels/user-context", authMiddleware(handleUpdateUserContext))
+	mux.HandleFunc("GET /api/channels/user-context", authMiddleware(handleGetUserContext))
+	mux.HandleFunc("GET /api/channels/conversations", authMiddleware(handleGetConversations))
+	mux.HandleFunc("POST /api/channels/relay", authMiddleware(handleRelayMessage))
+	mux.HandleFunc("POST /api/v1/channels/user-context", authMiddleware(handleUpdateUserContext))
+	mux.HandleFunc("GET /api/v1/channels/user-context", authMiddleware(handleGetUserContext))
+	mux.HandleFunc("GET /api/v1/channels/conversations", authMiddleware(handleGetConversations))
+	mux.HandleFunc("POST /api/v1/channels/relay", authMiddleware(handleRelayMessage))
+
+	// Channels (Discord, Telegram, Slack)
+	mux.HandleFunc("GET /api/channels", authMiddleware(handleListChannels))
+	mux.HandleFunc("POST /api/channels/discord", authMiddleware(handleConfigureDiscord))
+	mux.HandleFunc("POST /api/channels/telegram", authMiddleware(handleConfigureTelegram))
+	mux.HandleFunc("POST /api/channels/slack", authMiddleware(handleConfigureSlack))
+	mux.HandleFunc("POST /api/channels/{channel}/test", authMiddleware(handleTestChannel))
+	mux.HandleFunc("POST /api/channels/discord/webhook", handleDiscordWebhook)   // No auth — external
+	mux.HandleFunc("POST /api/channels/telegram/webhook", handleTelegramWebhook) // No auth — external
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/channels", authMiddleware(handleListChannels))
+	mux.HandleFunc("POST /api/v1/channels/discord", authMiddleware(handleConfigureDiscord))
+	mux.HandleFunc("POST /api/v1/channels/telegram", authMiddleware(handleConfigureTelegram))
+	mux.HandleFunc("POST /api/v1/channels/slack", authMiddleware(handleConfigureSlack))
+	mux.HandleFunc("POST /api/v1/channels/{channel}/test", authMiddleware(handleTestChannel))
+
+	// ── Browser Manager ──────────────────────────────────────────────────
+	mux.HandleFunc("GET /api/browsers/sessions", authMiddleware(handleBrowserSessions))
+	mux.HandleFunc("GET /api/browsers/agents", authMiddleware(handleBrowserAgentSessions))
+	mux.HandleFunc("GET /api/browsers/stats", authMiddleware(handleBrowserStats))
+	mux.HandleFunc("POST /api/browser/sessions", authMiddleware(handleCreateBrowserSession))
+	mux.HandleFunc("DELETE /api/browser/sessions/{id}", authMiddleware(handleCloseBrowserSession))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/navigate", authMiddleware(handleBrowserNavigate))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/screenshot", authMiddleware(handleBrowserScreenshot))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/execute", authMiddleware(handleBrowserExecute))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/click", authMiddleware(handleBrowserClick))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/type", authMiddleware(handleBrowserType))
+	mux.HandleFunc("GET /api/browser/sessions/{id}/console", authMiddleware(handleBrowserConsole))
+	mux.HandleFunc("GET /api/browser/sessions/{id}/network", authMiddleware(handleBrowserNetwork))
+	mux.HandleFunc("POST /api/browser/sessions/{id}/clear", authMiddleware(handleBrowserClear))
+	mux.HandleFunc("GET /api/browser/sessions/{id}/elements", authMiddleware(handleBrowserElements))
+	mux.HandleFunc("GET /api/browser/sessions/{id}/source", authMiddleware(handleBrowserSource))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/browsers/sessions", authMiddleware(handleBrowserSessions))
+	mux.HandleFunc("GET /api/v1/browsers/agents", authMiddleware(handleBrowserAgentSessions))
+	mux.HandleFunc("GET /api/v1/browsers/stats", authMiddleware(handleBrowserStats))
+	mux.HandleFunc("POST /api/v1/browser/sessions", authMiddleware(handleCreateBrowserSession))
+	mux.HandleFunc("DELETE /api/v1/browser/sessions/{id}", authMiddleware(handleCloseBrowserSession))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/navigate", authMiddleware(handleBrowserNavigate))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/screenshot", authMiddleware(handleBrowserScreenshot))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/execute", authMiddleware(handleBrowserExecute))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/click", authMiddleware(handleBrowserClick))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/type", authMiddleware(handleBrowserType))
+	mux.HandleFunc("GET /api/v1/browser/sessions/{id}/console", authMiddleware(handleBrowserConsole))
+	mux.HandleFunc("GET /api/v1/browser/sessions/{id}/network", authMiddleware(handleBrowserNetwork))
+	mux.HandleFunc("POST /api/v1/browser/sessions/{id}/clear", authMiddleware(handleBrowserClear))
+	mux.HandleFunc("GET /api/v1/browser/sessions/{id}/elements", authMiddleware(handleBrowserElements))
+	mux.HandleFunc("GET /api/v1/browser/sessions/{id}/source", authMiddleware(handleBrowserSource))
+
+	// ── Themes ──────────────────────────────────────────────────────────
+	mux.HandleFunc("GET /api/themes", authMiddleware(handleGetThemes))
+	mux.HandleFunc("POST /api/themes", authMiddleware(handleSaveTheme))
+	mux.HandleFunc("DELETE /api/themes/{id}", authMiddleware(handleDeleteTheme))
+	mux.HandleFunc("GET /api/themes/agent", authMiddleware(handleGetAgentThemes))
+	mux.HandleFunc("POST /api/themes/agent", authMiddleware(handleSetAgentTheme))
+	mux.HandleFunc("GET /api/themes/schedule", authMiddleware(handleGetThemeSchedule))
+	mux.HandleFunc("POST /api/themes/schedule", authMiddleware(handleSetThemeSchedule))
+	mux.HandleFunc("POST /api/themes/generate", authMiddleware(handleGenerateTheme))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/themes", authMiddleware(handleGetThemes))
+	mux.HandleFunc("POST /api/v1/themes", authMiddleware(handleSaveTheme))
+	mux.HandleFunc("DELETE /api/v1/themes/{id}", authMiddleware(handleDeleteTheme))
+	mux.HandleFunc("GET /api/v1/themes/agent", authMiddleware(handleGetAgentThemes))
+	mux.HandleFunc("POST /api/v1/themes/agent", authMiddleware(handleSetAgentTheme))
+	mux.HandleFunc("GET /api/v1/themes/schedule", authMiddleware(handleGetThemeSchedule))
+	mux.HandleFunc("POST /api/v1/themes/schedule", authMiddleware(handleSetThemeSchedule))
+	mux.HandleFunc("POST /api/v1/themes/generate", authMiddleware(handleGenerateTheme))
+
 	log.Printf("Server starting on :%s\n", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, corsMiddleware(mux)))
 }
@@ -860,22 +1226,24 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	var checks []interface{}
 
-	// Check database connection (simulated)
-	dbStatus := "ok"
-	dbFix := ""
-	if cfg.DBHost == "localhost" && cfg.DBPort == "5432" { // Example check
-		dbStatus = "warning"
-		dbFix = "Configure a production database in .env"
+	// Check database connection (real ping)
+	dbStatus := "error"
+	dbFix := "PostgreSQL not connected"
+	if dbAvailable() {
+		if err := db.Ping(); err == nil {
+			dbStatus = "connected"
+			dbFix = ""
+		} else {
+			dbFix = "PostgreSQL ping failed: " + err.Error()
+		}
+	} else {
+		dbFix = "Set DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD in .env"
 	}
-	checks = append(checks, map[string]string{"id": "database", "name": "Database", "status": dbStatus, "fix": dbFix})
+	checks = append(checks, map[string]string{"id": "database", "name": "PostgreSQL", "status": dbStatus, "fix": dbFix})
 
-	// Check Redis connection (simulated)
-	redisStatus := "ok"
-	redisFix := ""
-	if cfg.RedisHost == "localhost" && cfg.RedisPort == "6379" { // Example check
-		redisStatus = "warning"
-		redisFix = "Configure a production Redis in .env"
-	}
+	// Check Redis connection (still simulated — full Redis client not wired yet)
+	redisStatus := "warning"
+	redisFix := "Redis client not connected yet"
 	checks = append(checks, map[string]string{"id": "redis", "name": "Redis", "status": redisStatus, "fix": redisFix})
 
 	// Check Docker socket
@@ -952,13 +1320,22 @@ func handleListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if dbAvailable() {
+		dbSessions, err := dbListSessions(userID)
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "sessions": dbSessions})
+			return
+		}
+		log.Printf("[Sessions] DB error: %v, falling back to memory", err)
+	}
+
+	// In-memory fallback
 	userSessions := []Session{}
 	for _, session := range sessions {
 		if session.UserID == userID {
 			userSessions = append(userSessions, session)
 		}
 	}
-
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "sessions": userSessions})
 }
 
@@ -972,6 +1349,17 @@ func handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := r.PathValue("id")
 
+	if dbAvailable() {
+		if err := dbRevokeSession(sessionID, userID); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": err.Error()})
+			return
+		}
+		dbAddAuditEntry(userID, "session_revoked", "session", sessionID, nil, r.RemoteAddr)
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Session revoked"})
+		return
+	}
+
+	// In-memory fallback
 	if session, ok := sessions[sessionID]; ok && session.UserID == userID {
 		delete(sessions, sessionID)
 		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Session Revoked", Details: fmt.Sprintf("Session ID: %s", sessionID), Timestamp: time.Now().Unix()})
@@ -990,13 +1378,22 @@ func handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if dbAvailable() {
+		entries, err := dbGetAuditLog(userID, 100)
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "audit_log": entries})
+			return
+		}
+		log.Printf("[Audit] DB error: %v, falling back", err)
+	}
+
+	// In-memory fallback
 	userAuditLog := []AuditLogEntry{}
 	for _, entry := range auditLog {
 		if entry.UserID == userID {
 			userAuditLog = append(userAuditLog, entry)
 		}
 	}
-
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "audit_log": userAuditLog})
 }
 
@@ -1371,15 +1768,41 @@ func generateRandomString(length int) string {
 // ---- Dashboard ----
 
 func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
+	if dbAvailable() {
+		stats, err := dbGetDashboardStats()
+		if err == nil {
+			writeJSON(w, http.StatusOK, stats)
+			return
+		}
+		log.Printf("[Dashboard] DB stats error: %v, falling back", err)
+	}
+	// Fallback for no-DB mode — include real browser counts
+	browserSessionsMu.RLock()
+	totalBrowsers := len(browserSessions)
+	activeBrowsers := 0
+	for _, s := range browserSessions {
+		if s.Status == "active" {
+			activeBrowsers++
+		}
+	}
+	browserSessionsMu.RUnlock()
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"agents":     map[string]int{"total": 0, "online": 0, "offline": 0, "busy": 0},
 		"containers": map[string]int{"total": 0, "running": 0, "stopped": 0},
-		"browsers":   map[string]int{"total": 0, "active": 0},
+		"browsers":   map[string]int{"total": totalBrowsers, "active": activeBrowsers},
 		"workflows":  map[string]int{"total": 0, "running": 0, "completed": 0, "failed": 0},
 	})
 }
 
 func handleDashboardActivity(w http.ResponseWriter, r *http.Request) {
+	if dbAvailable() {
+		activity, err := dbGetRecentActivity(20)
+		if err == nil {
+			writeJSON(w, http.StatusOK, activity)
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, []interface{}{})
 }
 
