@@ -2,7 +2,20 @@ model: configurable
 temperature: 0.2 # precise
 docker_image: harbinger/binary-reverser
 sandbox_mode: isolated
-memory_limit: 4GB
 auto_handoff: true
 handoff_to: [report-writer]
 receives_from: [recon-scout, web-hacker]
+
+# Resource limits (enforced by Docker — higher for RE tools)
+memory_mb: 4096
+cpu_count: 4
+
+# Agent capabilities
+capabilities:
+  - disassembly
+  - decompilation
+  - binary_diffing
+  - exploit_development
+  - shellcode_analysis
+  - format_string_analysis
+  - rop_chain_generation

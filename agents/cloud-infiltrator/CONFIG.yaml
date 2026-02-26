@@ -6,3 +6,17 @@ stealth_mode: true
 cloud_providers: [aws, gcp, azure]
 auto_handoff: true
 handoff_to: [report-writer, osint-detective]
+
+# Resource limits (enforced by Docker)
+memory_mb: 2048
+cpu_count: 2
+
+# Agent capabilities
+capabilities:
+  - aws_enumeration
+  - gcp_enumeration
+  - azure_enumeration
+  - s3_bucket_scanning
+  - iam_analysis
+  - cloud_metadata_exploitation
+  - serverless_analysis

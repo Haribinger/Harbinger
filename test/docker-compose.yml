@@ -23,7 +23,7 @@ services:
 
   event-handler:
     container_name: harbinger-event-handler
-    image: ${EVENT_HANDLER_IMAGE_URL:-stephengpope/harbinger:event-handler-${HARBINGER_VERSION:-latest}}
+    image: ${EVENT_HANDLER_IMAGE_URL:-stephengpope/harbinger:event-handler-latest}
     volumes:
       - .:/app
       - /app/node_modules

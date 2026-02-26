@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { APIResponse } from '../types'
+import { API_BASE } from '../config'
 
 interface User {
   id: string
@@ -40,8 +41,7 @@ interface AuthState {
   loginWithGHToken: (token?: string) => Promise<{ ok: boolean; jwt?: string; error?: string } | null>
 }
 
-// Use relative URL so Vite proxy (dev) and nginx (prod) both route /api correctly
-const API_BASE = (import.meta as any).env?.VITE_API_URL || ''
+// API_BASE imported from config.ts — empty string means relative URLs (proxy handles routing)
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined'

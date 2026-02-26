@@ -34,7 +34,7 @@ LABEL description="Harbinger Frontend - React SPA"
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# nginx config for SPA routing (handle client-side routes)
+# nginx config for SPA routing + API proxy to backend
 RUN printf 'server {\n\
     listen 80;\n\
     server_name _;\n\
@@ -44,6 +44,55 @@ RUN printf 'server {\n\
     # Compression\n\
     gzip on;\n\
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;\n\
+\n\
+    # Proxy /api requests to Go backend\n\
+    location /api/ {\n\
+        proxy_pass http://backend:8080;\n\
+        proxy_set_header Host $host;\n\
+        proxy_set_header X-Real-IP $remote_addr;\n\
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n\
+        proxy_connect_timeout 30s;\n\
+        proxy_read_timeout 300s;\n\
+    }\n\
+\n\
+    # Proxy /health to backend\n\
+    location = /health {\n\
+        proxy_pass http://backend:8080;\n\
+        proxy_set_header Host $host;\n\
+    }\n\
+\n\
+    # WebSocket proxy\n\
+    location /ws {\n\
+        proxy_pass http://backend:8080;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header Upgrade $http_upgrade;\n\
+        proxy_set_header Connection "upgrade";\n\
+        proxy_set_header Host $host;\n\
+        proxy_read_timeout 3600s;\n\
+    }\n\
+\n\
+    # MCP plugin proxies\n\
+    location /mcp/hexstrike/ {\n\
+        rewrite ^/mcp/hexstrike/(.*) /$1 break;\n\
+        proxy_pass http://hexstrike:3001;\n\
+        proxy_read_timeout 600s;\n\
+    }\n\
+    location /mcp/pentagi/ {\n\
+        rewrite ^/mcp/pentagi/(.*) /$1 break;\n\
+        proxy_pass http://pentagi:3002;\n\
+        proxy_read_timeout 600s;\n\
+    }\n\
+    location /mcp/ui/ {\n\
+        rewrite ^/mcp/ui/(.*) /$1 break;\n\
+        proxy_pass http://mcp-ui:3003;\n\
+        proxy_buffering off;\n\
+    }\n\
+    location /api/redteam/ {\n\
+        rewrite ^/api/redteam/(.*) /api/$1 break;\n\
+        proxy_pass http://redteam:3004;\n\
+        proxy_read_timeout 600s;\n\
+        proxy_buffering off;\n\
+    }\n\
 \n\
     # SPA routing - serve index.html for all routes\n\
     location / {\n\

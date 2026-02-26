@@ -7,3 +7,18 @@ payload_wordlists: configurable
 auto_handoff: true
 handoff_to: [report-writer]
 receives_from: [recon-scout]
+
+# Resource limits (enforced by Docker)
+memory_mb: 4096
+cpu_count: 4
+
+# Agent capabilities
+capabilities:
+  - xss_testing
+  - sqli_testing
+  - ssrf_testing
+  - idor_testing
+  - fuzzing
+  - nuclei_scanning
+  - parameter_discovery
+  - authentication_bypass

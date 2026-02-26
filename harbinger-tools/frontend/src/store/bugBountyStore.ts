@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { bugBountyDataApi } from '../api/bugbounty'
-import type { BugBountyProgram, BugBountyData } from '../api/bugbounty'
+import type { BugBountyProgram, DataSource } from '../api/bugbounty'
+import { DEFAULT_DATA_SOURCES } from '../api/bugbounty'
+
+// BugBounty store: normalized bug bounty dataset (programs + domains/wildcards) used for
+// Settings and analytics. It complements `bountyHubStore`, which drives the BountyHub UI.
 
 interface BugBountyState {
   // Data
@@ -9,6 +13,9 @@ interface BugBountyState {
   domains: string[]
   wildcards: string[]
   lastUpdated: string | null
+
+  // Data Sources
+  dataSources: DataSource[]
 
   // UI State
   selectedPlatform: string | null
@@ -26,6 +33,12 @@ interface BugBountyState {
   setSearchQuery: (query: string) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+
+  // Data Source Actions
+  addDataSource: (source: DataSource) => void
+  removeDataSource: (id: string) => void
+  toggleDataSource: (id: string) => void
+  updateDataSource: (id: string, updates: Partial<DataSource>) => void
 
   // API Actions
   fetchAll: () => Promise<void>
@@ -45,6 +58,9 @@ export const useBugBountyStore = create<BugBountyState>()(
       wildcards: [],
       lastUpdated: null,
 
+      // Data Sources
+      dataSources: DEFAULT_DATA_SOURCES,
+
       // UI State
       selectedPlatform: null,
       selectedProgram: null,
@@ -62,22 +78,46 @@ export const useBugBountyStore = create<BugBountyState>()(
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
 
+      // Data Source Actions
+      addDataSource: (source) => set((state) => ({
+        dataSources: [...state.dataSources, source],
+      })),
+      removeDataSource: (id) => set((state) => ({
+        dataSources: state.dataSources.filter((s) => s.id !== id),
+      })),
+      toggleDataSource: (id) => set((state) => ({
+        dataSources: state.dataSources.map((s) =>
+          s.id === id ? { ...s, enabled: !s.enabled } : s
+        ),
+      })),
+      updateDataSource: (id, updates) => set((state) => ({
+        dataSources: state.dataSources.map((s) =>
+          s.id === id ? { ...s, ...updates } : s
+        ),
+      })),
+
       // API Actions
       fetchAll: async () => {
         set({ isLoading: true, error: null })
         try {
-          const data = await bugBountyDataApi.fetchAll()
+          const { dataSources } = get()
+          const data = await bugBountyDataApi.fetchAll(dataSources)
+          // Update lastSynced on active sources
+          const updatedSources = dataSources.map((s) =>
+            s.enabled ? { ...s, lastSynced: new Date().toISOString() } : s
+          )
           set({
             programs: data.programs,
             domains: data.domains,
             wildcards: data.wildcards,
             lastUpdated: data.lastUpdated,
+            dataSources: updatedSources,
             isLoading: false,
           })
         } catch (error) {
           console.error('Failed to fetch bug bounty data:', error)
           set({
-            error: 'Failed to fetch bug bounty data',
+            error: error instanceof Error ? error.message : 'Failed to fetch bug bounty data',
             isLoading: false,
           })
         }
@@ -95,11 +135,9 @@ export const useBugBountyStore = create<BugBountyState>()(
       },
 
       search: async (query) => {
-        if (!query) {
-          const { programs } = get()
-          return programs
-        }
-        return await bugBountyDataApi.search(query)
+        const { programs } = get()
+        if (!query) return programs
+        return bugBountyDataApi.search(query, programs)
       },
 
       // Stats
@@ -125,6 +163,7 @@ export const useBugBountyStore = create<BugBountyState>()(
         domains: state.domains,
         wildcards: state.wildcards,
         lastUpdated: state.lastUpdated,
+        dataSources: state.dataSources,
       }),
     }
   )

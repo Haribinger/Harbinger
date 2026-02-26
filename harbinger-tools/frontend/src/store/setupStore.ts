@@ -1,6 +1,5 @@
 import { create } from 'zustand'
-
-const API_BASE = (import.meta as any).env?.VITE_API_URL || ''
+import { API_BASE } from '../config'
 
 type LLMProvider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'gemini' | 'mistral' | 'google' | 'custom'
 
@@ -160,7 +159,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
           s.adminPassword.length >= 8 &&
           s.adminPassword === s.adminPasswordConfirm
         )
-      case 6: return true // Review
+      case 6: return true // Review — warn but don't block (user may have GH_TOKEN in env)
       default: return false
     }
   },
@@ -176,6 +175,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
         if (s.adminPassword.length < 8) return 'Password must be at least 8 characters'
         if (s.adminPassword !== s.adminPasswordConfirm) return 'Passwords do not match'
         return null
+      case 6: return null // Warning shown in UI but doesn't block deploy
       default:
         return null
     }
@@ -236,7 +236,8 @@ export const useSetupStore = create<SetupState>((set, get) => ({
 
   checkNeedsSetup: async () => {
     try {
-      const response = await fetch('/api/setup/status')
+      const url = `${API_BASE}/api/setup/status`
+      const response = await fetch(url)
       const data = await response.json()
       return data.needsSetup === true
     } catch {

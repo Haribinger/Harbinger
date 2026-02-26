@@ -75,7 +75,10 @@ function BrowserManager() {
 
   const loadStats = async () => {
     try {
-      const res = await fetch('/api/browsers/stats')
+      const token = localStorage.getItem('harbinger-token')
+      const res = await fetch('/api/browsers/stats', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       if (res.ok) {
         const data = await res.json()
         setBrowserStats(data)

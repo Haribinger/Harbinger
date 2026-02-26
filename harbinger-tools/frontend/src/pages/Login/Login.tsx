@@ -72,6 +72,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   token_generation_failed: 'Session token generation failed',
   no_code: 'No authorization code received',
   access_denied: 'Access denied by GitHub user',
+  invalid_state: 'OAuth state mismatch — possible CSRF attempt. Try again.',
 }
 
 const TABS: { id: Tab; label: string }[] = [

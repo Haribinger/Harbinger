@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 // ============================================================================
@@ -19,7 +18,7 @@ func handleListAgents(w http.ResponseWriter, r *http.Request) {
 	if dbAvailable() {
 		agents, err := dbListAgents()
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			internalError(w, "failed to list agents", err)
 			return
 		}
 		// Enrich with container status
@@ -86,7 +85,7 @@ func handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 
 	agent, err := dbCreateAgent(body.Name, body.Type, body.Description, body.Capabilities, configJSON)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 
@@ -311,7 +310,7 @@ func handleCloneAgent(w http.ResponseWriter, r *http.Request) {
 	// Create clone
 	clone, err := dbCreateAgent(body.Name, source.Type, source.Description, source.Capabilities, source.Config)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 
@@ -402,7 +401,7 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("/v1.41/containers/create?name=%s", containerName),
 		bytes.NewReader(configJSON))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "failed to create container: " + err.Error()})
+		internalError(w, "failed to create container", err)
 		return
 	}
 	defer createResp.Body.Close()
@@ -424,7 +423,7 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 	startResp, err := dockerAPIRequest("POST",
 		fmt.Sprintf("/v1.41/containers/%s/start", createResult.ID), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "failed to start container: " + err.Error()})
+		internalError(w, "failed to start container", err)
 		return
 	}
 	defer startResp.Body.Close()
@@ -550,7 +549,7 @@ func handleAgentLogs(w http.ResponseWriter, r *http.Request) {
 	endpoint := fmt.Sprintf("/v1.41/containers/%s/logs?stdout=true&stderr=true&tail=%s&timestamps=true", cid, tail)
 	resp, err := dockerAPIRequest("GET", endpoint, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -621,7 +620,7 @@ func handleDockerContainerStats(w http.ResponseWriter, r *http.Request) {
 	resp, err := dockerAPIRequest("GET",
 		fmt.Sprintf("/v1.41/containers/%s/stats?stream=false", id), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -642,7 +641,7 @@ func handleDockerContainerInspect(w http.ResponseWriter, r *http.Request) {
 	resp, err := dockerAPIRequest("GET",
 		fmt.Sprintf("/v1.41/containers/%s/json", id), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -670,7 +669,7 @@ func handleDockerPullImage(w http.ResponseWriter, r *http.Request) {
 	resp, err := dockerAPIRequest("POST",
 		fmt.Sprintf("/v1.41/images/create?fromImage=%s", body.Image), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -691,7 +690,7 @@ func handleDockerDeleteContainer(w http.ResponseWriter, r *http.Request) {
 	resp, err := dockerAPIRequest("DELETE",
 		fmt.Sprintf("/v1.41/containers/%s?force=true&v=true", id), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -721,7 +720,7 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	jobs, err := dbListJobs(agentID, limit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, jobs)
@@ -749,7 +748,7 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	userID, _ := getUserIDFromContext(r.Context())
 	job, err := dbCreateJob(body.AgentID, body.Name, body.Type, body.Params, userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, job)
@@ -771,7 +770,7 @@ func handleUpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := dbUpdateJobStatus(id, body.Status, body.Result, body.Error); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -788,7 +787,7 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	}
 	workflows, err := dbListWorkflows()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflows)
@@ -815,7 +814,7 @@ func handleCreateWorkflowAPI(w http.ResponseWriter, r *http.Request) {
 	userID, _ := getUserIDFromContext(r.Context())
 	wf, err := dbCreateWorkflow(body.Name, body.Description, body.Definition, userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		internalError(w, "operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, wf)
@@ -855,9 +854,3 @@ func handleDeleteWorkflowAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 // Ensure unused imports don't cause compile errors
-var _ = bytes.NewReader
-var _ = strconv.Atoi
-var _ = time.Now
-var _ = log.Println
-var _ = fmt.Sprintf
-var _ = io.ReadAll

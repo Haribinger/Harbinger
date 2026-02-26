@@ -1,23 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import toast from 'react-hot-toast'
-
-// Type declaration for (import.meta as any).env
-interface ImportMetaEnv {
-  VITE_API_URL?: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
-}
-
-const API_BASE_URL = (import.meta as any).env.VITE_API_URL || ''
+import { API_BASE } from '../config'
 
 class ApiClient {
   private client: AxiosInstance
 
   constructor() {
     this.client = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: API_BASE,
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',

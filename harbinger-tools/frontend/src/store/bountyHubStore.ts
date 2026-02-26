@@ -1,5 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { bugBountyDataApi } from '../api/bugbounty'
+
+// BountyHub store: high-level bug bounty programs and hunt queue used by the BountyHub UI.
+// This focuses on program metadata and syncing targets from Harbinger backend / bounty-targets-data.
+// Detailed target inventory and analytics live in `bugBountyStore`, which is used in Settings.
 
 interface BountyProgram {
   id: string
@@ -82,14 +87,13 @@ export const useBountyHubStore = create<BountyHubState>()(
       syncTargets: async () => {
         set({ isLoading: true, error: null })
         try {
-          // Fetch from backend API which aggregates bounty-targets-data
+          // Try backend API first
+          const token = localStorage.getItem('harbinger-token')
           const res = await fetch('/api/bounty/programs', {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}`,
-            },
-          })
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }).catch(() => null)
 
-          if (res.ok) {
+          if (res?.ok) {
             const data = await res.json()
             const programs: BountyProgram[] = Array.isArray(data)
               ? data
@@ -104,53 +108,39 @@ export const useBountyHubStore = create<BountyHubState>()(
               },
               isLoading: false,
             })
-          } else {
-            // Try GitHub bounty-targets-data directly
-            const ghRes = await fetch(
-              'https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/main/data/hackerone_data.json'
-            )
-
-            if (ghRes.ok) {
-              const rawData = await ghRes.json()
-              const programs: BountyProgram[] = (Array.isArray(rawData) ? rawData : [])
-                .slice(0, 200) // Cap at 200 for performance
-                .map((entry: any, idx: number) => ({
-                  id: `h1-${idx}`,
-                  name: entry.name || entry.handle || `Program ${idx}`,
-                  platform: 'HackerOne' as const,
-                  scopeDomains: Array.isArray(entry.targets?.in_scope)
-                    ? entry.targets.in_scope
-                        .filter((t: any) => t.asset_type === 'URL' || t.asset_type === 'WILDCARD')
-                        .map((t: any) => t.asset_identifier)
-                        .slice(0, 20)
-                    : [],
-                  outOfScope: Array.isArray(entry.targets?.out_of_scope)
-                    ? entry.targets.out_of_scope.map((t: any) => t.asset_identifier).slice(0, 10)
-                    : [],
-                  payoutMin: entry.min_bounty ?? 0,
-                  payoutMax: entry.max_bounty ?? 0,
-                  type: (entry.min_bounty > 0 ? 'Paid' : 'VDP') as 'Paid' | 'VDP',
-                  status: 'active' as const,
-                  createdAt: entry.started_accepting_at || new Date().toISOString(),
-                }))
-
-              set({
-                programs,
-                syncStatus: {
-                  lastSyncTime: new Date().toISOString(),
-                  totalPrograms: programs.length,
-                  nextSyncTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-                },
-                isLoading: false,
-              })
-            } else {
-              // Keep existing programs if any, report error
-              set({
-                error: 'Could not reach bounty data sources — check network connection',
-                isLoading: false,
-              })
-            }
+            return
           }
+
+          // Fallback: fetch all platforms from GitHub bounty-targets-data
+          const ghData = await bugBountyDataApi.fetchAll()
+          const programs: BountyProgram[] = ghData.programs.map((p, idx) => ({
+            id: `${p.platform}-${idx}`,
+            name: p.name,
+            platform: ({
+              hackerone: 'HackerOne',
+              bugcrowd: 'Bugcrowd',
+              intigriti: 'Intigriti',
+              yeswehack: 'YesWeHack',
+              federacy: 'Federacy',
+            }[p.platform] || p.platform) as BountyProgram['platform'],
+            scopeDomains: p.domains.slice(0, 20),
+            outOfScope: [],
+            payoutMin: 0,
+            payoutMax: p.maxBounty ? parseInt(p.maxBounty, 10) || 0 : 0,
+            type: (p.maxBounty && parseInt(p.maxBounty, 10) > 0 ? 'Paid' : 'VDP') as 'Paid' | 'VDP',
+            status: 'active' as const,
+            createdAt: p.launchDate || new Date().toISOString(),
+          }))
+
+          set({
+            programs,
+            syncStatus: {
+              lastSyncTime: new Date().toISOString(),
+              totalPrograms: programs.length,
+              nextSyncTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+            },
+            isLoading: false,
+          })
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to sync targets',

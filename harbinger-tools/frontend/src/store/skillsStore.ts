@@ -153,9 +153,22 @@ export const useSkillsStore = create<SkillsState>()((set, get) => ({
   setError: (e) => set({ error: e }),
 
   fetchSkills: async () => {
+    const token = localStorage.getItem('harbinger-token')
+    // No token → use local catalog silently (no point hitting API without auth)
+    if (!token) {
+      set({ error: null })
+      return
+    }
     set({ isLoading: true, error: null })
     try {
-      const res = await fetch('/api/skills')
+      const res = await fetch('/api/skills', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401 || res.status === 403) {
+        // Auth issue — use local catalog without alarming the user
+        set({ isLoading: false })
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const raw: Skill[] = Array.isArray(data) ? data : (Array.isArray(data?.skills) ? data.skills : [])

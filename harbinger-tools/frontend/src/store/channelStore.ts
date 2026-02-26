@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+function authHeaders(): HeadersInit {
+  const token = localStorage.getItem('harbinger-token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // Channel types
 export type ChannelType = 'discord' | 'telegram' | 'slack' | 'webchat'
 
@@ -115,7 +120,7 @@ export const useChannelStore = create<ChannelState>()(
 
       fetchChannels: async () => {
         try {
-          const res = await fetch('/api/channels')
+          const res = await fetch('/api/channels', { headers: authHeaders() })
           if (!res.ok) return
           const data = await res.json()
           set((state) => ({
@@ -137,7 +142,7 @@ export const useChannelStore = create<ChannelState>()(
 
       testChannel: async (channel) => {
         try {
-          const res = await fetch(`/api/channels/${channel}/test`, { method: 'POST' })
+          const res = await fetch(`/api/channels/${channel}/test`, { method: 'POST', headers: authHeaders() })
           const data = await res.json()
           set((state) => ({
             channels: {
@@ -196,7 +201,7 @@ export const useChannelStore = create<ChannelState>()(
         // Also POST to backend for persistence
         fetch('/api/agents/broadcast', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify(full),
         }).catch(() => {})
       },
@@ -209,7 +214,7 @@ export const useChannelStore = create<ChannelState>()(
 
       fetchAgentMessages: async () => {
         try {
-          const res = await fetch('/api/agents/messages')
+          const res = await fetch('/api/agents/messages', { headers: authHeaders() })
           if (!res.ok) return
           const data = await res.json()
           if (Array.isArray(data)) {
@@ -231,7 +236,7 @@ export const useChannelStore = create<ChannelState>()(
 
       fetchConversations: async () => {
         try {
-          const res = await fetch('/api/channels/conversations')
+          const res = await fetch('/api/channels/conversations', { headers: authHeaders() })
           if (!res.ok) return
           const data = await res.json()
           if (Array.isArray(data)) {

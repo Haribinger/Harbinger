@@ -1,7 +1,7 @@
 // Bug Bounty Platform Data API
-// Uses data from https://github.com/arkadiyt/bounty-targets-data
+// Uses data from https://github.com/arkadiyt/bounty-targets-data (and custom GitHub sources)
 
-const BOUNTY_TARGETS_DATA_URL = 'https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/main/data'
+const DEFAULT_DATA_SOURCE = 'https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/main/data'
 
 export interface BugBountyProgram {
   name: string
@@ -22,12 +22,44 @@ export interface BugBountyData {
   lastUpdated: string
 }
 
-// Fetch raw data from a specific platform
-async function fetchPlatformData(platform: string): Promise<any[]> {
+export interface DataSource {
+  id: string
+  name: string
+  repoUrl: string  // e.g. "arkadiyt/bounty-targets-data"
+  branch: string
+  dataPath: string  // e.g. "data"
+  enabled: boolean
+  lastSynced: string | null
+}
+
+export const DEFAULT_DATA_SOURCES: DataSource[] = [
+  {
+    id: 'bounty-targets-data',
+    name: 'Bounty Targets Data',
+    repoUrl: 'arkadiyt/bounty-targets-data',
+    branch: 'main',
+    dataPath: 'data',
+    enabled: true,
+    lastSynced: null,
+  },
+]
+
+// Build raw GitHub URL from a DataSource
+function sourceBaseUrl(source: DataSource): string {
+  return `https://raw.githubusercontent.com/${source.repoUrl}/${source.branch}/${source.dataPath}`
+}
+
+// Fetch raw data from a specific platform with timeout and size guard
+async function fetchPlatformData(platform: string, baseUrl = DEFAULT_DATA_SOURCE): Promise<any[]> {
   try {
-    const response = await fetch(`${BOUNTY_TARGETS_DATA_URL}/${platform}_data.json`)
-    if (!response.ok) throw new Error(`Failed to fetch ${platform} data`)
-    return await response.json()
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000) // 30s timeout
+    const response = await fetch(`${baseUrl}/${platform}_data.json`, { signal: controller.signal })
+    clearTimeout(timeout)
+    if (!response.ok) throw new Error(`Failed to fetch ${platform} data: ${response.status}`)
+    const data = await response.json()
+    // Cap at 500 programs per platform to avoid memory issues
+    return Array.isArray(data) ? data.slice(0, 500) : []
   } catch (error) {
     console.error(`Failed to fetch ${platform} data:`, error)
     return []
@@ -35,9 +67,12 @@ async function fetchPlatformData(platform: string): Promise<any[]> {
 }
 
 // Fetch domains list
-async function fetchDomains(): Promise<string[]> {
+async function fetchDomains(baseUrl = DEFAULT_DATA_SOURCE): Promise<string[]> {
   try {
-    const response = await fetch(`${BOUNTY_TARGETS_DATA_URL}/domains.txt`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
+    const response = await fetch(`${baseUrl}/domains.txt`, { signal: controller.signal })
+    clearTimeout(timeout)
     if (!response.ok) throw new Error('Failed to fetch domains')
     const text = await response.text()
     return text.split('\n').filter(d => d.trim())
@@ -48,9 +83,12 @@ async function fetchDomains(): Promise<string[]> {
 }
 
 // Fetch wildcards list
-async function fetchWildcards(): Promise<string[]> {
+async function fetchWildcards(baseUrl = DEFAULT_DATA_SOURCE): Promise<string[]> {
   try {
-    const response = await fetch(`${BOUNTY_TARGETS_DATA_URL}/wildcards.txt`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
+    const response = await fetch(`${baseUrl}/wildcards.txt`, { signal: controller.signal })
+    clearTimeout(timeout)
     if (!response.ok) throw new Error('Failed to fetch wildcards')
     const text = await response.text()
     return text.split('\n').filter(w => w.trim())
@@ -115,45 +153,56 @@ function parseGenericData(data: any[], platform: BugBountyProgram['platform']): 
 
 // Main API
 export const bugBountyDataApi = {
-  // Fetch all bug bounty data
-  fetchAll: async (): Promise<BugBountyData> => {
-    const [
-      bugcrowdData,
-      hackeroneData,
-      intigritiData,
-      federacyData,
-      yeswehackData,
-      domains,
-      wildcards,
-    ] = await Promise.all([
-      fetchPlatformData('bugcrowd'),
-      fetchPlatformData('hackerone'),
-      fetchPlatformData('intigriti'),
-      fetchPlatformData('federacy'),
-      fetchPlatformData('yeswehack'),
-      fetchDomains(),
-      fetchWildcards(),
-    ])
+  // Fetch all bug bounty data from a specific source
+  fetchAll: async (sources?: DataSource[]): Promise<BugBountyData> => {
+    const activeSources = (sources || DEFAULT_DATA_SOURCES).filter(s => s.enabled)
+    const allPrograms: BugBountyProgram[] = []
+    let allDomains: string[] = []
+    let allWildcards: string[] = []
 
-    const programs = [
-      ...parseBugcrowdData(bugcrowdData),
-      ...parseHackerOneData(hackeroneData),
-      ...parseIntigritiData(intigritiData),
-      ...parseGenericData(federacyData, 'federacy'),
-      ...parseGenericData(yeswehackData, 'yeswehack'),
-    ]
+    for (const source of activeSources) {
+      const baseUrl = sourceBaseUrl(source)
+      // Fetch platforms in parallel per source, with individual error handling
+      const [
+        bugcrowdData,
+        hackeroneData,
+        intigritiData,
+        federacyData,
+        yeswehackData,
+        domains,
+        wildcards,
+      ] = await Promise.all([
+        fetchPlatformData('bugcrowd', baseUrl),
+        fetchPlatformData('hackerone', baseUrl),
+        fetchPlatformData('intigriti', baseUrl),
+        fetchPlatformData('federacy', baseUrl),
+        fetchPlatformData('yeswehack', baseUrl),
+        fetchDomains(baseUrl),
+        fetchWildcards(baseUrl),
+      ])
+
+      allPrograms.push(
+        ...parseBugcrowdData(bugcrowdData),
+        ...parseHackerOneData(hackeroneData),
+        ...parseIntigritiData(intigritiData),
+        ...parseGenericData(federacyData, 'federacy'),
+        ...parseGenericData(yeswehackData, 'yeswehack'),
+      )
+      allDomains = [...allDomains, ...domains]
+      allWildcards = [...allWildcards, ...wildcards]
+    }
 
     return {
-      programs,
-      domains,
-      wildcards,
+      programs: allPrograms,
+      domains: [...new Set(allDomains)], // deduplicate
+      wildcards: [...new Set(allWildcards)],
       lastUpdated: new Date().toISOString(),
     }
   },
 
   // Fetch programs by platform
-  fetchByPlatform: async (platform: BugBountyProgram['platform']): Promise<BugBountyProgram[]> => {
-    const data = await fetchPlatformData(platform)
+  fetchByPlatform: async (platform: BugBountyProgram['platform'], baseUrl?: string): Promise<BugBountyProgram[]> => {
+    const data = await fetchPlatformData(platform, baseUrl)
     switch (platform) {
       case 'bugcrowd': return parseBugcrowdData(data)
       case 'hackerone': return parseHackerOneData(data)
@@ -162,9 +211,8 @@ export const bugBountyDataApi = {
     }
   },
 
-  // Search programs
-  search: async (query: string): Promise<BugBountyProgram[]> => {
-    const { programs } = await bugBountyDataApi.fetchAll()
+  // Search across cached programs
+  search: async (query: string, programs: BugBountyProgram[]): Promise<BugBountyProgram[]> => {
     const lowerQuery = query.toLowerCase()
     return programs.filter((p) =>
       p.name.toLowerCase().includes(lowerQuery) ||
@@ -173,32 +221,14 @@ export const bugBountyDataApi = {
     )
   },
 
-  // Get domains for a program
-  getProgramDomains: async (programName: string): Promise<string[]> => {
-    const { programs } = await bugBountyDataApi.fetchAll()
-    const program = programs.find((p) => p.name === programName)
-    return program?.domains || []
-  },
-
-  // Get wildcards for a program
-  getProgramWildcards: async (programName: string): Promise<string[]> => {
-    const { programs } = await bugBountyDataApi.fetchAll()
-    const program = programs.find((p) => p.name === programName)
-    return program?.wildcards || []
-  },
-
   // Export domains to file
-  exportDomains: async (): Promise<Blob> => {
-    const { domains } = await bugBountyDataApi.fetchAll()
-    const text = domains.join('\n')
-    return new Blob([text], { type: 'text/plain' })
+  exportDomains: (domains: string[]): Blob => {
+    return new Blob([domains.join('\n')], { type: 'text/plain' })
   },
 
   // Export wildcards to file
-  exportWildcards: async (): Promise<Blob> => {
-    const { wildcards } = await bugBountyDataApi.fetchAll()
-    const text = wildcards.join('\n')
-    return new Blob([text], { type: 'text/plain' })
+  exportWildcards: (wildcards: string[]): Blob => {
+    return new Blob([wildcards.join('\n')], { type: 'text/plain' })
   },
 }
 

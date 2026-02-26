@@ -1,5 +1,4 @@
 packages:
-  - frontend
   - harbinger-tools/frontend
 
 ignoredBuiltDependencies:

@@ -23,6 +23,13 @@ interface DockerAgentContainer {
   logs: string[]
 }
 
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = localStorage.getItem('harbinger-token')
+  if (token) h['Authorization'] = `Bearer ${token}`
+  return h
+}
+
 class DockerAgentManager {
   private containers: Map<string, DockerAgentContainer> = new Map();
   private agentTypeImages: Record<string, string> = {
@@ -33,36 +40,13 @@ class DockerAgentManager {
   };
 
   async spawnAgentContainer(config: DockerAgentConfig): Promise<DockerAgentContainer> {
-    const containerId = `agent-${Date.now()}`;
-    const image = this.agentTypeImages[config.agentType] ?? this.agentTypeImages.default;
+    const image = config.image || (this.agentTypeImages[config.agentType] ?? this.agentTypeImages.default);
 
-    const container: DockerAgentContainer = {
-      containerId,
-      agentType: config.agentType,
-      agentName: config.agentName,
-      status: 'created',
-      image,
-      createdAt: new Date().toISOString(),
-      logs: [],
-    };
+    // Call real Docker API on backend
+    const container = await this.createContainer(config, image);
+    this.containers.set(container.containerId, container);
 
-    this.containers.set(containerId, container);
-
-    try {
-      // Simulate container creation
-      await this.createContainer(containerId, config);
-      container.status = 'running';
-      container.startedAt = new Date().toISOString();
-      this.containers.set(containerId, container);
-
-      console.log(`Agent container spawned: ${containerId} (${config.agentType})`);
-    } catch (error) {
-      container.status = 'exited';
-      container.stoppedAt = new Date().toISOString();
-      this.containers.set(containerId, container);
-      throw error;
-    }
-
+    console.log(`Agent container spawned: ${container.containerId} (${config.agentType})`);
     return container;
   }
 
@@ -72,11 +56,18 @@ class DockerAgentManager {
       throw new Error(`Container not found: ${containerId}`);
     }
 
+    const res = await fetch(`/api/docker/containers/${containerId}/stop`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(data.error || `Failed to stop container ${containerId}`);
+    }
+
     container.status = 'stopped';
     container.stoppedAt = new Date().toISOString();
     this.containers.set(containerId, container);
-
-    console.log(`Agent container stopped: ${containerId}`);
   }
 
   async removeContainer(containerId: string): Promise<void> {
@@ -85,27 +76,30 @@ class DockerAgentManager {
       throw new Error(`Container not found: ${containerId}`);
     }
 
+    const res = await fetch(`/api/docker/containers/${containerId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(data.error || `Failed to remove container ${containerId}`);
+    }
+
     this.containers.delete(containerId);
-    console.log(`Agent container removed: ${containerId}`);
   }
 
   async getContainerLogs(containerId: string): Promise<string[]> {
-    const container = this.containers.get(containerId);
-    if (!container) {
-      throw new Error(`Container not found: ${containerId}`);
+    const res = await fetch(`/api/docker/containers/${containerId}/logs`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      // Fall back to local cache
+      const container = this.containers.get(containerId);
+      return container?.logs ?? [];
     }
 
-    return container.logs;
-  }
-
-  async addContainerLog(containerId: string, message: string): Promise<void> {
-    const container = this.containers.get(containerId);
-    if (!container) {
-      throw new Error(`Container not found: ${containerId}`);
-    }
-
-    container.logs.push(`[${new Date().toISOString()}] ${message}`);
-    this.containers.set(containerId, container);
+    const text = await res.text();
+    return text.split('\n').filter(Boolean);
   }
 
   getContainer(containerId: string): DockerAgentContainer | undefined {
@@ -120,14 +114,40 @@ class DockerAgentManager {
     return Array.from(this.containers.values()).filter(c => c.status === status);
   }
 
-  private async createContainer(containerId: string, config: DockerAgentConfig): Promise<void> {
-    // Simulate container creation
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log(`Container ${containerId} created with config:`, config);
-        resolve();
-      }, 1000);
+  private async createContainer(config: DockerAgentConfig, image: string): Promise<DockerAgentContainer> {
+    const res = await fetch('/api/docker/containers', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        image,
+        name: `harbinger-${config.agentType}-${Date.now()}`,
+        env: config.environment,
+        ports: config.ports,
+        volumes: config.volumeMounts,
+        labels: {
+          'harbinger.agent.type': config.agentType,
+          'harbinger.agent.name': config.agentName,
+        },
+        resourceLimits: config.resourceLimits,
+      }),
     });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(data.error || data.message || 'Failed to create agent container');
+    }
+
+    const data = await res.json();
+    return {
+      containerId: data.id || data.containerId || `agent-${Date.now()}`,
+      agentType: config.agentType,
+      agentName: config.agentName,
+      status: 'running',
+      image,
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      logs: [],
+    };
   }
 }
 

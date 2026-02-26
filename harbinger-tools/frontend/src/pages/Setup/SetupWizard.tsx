@@ -62,15 +62,15 @@ const PROVIDERS = [
 
 function SetupWizard() {
   const navigate = useNavigate()
-  const [isLoading, setIsLoading] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isTestingOllama, setIsTestingOllama] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [countdown, setCountdown] = useState(5)
 
   const {
     currentStep, totalSteps, isComplete,
-    nextStep, prevStep, submitSetup, checkNeedsSetup, isStepValid, getStepError, testOllama,
+    nextStep, prevStep, submitSetup, isStepValid, getStepError, testOllama,
     // App config
     appName, appUrl, setAppName, setAppUrl,
     // AI
@@ -89,12 +89,13 @@ function SetupWizard() {
     setAdminEmail, setAdminPassword, setAdminPasswordConfirm,
   } = useSetupStore()
 
+  // Auto-redirect after setup completion
   useEffect(() => {
-    checkNeedsSetup().then((needsSetup) => {
-      if (!needsSetup) navigate('/login')
-      setIsLoading(false)
-    })
-  }, [checkNeedsSetup, navigate])
+    if (!isComplete) return
+    if (countdown <= 0) { navigate('/login'); return }
+    const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [isComplete, countdown, navigate])
 
   const handleNext = () => {
     if (!isStepValid()) {
@@ -128,14 +129,6 @@ function SetupWizard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg }}>
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: C.accent }} />
-      </div>
-    )
-  }
-
   if (isComplete) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.bg }}>
@@ -145,10 +138,13 @@ function SetupWizard() {
           </div>
           <h1 className="text-3xl font-bold mb-4" style={{ color: C.text, fontFamily: 'monospace' }}>HARBINGER ONLINE</h1>
           <p style={{ color: C.textMuted }} className="mb-2">Your command center is configured and ready.</p>
-          <p style={{ color: C.textMuted }} className="mb-8 text-sm">
+          <p style={{ color: C.textMuted }} className="mb-4 text-sm">
             {llmProvider === 'ollama' ? 'Local AI agents powered by Ollama' : `AI powered by ${PROVIDERS.find(p => p.id === llmProvider)?.name}`}
             {discordBotToken && ' · Discord connected'}
             {telegramBotToken && ' · Telegram connected'}
+          </p>
+          <p className="text-xs mb-6 font-mono" style={{ color: C.textMuted }}>
+            Redirecting to login in {countdown}s...
           </p>
           <button
             onClick={() => navigate('/login')}
@@ -463,6 +459,14 @@ function SetupWizard() {
           {currentStep === 6 && (
             <div className="space-y-4">
               <h3 className="font-medium font-mono mb-4" style={{ color: C.text }}>MISSION BRIEFING</h3>
+              {!githubClientId && !githubPat && (
+                <div className="p-3 rounded-xl flex items-start gap-2 text-xs" style={{ background: '#f0c04015', border: `1px solid ${C.accent}30`, color: C.accent }}>
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong>No GitHub auth configured in this wizard.</strong> You can still deploy if you have <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: C.bg }}>GH_TOKEN</code> set in your server environment. Otherwise, go back to step 4 to add OAuth or a PAT.
+                  </div>
+                </div>
+              )}
               <div className="space-y-2 text-sm">
                 <ReviewRow label="Instance" value={appName} />
                 <ReviewRow label="URL" value={appUrl || 'http://localhost:3000'} />

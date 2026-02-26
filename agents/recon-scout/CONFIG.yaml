@@ -6,3 +6,17 @@ max_concurrent_scans: 10
 output_format: json
 auto_handoff: true
 handoff_to: [web-hacker, osint-detective]
+
+# Resource limits (enforced by Docker)
+memory_mb: 2048
+cpu_count: 2
+
+# Agent capabilities
+capabilities:
+  - subdomain_enumeration
+  - port_scanning
+  - web_crawling
+  - dns_resolution
+  - certificate_transparency
+  - technology_fingerprinting
+  - wayback_discovery
