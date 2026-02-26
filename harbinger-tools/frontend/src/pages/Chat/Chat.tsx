@@ -89,40 +89,21 @@ function Chat() {
       addMessage(chat.id, userMessage)
       setIsTyping(true)
 
-      // Try to use real API first, fall back to mock
-      try {
-        const response = await chatApi.sendMessage({
-          content: messageContent,
-          agentId: activeAgent.id,
-          sessionId: chat.id,
-          stream: false,
-        })
+      const response = await chatApi.sendMessage({
+        content: messageContent,
+        agentId: activeAgent.id,
+        sessionId: chat.id,
+        stream: false,
+      })
 
-        // Add agent response from API
-        const agentMessage: Message = {
-          id: response.id || `msg-${Date.now() + 1}`,
-          agentId: activeAgent.id,
-          role: 'assistant',
-          content: response.content || 'No response',
-          timestamp: new Date().toISOString(),
-        }
-        addMessage(chat.id, agentMessage)
-      } catch (apiError) {
-        // API not available, use mock response
-        console.log('Chat API not available, using mock response')
-
-        setTimeout(() => {
-          const agentMessage: Message = {
-            id: `msg-${Date.now() + 1}`,
-            agentId: activeAgent.id,
-            role: 'assistant',
-            content: `**${activeAgent.name}:** I received your message: "${messageContent}"\n\nThis is a simulated response since the chat API is not currently available.`,
-            timestamp: new Date().toISOString(),
-          }
-          addMessage(chat.id, agentMessage)
-          setIsTyping(false)
-        }, 1000)
+      const agentMessage: Message = {
+        id: response.id || `msg-${Date.now() + 1}`,
+        agentId: activeAgent.id,
+        role: 'assistant',
+        content: response.content || 'No response',
+        timestamp: new Date().toISOString(),
       }
+      addMessage(chat.id, agentMessage)
 
     } catch (err) {
       console.error('Failed to send message:', err)

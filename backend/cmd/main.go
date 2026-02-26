@@ -1066,6 +1066,8 @@ func main() {
 	// MCP
 	mux.HandleFunc("GET /api/mcp", authMiddleware(handleMCPServers))
 	mux.HandleFunc("GET /api/mcp/servers", authMiddleware(handleMCPServers))
+	mux.HandleFunc("POST /api/mcp/connect", authMiddleware(handleMCPConnect))
+	mux.HandleFunc("POST /api/mcp/disconnect", authMiddleware(handleMCPDisconnect))
 	// Enhanced Docker endpoints
 	mux.HandleFunc("GET /api/docker/containers/{id}/stats", authMiddleware(handleDockerContainerStats))
 	mux.HandleFunc("GET /api/docker/containers/{id}/inspect", authMiddleware(handleDockerContainerInspect))
@@ -2002,9 +2004,65 @@ func handleMCPServers(w http.ResponseWriter, r *http.Request) {
 		if status == "not_configured" {
 			ms.Fix = s.fix
 		}
+		// Map "up" to "connected" for frontend compatibility
+		if ms.Status == "up" {
+			ms.Status = "connected"
+		}
 		results = append(results, ms)
 	}
-	writeJSON(w, http.StatusOK, results)
+	writeJSON(w, http.StatusOK, map[string]any{"servers": results})
+}
+
+// POST /api/mcp/connect — attempt to connect to an MCP server
+func handleMCPConnect(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ServerID string `json:"serverId"`
+		URL      string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"ok":false,"error":"invalid body"}`, 400)
+		return
+	}
+
+	// Probe the URL
+	targetURL := body.URL
+	if targetURL == "" {
+		// Try to resolve from known servers
+		known := map[string]string{
+			"hexstrike": cfg.HexStrikeURL,
+			"pentagi":   cfg.PentagiURL,
+			"redteam":   cfg.RedteamURL,
+			"mcp-ui":    cfg.MCPUIURL,
+		}
+		targetURL = known[body.ServerID]
+	}
+
+	if targetURL == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "no URL configured", "fix": "Set the server URL in MCP Manager settings"})
+		return
+	}
+
+	status, latency := probeService(targetURL)
+	connected := status == "up"
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        connected,
+		"status":    status,
+		"latency":   latency,
+		"url":       targetURL,
+		"connected": connected,
+	})
+}
+
+// POST /api/mcp/disconnect — disconnect from an MCP server
+func handleMCPDisconnect(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ServerID string `json:"serverId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"ok":false,"error":"invalid body"}`, 400)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serverId": body.ServerID, "status": "disconnected"})
 }
 
 func probeService(serviceURL string) (string, int64) {

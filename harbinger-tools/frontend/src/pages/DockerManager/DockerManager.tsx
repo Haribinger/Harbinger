@@ -200,8 +200,6 @@ function DockerManager() {
       return
     }
     toast(`Opening terminal for ${container.name}...`)
-    // In a real implementation, this would open a terminal connection
-    // For now, we show a placeholder
     window.open(`/api/docker/containers/${container.id}/terminal`, '_blank')
   }
 

@@ -80,62 +80,82 @@ export const useBountyHubStore = create<BountyHubState>()(
       setError: (error) => set({ error }),
 
       syncTargets: async () => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null })
         try {
-          // Mock data for now - in production, this would fetch from bounty-targets-data
-          const mockPrograms: BountyProgram[] = [
-            {
-              id: 'h1-1',
-              name: 'Example Corp Security Program',
-              platform: 'HackerOne',
-              scopeDomains: ['example.com', 'api.example.com', 'app.example.com'],
-              outOfScope: ['legacy.example.com'],
-              payoutMin: 100,
-              payoutMax: 50000,
-              type: 'Paid',
-              status: 'active',
-              createdAt: new Date().toISOString(),
+          // Fetch from backend API which aggregates bounty-targets-data
+          const res = await fetch('/api/bounty/programs', {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}`,
             },
-            {
-              id: 'bc-1',
-              name: 'Tech Startup Bug Bounty',
-              platform: 'Bugcrowd',
-              scopeDomains: ['startup.io', 'api.startup.io'],
-              outOfScope: [],
-              payoutMin: 50,
-              payoutMax: 10000,
-              type: 'Paid',
-              status: 'active',
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: 'int-1',
-              name: 'European SaaS VDP',
-              platform: 'Intigriti',
-              scopeDomains: ['saas.eu', 'platform.saas.eu'],
-              outOfScope: ['admin.saas.eu'],
-              payoutMin: 0,
-              payoutMax: 5000,
-              type: 'VDP',
-              status: 'active',
-              createdAt: new Date().toISOString(),
-            },
-          ];
+          })
 
-          set({
-            programs: mockPrograms,
-            syncStatus: {
-              lastSyncTime: new Date().toISOString(),
-              totalPrograms: mockPrograms.length,
-              nextSyncTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            },
-            isLoading: false,
-          });
+          if (res.ok) {
+            const data = await res.json()
+            const programs: BountyProgram[] = Array.isArray(data)
+              ? data
+              : Array.isArray(data?.programs) ? data.programs : []
+
+            set({
+              programs,
+              syncStatus: {
+                lastSyncTime: new Date().toISOString(),
+                totalPrograms: programs.length,
+                nextSyncTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+              },
+              isLoading: false,
+            })
+          } else {
+            // Try GitHub bounty-targets-data directly
+            const ghRes = await fetch(
+              'https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/main/data/hackerone_data.json'
+            )
+
+            if (ghRes.ok) {
+              const rawData = await ghRes.json()
+              const programs: BountyProgram[] = (Array.isArray(rawData) ? rawData : [])
+                .slice(0, 200) // Cap at 200 for performance
+                .map((entry: any, idx: number) => ({
+                  id: `h1-${idx}`,
+                  name: entry.name || entry.handle || `Program ${idx}`,
+                  platform: 'HackerOne' as const,
+                  scopeDomains: Array.isArray(entry.targets?.in_scope)
+                    ? entry.targets.in_scope
+                        .filter((t: any) => t.asset_type === 'URL' || t.asset_type === 'WILDCARD')
+                        .map((t: any) => t.asset_identifier)
+                        .slice(0, 20)
+                    : [],
+                  outOfScope: Array.isArray(entry.targets?.out_of_scope)
+                    ? entry.targets.out_of_scope.map((t: any) => t.asset_identifier).slice(0, 10)
+                    : [],
+                  payoutMin: entry.min_bounty ?? 0,
+                  payoutMax: entry.max_bounty ?? 0,
+                  type: (entry.min_bounty > 0 ? 'Paid' : 'VDP') as 'Paid' | 'VDP',
+                  status: 'active' as const,
+                  createdAt: entry.started_accepting_at || new Date().toISOString(),
+                }))
+
+              set({
+                programs,
+                syncStatus: {
+                  lastSyncTime: new Date().toISOString(),
+                  totalPrograms: programs.length,
+                  nextSyncTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                },
+                isLoading: false,
+              })
+            } else {
+              // Keep existing programs if any, report error
+              set({
+                error: 'Could not reach bounty data sources — check network connection',
+                isLoading: false,
+              })
+            }
+          }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to sync targets',
             isLoading: false,
-          });
+          })
         }
       },
     }),

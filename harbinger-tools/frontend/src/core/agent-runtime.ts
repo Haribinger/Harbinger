@@ -1,71 +1,150 @@
-import EventEmitter from 'events';
-import { agentOrchestrator } from './orchestrator';
+import EventEmitter from 'events'
+import { agentOrchestrator } from './orchestrator'
+import { mcpClient } from './mcp-client'
 
 interface AgentConfig {
-  name: string;
-  description: string;
-  tools: string[];
-  memory: any;
-  knowledge: any;
+  name: string
+  description: string
+  tools: string[]
+  memory: Record<string, unknown>
+  knowledge: Record<string, unknown>
+  systemPrompt?: string
+  dockerImage?: string
 }
 
 class AgentRuntime extends EventEmitter {
-  private agentId: string;
-  private config: AgentConfig | null = null;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private agentId: string
+  private config: AgentConfig | null = null
+  private heartbeatInterval: NodeJS.Timeout | null = null
 
   constructor(agentId: string) {
-    super();
-    this.agentId = agentId;
+    super()
+    this.agentId = agentId
   }
 
   async loadConfig(agentType: string): Promise<void> {
-    // In a real scenario, this would load from a CONFIG.yaml file
-    // For now, we'll use a mock config
-    this.config = {
-      name: agentType,
-      description: `A ${agentType} agent`,
-      tools: ['toolA', 'toolB'],
-      memory: {}, // Placeholder for memory
-      knowledge: {}, // Placeholder for knowledge
-    };
-    console.log(`Agent ${this.agentId} loaded config for ${agentType}.`);
-    agentOrchestrator.updateAgentStatus(this.agentId, 'initializing', 'Loading config');
+    agentOrchestrator.updateAgentStatus(this.agentId, 'initializing', 'Loading config')
+
+    try {
+      // Load agent config from backend API
+      const res = await fetch(`/api/agents/${this.agentId}/config`)
+      if (res.ok) {
+        const data = await res.json()
+        this.config = {
+          name: data.name || agentType,
+          description: data.description || '',
+          tools: Array.isArray(data.tools) ? data.tools : [],
+          memory: data.memory || {},
+          knowledge: data.knowledge || {},
+          systemPrompt: data.systemPrompt || data.system_prompt || '',
+          dockerImage: data.dockerImage || data.docker_image || '',
+        }
+      } else {
+        // Fall back to template from agent type
+        const templateRes = await fetch('/api/agents/templates')
+        if (templateRes.ok) {
+          const templates = await templateRes.json()
+          const tpl = (Array.isArray(templates) ? templates : templates.templates || [])
+            .find((t: any) => t.type === agentType || t.name?.toLowerCase() === agentType.toLowerCase())
+
+          this.config = {
+            name: tpl?.name || agentType,
+            description: tpl?.description || `${agentType} agent`,
+            tools: tpl?.capabilities || [],
+            memory: {},
+            knowledge: {},
+            systemPrompt: tpl?.personality || '',
+          }
+        } else {
+          // Minimal config — agent name from type
+          this.config = {
+            name: agentType,
+            description: `${agentType} agent`,
+            tools: [],
+            memory: {},
+            knowledge: {},
+          }
+        }
+      }
+    } catch {
+      // Backend unreachable — minimal config
+      this.config = {
+        name: agentType,
+        description: `${agentType} agent`,
+        tools: [],
+        memory: {},
+        knowledge: {},
+      }
+    }
+
+    agentOrchestrator.updateAgentStatus(this.agentId, 'heartbeat', 'Config loaded')
   }
 
   startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
-      agentOrchestrator.handleHeartbeat(this.agentId);
-      this.emit('heartbeat', this.agentId);
-    }, 5000); // Every 5 seconds
-    console.log(`Agent ${this.agentId} heartbeat started.`);
+      agentOrchestrator.handleHeartbeat(this.agentId)
+      this.emit('heartbeat', this.agentId)
+    }, 5000)
   }
 
   stopHeartbeat(): void {
     if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+      clearInterval(this.heartbeatInterval)
+      this.heartbeatInterval = null
     }
-    console.log(`Agent ${this.agentId} heartbeat stopped.`);
   }
 
   async executeTool(toolName: string, params: any): Promise<any> {
-    agentOrchestrator.updateAgentStatus(this.agentId, 'working', `Executing tool: ${toolName}`);
-    console.log(`Agent ${this.agentId} executing tool ${toolName} with params:`, params);
-    // Simulate tool execution via MCP protocol
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const result = `Result from ${toolName} with params ${JSON.stringify(params)}`;
-        this.emit('toolExecuted', { toolName, params, result });
-        agentOrchestrator.updateAgentStatus(this.agentId, 'heartbeat', 'Waiting for next task');
-        resolve(result);
-      }, 2000);
-    });
+    agentOrchestrator.updateAgentStatus(this.agentId, 'working', `Executing tool: ${toolName}`)
+
+    try {
+      // Try MCP execution first
+      const servers = mcpClient.getConnectedServers()
+      for (const server of servers) {
+        const hasTool = server.tools.some(t => t.name === toolName)
+        if (hasTool) {
+          const result = await mcpClient.executeTool(server.name, toolName, params)
+          this.emit('toolExecuted', { toolName, params, result })
+          agentOrchestrator.updateAgentStatus(this.agentId, 'heartbeat', 'Waiting for next task')
+          return result
+        }
+      }
+
+      // Fall back to backend tool execution API
+      const res = await fetch('/api/tools/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}`,
+        },
+        body: JSON.stringify({
+          agentId: this.agentId,
+          tool: toolName,
+          parameters: params,
+        }),
+      })
+
+      if (res.ok) {
+        const result = await res.json()
+        this.emit('toolExecuted', { toolName, params, result })
+        agentOrchestrator.updateAgentStatus(this.agentId, 'heartbeat', 'Waiting for next task')
+        return result
+      }
+
+      throw new Error(`Tool ${toolName} execution failed: ${res.statusText}`)
+    } catch (err) {
+      agentOrchestrator.updateAgentStatus(this.agentId, 'stopped', `Tool ${toolName} failed`)
+      throw err
+    }
   }
 
   getAgentConfig(): AgentConfig | null {
-    return this.config;
+    return this.config
+  }
+
+  getAgentId(): string {
+    return this.agentId
   }
 }
 
-export default AgentRuntime;
+export default AgentRuntime

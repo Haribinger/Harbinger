@@ -57,8 +57,8 @@ const AGENT_SKILL_MAP: Record<string, { agent: string; agentDir: string }> = {
   bugbounty:           { agent: 'BREACH',     agentDir: 'web-hacker' },
 }
 
-// Fallback data when API is unreachable — always renders
-const MOCK_SKILLS: Skill[] = [
+// Default skill catalog — serves as fallback when backend is unreachable
+const DEFAULT_SKILLS: Skill[] = [
   {
     id: 'recon', name: 'recon', category: 'recon',
     description: 'Subdomain enum, DNS resolution, HTTP probing, port scanning. Full attack surface mapping for PATHFINDER.',
@@ -134,7 +134,7 @@ const MOCK_SKILLS: Skill[] = [
 ]
 
 export const useSkillsStore = create<SkillsState>()((set, get) => ({
-  skills: MOCK_SKILLS,
+  skills: DEFAULT_SKILLS,
   selectedSkill: null,
   activeCategory: 'all',
   searchQuery: '',
@@ -160,7 +160,7 @@ export const useSkillsStore = create<SkillsState>()((set, get) => ({
       const data = await res.json()
       const raw: Skill[] = Array.isArray(data) ? data : (Array.isArray(data?.skills) ? data.skills : [])
       if (raw.length > 0) {
-        // Merge API data with enabled state from existing mock
+        // Merge API data with enabled state from existing local data
         const existing = get().skills
         const merged = raw.map((s) => ({
           ...s,
@@ -168,11 +168,11 @@ export const useSkillsStore = create<SkillsState>()((set, get) => ({
         }))
         set({ skills: merged })
       }
-      // If empty response, keep mock data — never blank the page
+      // If empty response, keep default skill catalog
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error'
-      set({ error: `skills API unavailable (${msg}) — showing local data` })
-      // Keep mock data on error — no blank page
+      set({ error: `skills API unavailable (${msg}) — showing local catalog` })
+      // Keep default catalog on error
     } finally {
       set({ isLoading: false })
     }

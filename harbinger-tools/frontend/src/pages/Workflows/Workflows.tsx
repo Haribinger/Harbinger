@@ -283,13 +283,18 @@ function Workflows() {
                 </div>
               </div>
             ) : (
-              /* Canvas view placeholder */
+              /* Visual canvas — use the full Workflow Editor */
               <div className="flex-1 relative bg-[radial-gradient(circle_at_1px_1px,rgba(240,192,64,0.1)_1px,transparent_0)] [background-size:32px_32px] flex items-center justify-center">
                 <div className="text-center text-text-secondary">
                   <Workflow className="w-16 h-16 mx-auto mb-4 opacity-30" />
                   <p className="text-lg font-medium">Visual Canvas</p>
                   <p className="text-sm mt-1">Drag and drop nodes to build your workflow</p>
-                  <p className="text-xs mt-2 opacity-60">Full canvas editor coming soon</p>
+                  <a
+                    href="/workflow-editor"
+                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg text-sm transition-colors"
+                  >
+                    Open Workflow Editor
+                  </a>
                 </div>
               </div>
             )}
