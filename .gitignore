@@ -48,3 +48,47 @@ frontend/.env.local
 coverage/
 .nyc_output/
 .env
+
+# Secrets and sensitive data
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+secrets/
+credentials.json
+service-account.json
+**/secrets/
+**/credentials/
+**/service-account.json
+
+# Logs and temp files
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+*.pid
+*.seed
+*.pid.lock
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+/data/
+!data/README.md
+
+# Local AI model files
+models/
+**/*.bin
+**/*.gguf
+**/*.onnx
+**/*.pt
+**/*.pth
+**/*.safetensors
+
+# Docker volumes (don't commit container data)
+/docker/volumes/
+/volumes/
