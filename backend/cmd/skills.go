@@ -35,6 +35,7 @@ var agentSkillMap = map[string]struct{ Agent, AgentDir string }{
 	"social-engineering": {Agent: "SPECTER", AgentDir: "osint-detective"},
 	"maintainer":         {Agent: "MAINTAINER", AgentDir: "maintainer"},
 	"feature-deploy":     {Agent: "SAM", AgentDir: "coding-assistant"},
+	"website-sync":       {Agent: "SCRIBE", AgentDir: "report-writer"},
 }
 // skillsDir returns the skills directory. Checks SKILLS_DIR env, /app/skills, then binary-relative path.
 func skillsDir() string {

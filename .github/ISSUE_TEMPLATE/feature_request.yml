@@ -1,0 +1,55 @@
+name: Feature Request
+description: Suggest a new feature for Harbinger
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - New Agent
+        - New Page / UI
+        - Backend API
+        - MCP Plugin
+        - Workflow Template
+        - Integration (Discord/Telegram/Slack)
+        - Security Enhancement
+        - Developer Experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: What do you want to add?
+      placeholder: "Add a FORENSICS agent that analyzes disk images and memory dumps..."
+    validations:
+      required: true
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Why is this needed? What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Suggested Implementation
+      description: How would you build it? (optional)
+      placeholder: |
+        - New agent profile at agents/forensics/
+        - Backend handler for volatility integration
+        - Frontend page for memory analysis visualization
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1 (Critical — blocks workflows)
+        - P2 (High — significant value)
+        - P3 (Medium — nice to have)
+        - P4 (Low — future consideration)

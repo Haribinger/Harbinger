@@ -1,0 +1,69 @@
+name: Bug Report
+description: Report a bug in Harbinger
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill out the sections below.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Harbinger is affected?
+      options:
+        - Frontend (React UI)
+        - Backend (Go API)
+        - Agent System
+        - Docker / Containers
+        - MCP Plugins
+        - Workflows
+        - Authentication
+        - Browser CDP
+        - Channels (Discord/Telegram/Slack)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What happened? What did you expect?
+      placeholder: "When I click 'Spawn Agent', the container fails to start..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      value: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Paste any relevant logs or error messages
+      render: shell
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical (system unusable)
+        - High (major feature broken)
+        - Medium (workaround exists)
+        - Low (cosmetic / minor)
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker version, browser, etc.
+      placeholder: "Ubuntu 22.04, Docker 24.0.7, Chrome 120"

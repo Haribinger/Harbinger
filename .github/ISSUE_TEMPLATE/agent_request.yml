@@ -1,0 +1,50 @@
+name: New Agent Request
+description: Propose a new agent for the Harbinger swarm
+title: "[Agent]: "
+labels: ["agent", "enhancement"]
+body:
+  - type: input
+    id: codename
+    attributes:
+      label: Agent Codename
+      description: UPPERCASE name (e.g., PHANTOM, CIPHER)
+      placeholder: "FORENSICS"
+    validations:
+      required: true
+  - type: input
+    id: role
+    attributes:
+      label: Role
+      description: One-line role description
+      placeholder: "Digital Forensics Analyst"
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Capabilities
+      description: What tools and skills should this agent have?
+      placeholder: |
+        - Volatility memory analysis
+        - disk image parsing
+        - timeline reconstruction
+        - artifact extraction
+    validations:
+      required: true
+  - type: textarea
+    id: personality
+    attributes:
+      label: Personality / Soul
+      description: How should this agent communicate and behave?
+      placeholder: "Meticulous, evidence-driven, never speculates..."
+  - type: input
+    id: color
+    attributes:
+      label: Color Code
+      description: Hex color for the agent (check existing colors to avoid duplicates)
+      placeholder: "#06b6d4"
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: When would you use this agent?

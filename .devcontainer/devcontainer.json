@@ -1,0 +1,36 @@
+{
+  "name": "Harbinger Command Center",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": { "version": "1.24" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.fontFamily": "JetBrains Mono, Fira Code, monospace",
+        "editor.fontSize": 14,
+        "workbench.colorTheme": "Default Dark Modern"
+      }
+    }
+  },
+  "forwardPorts": [8080, 3000, 5432, 6379, 7474, 7687],
+  "portsAttributes": {
+    "8080": { "label": "Backend API", "onAutoForward": "notify" },
+    "3000": { "label": "Frontend UI", "onAutoForward": "openBrowser" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "ignore" },
+    "7474": { "label": "Neo4j Browser", "onAutoForward": "notify" }
+  },
+  "postCreateCommand": "npm i -g pnpm@9 && pnpm install && cd backend && go mod download",
+  "postStartCommand": "docker compose up -d postgres redis neo4j 2>/dev/null || true"
+}
