@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Search,
@@ -26,6 +26,7 @@ import {
 import { useAgentStore } from '../../store/agentStore'
 import { useDockerStore } from '../../store/dockerStore'
 import { useCommandCenterStore, type TabType, type WorkspaceTab } from '../../store/commandCenterStore'
+import { browserApi } from '../../api/browser'
 import type { Agent, Message } from '../../types'
 
 // ---- Status helpers ----
@@ -615,8 +616,8 @@ function TerminalPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null 
         headers: { Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}` },
       })
       if (res.ok) {
-        const data = await res.json()
-        const logs = Array.isArray(data) ? data.map((l: any) => l.message || l) : [JSON.stringify(data)]
+        const text = await res.text()
+        const logs = text ? text.split(/\r?\n/).filter(Boolean) : []
         setOutput((prev) => [...prev, ...logs])
       } else {
         setOutput((prev) => [...prev, `Error: Container exec failed (HTTP ${res.status})`])
@@ -670,31 +671,42 @@ function BrowserPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }
   const [url, setUrl] = useState('')
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const sessionIdByAgentRef = useRef<Record<string, string>>({})
+  const [sessionIdByAgent, setSessionIdByAgent] = useState<Record<string, string>>({})
+  const [sessionError, setSessionError] = useState<string | null>(null)
+
+  const agentId = agent?.id ?? ''
+
+  const ensureSession = useCallback(async (): Promise<string | null> => {
+    if (!agentId) return null
+    const existing = sessionIdByAgentRef.current[agentId]
+    if (existing) return existing
+    setSessionError(null)
+    try {
+      const session = await browserApi.createSession({ url: 'about:blank', headless: true })
+      sessionIdByAgentRef.current[agentId] = session.id
+      setSessionIdByAgent((prev) => ({ ...prev, [agentId]: session.id }))
+      return session.id
+    } catch {
+      setSessionError('Failed to create browser session')
+      return null
+    }
+  }, [agentId])
 
   const handleNavigate = async () => {
-    if (!url.trim() || !agent?.containerId) return
+    if (!url.trim() || !agent) return
     setLoading(true)
+    setSessionError(null)
     try {
-      const res = await fetch(`/api/browser/sessions/${agent.containerId}/navigate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}`,
-        },
-        body: JSON.stringify({ url }),
-      })
-      if (res.ok) {
-        // Take screenshot after navigation
-        const ssRes = await fetch(`/api/browser/sessions/${agent.containerId}/screenshot`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${localStorage.getItem('harbinger-token') || ''}` },
-        })
-        if (ssRes.ok) {
-          const data = await ssRes.json()
-          if (data.screenshot) setScreenshot(data.screenshot)
-        }
+      const sessionId = await ensureSession()
+      if (!sessionId) {
+        setSessionError('No browser session available')
+        return
       }
-    } catch { /* network error */ } finally { setLoading(false) }
+      await browserApi.navigate(sessionId, url.trim())
+      const ss = await browserApi.takeScreenshot(sessionId)
+      if (ss?.data) setScreenshot(ss.data)
+    } catch { setSessionError('Navigation failed') } finally { setLoading(false) }
   }
 
   return (
@@ -720,7 +732,12 @@ function BrowserPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }
       </div>
 
       {/* Viewport */}
-      <div className="flex-1 bg-[#0a0a0f] flex items-center justify-center overflow-auto">
+      <div className="flex-1 bg-[#0a0a0f] flex flex-col items-center justify-center overflow-auto relative">
+        {sessionError && (
+          <div className="absolute top-2 left-4 right-4 py-2 px-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded z-10">
+            {sessionError}
+          </div>
+        )}
         {screenshot ? (
           <img src={`data:image/png;base64,${screenshot}`} alt="Browser view" className="max-w-full max-h-full object-contain" />
         ) : (
@@ -728,9 +745,9 @@ function BrowserPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }
             <Globe className="w-12 h-12 mx-auto mb-3 opacity-20" />
             <p className="text-sm">Browser Panel</p>
             <p className="text-xs mt-1">
-              {agent?.containerId
+              {agent
                 ? 'Enter a URL and navigate to see the live view'
-                : 'Spawn the LENS agent to enable browser automation'}
+                : 'Select an agent to enable browser automation'}
             </p>
           </div>
         )}

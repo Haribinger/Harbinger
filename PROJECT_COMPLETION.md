@@ -192,6 +192,53 @@ kubectl scale deployment harbinger-backend --replicas=3
 
 ---
 
+## ⚠️ Simulated / Demo Endpoints
+
+The following backend endpoints are **intentionally simulated** for lab and development use. They return canned data or accept demo values rather than performing real integrations. Do not rely on them for production workflows until replaced with real implementations.
+
+| Endpoint | Behavior | Notes |
+|----------|----------|-------|
+| **MFA Verify** (`POST /api/auth/mfa/verify`) | Accepts `123456` as a valid code | Demo only — replace with real TOTP verification before production |
+| **Hostinger** (`/api/v1/providers/hostinger/*`) | Simulates API key validation, VPS list, VPS creation | Returns canned VPS data; no real Hostinger API calls |
+| **Cloudflare** (`/api/v1/providers/cloudflare/*`) | Simulates token validation, zones, tunnels, WAF | Returns canned zones/rules; no real Cloudflare API calls |
+| **Docker Create** (`POST /api/docker/containers`, `POST /api/v1/docker/containers`) | Returns stub response | Returns `"Container creation via API not yet implemented"` — does not create containers |
+| **OpenClaw Skills** | `listOpenClawSkills` has hardcoded fallback | If skill files not found, returns predefined list |
+
+**Recommendation:** Before any public release claiming "zero mock data," either (a) document these as demos in release notes, or (b) implement real API integrations and proper TOTP for MFA.
+
+---
+
+## 🖥️ Command Center Dependencies & Verification
+
+The Command Center page provides chat, terminal, browser, logs, files, and settings panels for each agent. For full functionality, the following must be running and configured:
+
+### Prerequisites
+
+| Dependency | Purpose | How to Verify |
+|------------|---------|----------------|
+| **Backend API** | All panel data and actions | `GET /api/health` returns 200 |
+| **Docker socket** | Terminal logs, container exec | `GET /api/docker/containers` returns list (or 503 if not configured) |
+| **Browser service** | Browser panel (navigate, screenshot) | `POST /api/browser/sessions` creates a session |
+| **Agent DB** | Agent list, chat, logs | `GET /api/agents` returns agents with valid `id` |
+| **JWT auth** | All API calls | Valid token in `localStorage.getItem('harbinger-token')` |
+
+### Panel Verification
+
+| Panel | Backend Route | Expected Behavior |
+|-------|---------------|-------------------|
+| **Chat** | `POST /api/agents/{id}/broadcast`, `GET /api/agents/{id}/logs` | Messages send; agent logs appear |
+| **Terminal** | `GET /api/docker/containers/{containerId}/logs?tail=N` | Returns **plain text** (not JSON); split on newlines for display |
+| **Browser** | `POST /api/browser/sessions`, `POST .../navigate`, `POST .../screenshot` | Creates session on first use; uses real session ID (not `containerId`) |
+| **Logs** | `GET /api/agents/{id}/logs?tail=N` | Returns JSON array of log entries |
+
+### Common Issues
+
+- **Terminal shows "Error" or blank:** Backend returns `text/plain` for container logs; frontend must use `res.text()`, not `res.json()`.
+- **Browser panel fails to navigate:** Ensure BrowserPanel creates a session via `POST /api/browser/sessions` and uses the returned `id` for navigate/screenshot — do not use `agent.containerId` as session ID.
+- **Chat/Logs empty:** Agent must exist in DB and have `id`; backend must serve `/api/agents` and `/api/agents/{id}/logs`.
+
+---
+
 ## 🦞 HARBINGER - REVOLUTIONIZING BUG BOUNTY HUNTING
 
 **Status**: ✅ PRODUCTION READY  

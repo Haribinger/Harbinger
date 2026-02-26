@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { applyNodeChanges, applyEdgeChanges, addEdge, OnNodesChange, OnEdgesChange, OnConnect } from '@xyflow/react';
 import { WorkflowNode, WorkflowEdge, WorkflowTemplate, WorkflowExecution, WorkflowVariable } from '../types/workflow';
+import { WORKFLOW_TEMPLATES } from '../core/workflows/templates';
 
 interface WorkflowEditorState {
   nodes: WorkflowNode[];
@@ -49,43 +50,14 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>()(
       selectedNode: null,
       executionState: null,
       workflowVariables: [],
-      templates: [
-        {
-          id: 'recon-pipeline',
-          name: 'Recon Pipeline',
-          description: 'Trigger → subfinder → httpx → nuclei → Report',
-          nodes: [],
-          edges: [],
-        },
-        {
-          id: 'full-bug-bounty',
-          name: 'Full Bug Bounty',
-          description: 'Complete recon → scan → exploit → report chain with all 6 agents',
-          nodes: [],
-          edges: [],
-        },
-        {
-          id: 'subdomain-takeover',
-          name: 'Subdomain Takeover',
-          description: 'Subdomain enumeration → CNAME check → takeover detection',
-          nodes: [],
-          edges: [],
-        },
-        {
-          id: 'api-security-audit',
-          name: 'API Security Audit',
-          description: 'Endpoint discovery → auth testing → injection testing → report',
-          nodes: [],
-          edges: [],
-        },
-        {
-          id: 'cloud-posture',
-          name: 'Cloud Posture Check',
-          description: 'PHANTOM runs ScoutSuite + Prowler across cloud accounts',
-          nodes: [],
-          edges: [],
-        },
-      ],
+      templates: WORKFLOW_TEMPLATES.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        nodes: t.nodes as WorkflowNode[],
+        edges: t.edges as WorkflowEdge[],
+        variables: [],
+      })),
       savedWorkflows: [],
 
       onNodesChange: (changes) => {
