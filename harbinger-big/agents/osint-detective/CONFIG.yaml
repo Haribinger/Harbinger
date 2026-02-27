@@ -1,9 +1,0 @@
-model: configurable
-temperature: 0.5 # balanced
-docker_image: harbinger/osint-detective
-proxy_chain: required
-tor_enabled: configurable
-data_retention: configurable
-auto_handoff: true
-handoff_to: [recon-scout, web-hacker]
-feeds_knowledge_graph: true

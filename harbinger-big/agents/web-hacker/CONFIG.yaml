@@ -1,9 +1,0 @@
-model: configurable
-temperature: 0.7 # creative
-docker_image: harbinger/web-hacker
-proxy_chain: configurable
-max_concurrent_tests: 5
-payload_wordlists: configurable
-auto_handoff: true
-handoff_to: [report-writer]
-receives_from: [recon-scout]

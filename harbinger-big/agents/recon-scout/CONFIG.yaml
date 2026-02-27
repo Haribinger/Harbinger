@@ -1,8 +1,0 @@
-model: configurable
-temperature: 0.3 # precise
-docker_image: harbinger/recon-scout
-proxy_chain: configurable
-max_concurrent_scans: 10
-output_format: json
-auto_handoff: true
-handoff_to: [web-hacker, osint-detective]

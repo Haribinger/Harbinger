@@ -16,7 +16,7 @@
 ## Step 1: Clone and Configure
 
 ```bash
-git clone https://github.com/kdairatchi/harbinger.git
+git clone https://github.com/Haribinger/Harbinger.git
 cd harbinger
 cp .env.example .env
 ```

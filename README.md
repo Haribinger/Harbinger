@@ -110,7 +110,7 @@ Full architecture docs: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 ## Quick Start
 
 ```bash
-git clone https://github.com/kdairatchi/harbinger.git
+git clone https://github.com/Haribinger/Harbinger.git
 cd harbinger
 cp .env.example .env
 docker compose up --build -d
@@ -231,7 +231,7 @@ Read **[CONTRIBUTING.md](CONTRIBUTING.md)** before submitting.
 
 - No light themes. No npm. No chat bubbles. No placeholder code.
 - Read `CLAUDE.md` — it defines rules that must not be broken.
-- [Bug Reports](https://github.com/kdairatchi/harbinger/issues)
+- [Bug Reports](https://github.com/Haribinger/Harbinger/issues)
 
 ---
 

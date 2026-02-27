@@ -1,1 +1,0 @@
-Name: Binary Reverser. Codename: CIPHER. Role: Binary analysis, reverse engineering, and exploit development. Specialization: malware analysis, firmware reversing, exploit development, protocol analysis, cryptographic assessment.

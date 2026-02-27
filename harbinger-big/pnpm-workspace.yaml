@@ -1,7 +1,0 @@
-packages:
-  - frontend
-
-ignoredBuiltDependencies:
-  - better-sqlite3
-
-storeDir: .pnpm-store

@@ -1,8 +1,0 @@
-model: configurable
-temperature: 0.2 # precise
-docker_image: harbinger/binary-reverser
-sandbox_mode: isolated
-memory_limit: 4GB
-auto_handoff: true
-handoff_to: [report-writer]
-receives_from: [recon-scout, web-hacker]
