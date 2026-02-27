@@ -21,6 +21,14 @@ export interface ActivityEvent {
   timestamp: string
 }
 
+interface ChatMsg {
+  id: string
+  role: string
+  content: string
+  agent?: string
+  time: string
+}
+
 interface CommandCenterState {
   // Workspace tabs
   tabs: WorkspaceTab[]
@@ -33,6 +41,9 @@ interface CommandCenterState {
 
   // Activity feed
   activityEvents: ActivityEvent[]
+
+  // Chat message history per tab (persisted across tab reopens)
+  chatMessages: Record<string, ChatMsg[]>
 
   // Panel visibility
   showVMPanel: boolean
@@ -49,6 +60,11 @@ interface CommandCenterState {
   clearActivity: () => void
   toggleVMPanel: () => void
   toggleActivityPanel: () => void
+
+  // Chat persistence
+  addChatMessage: (agentId: string, msg: ChatMsg) => void
+  getChatMessages: (agentId: string) => ChatMsg[]
+  clearChatMessages: (agentId: string) => void
 
   // Open agent workspace helpers
   openAgentChat: (agentId: string, agentName: string) => void
@@ -69,6 +85,7 @@ export const useCommandCenterStore = create<CommandCenterState>((set, get) => ({
   agentFilter: '',
   statusFilter: 'all',
   activityEvents: [],
+  chatMessages: {},
   showVMPanel: false,
   showActivityPanel: true,
 
@@ -115,6 +132,27 @@ export const useCommandCenterStore = create<CommandCenterState>((set, get) => ({
 
   toggleVMPanel: () => set((s) => ({ showVMPanel: !s.showVMPanel })),
   toggleActivityPanel: () => set((s) => ({ showActivityPanel: !s.showActivityPanel })),
+
+  // Chat persistence — keyed by agentId so messages survive tab close/reopen
+  addChatMessage: (agentId, msg) => {
+    set((s) => {
+      const existing = s.chatMessages[agentId] || []
+      const updated = [...existing, msg].slice(-200) // Keep last 200
+      return { chatMessages: { ...s.chatMessages, [agentId]: updated } }
+    })
+  },
+
+  getChatMessages: (agentId) => {
+    return get().chatMessages[agentId] || []
+  },
+
+  clearChatMessages: (agentId) => {
+    set((s) => {
+      const copy = { ...s.chatMessages }
+      delete copy[agentId]
+      return { chatMessages: copy }
+    })
+  },
 
   // Helper: open a chat tab for an agent (reuse existing if open)
   openAgentChat: (agentId, agentName) => {

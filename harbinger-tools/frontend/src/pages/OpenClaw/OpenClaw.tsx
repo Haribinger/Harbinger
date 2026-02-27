@@ -81,9 +81,10 @@ const VOICE_COMMANDS = [
   { cmd: 'Clean up and standby', desc: 'Stop all agents', agent: 'SYSTEM' },
 ]
 
-const CHANNELS = [
+// Default channels — overridden by real status from backend
+const DEFAULT_CHANNELS = [
   { name: 'Voice', icon: Mic, status: 'available', color: C.gold },
-  { name: 'WebChat', icon: Terminal, status: 'available', color: C.green },
+  { name: 'WebChat', icon: Terminal, status: 'connected', color: C.green },
   { name: 'Telegram', icon: Send, status: 'configurable', color: C.cyan },
   { name: 'Slack', icon: Globe, status: 'configurable', color: C.purple },
 ]

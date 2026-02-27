@@ -430,12 +430,13 @@ function TabContent({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | 
 
 function ChatPanel({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | null; agents: Agent[] }) {
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState<Array<{ id: string; role: string; content: string; agent?: string; time: string }>>([])
   const [sending, setSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const addActivity = useCommandCenterStore((s) => s.addActivity)
+  const { addActivity, addChatMessage, getChatMessages } = useCommandCenterStore()
 
   const targetAgent = tab.agentId ? agents.find((a) => a.id === tab.agentId) : agent
+  const agentKey = targetAgent?.id || 'unknown'
+  const messages = getChatMessages(agentKey)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -451,7 +452,7 @@ function ChatPanel({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | n
       content: message,
       time: new Date().toLocaleTimeString(),
     }
-    setMessages((prev) => [...prev, userMsg])
+    addChatMessage(agentKey, userMsg)
     setMessage('')
     setSending(true)
 
@@ -472,13 +473,13 @@ function ChatPanel({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | n
       if (res.ok) {
         const data = await res.json()
         const reply = data.response || data.message || 'Command received.'
-        setMessages((prev) => [...prev, {
+        addChatMessage(agentKey, {
           id: `msg-${Date.now()}-reply`,
           role: 'assistant',
           content: reply,
           agent: targetAgent.codename || targetAgent.name,
           time: new Date().toLocaleTimeString(),
-        }])
+        })
         addActivity({
           agentId: targetAgent.id,
           agentName: targetAgent.codename || targetAgent.name,
@@ -487,20 +488,20 @@ function ChatPanel({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | n
           type: 'info',
         })
       } else {
-        setMessages((prev) => [...prev, {
+        addChatMessage(agentKey, {
           id: `msg-${Date.now()}-err`,
           role: 'system',
           content: `Agent unreachable (HTTP ${res.status}). Message queued.`,
           time: new Date().toLocaleTimeString(),
-        }])
+        })
       }
     } catch {
-      setMessages((prev) => [...prev, {
+      addChatMessage(agentKey, {
         id: `msg-${Date.now()}-err`,
         role: 'system',
         content: 'Network error. Backend may be offline.',
         time: new Date().toLocaleTimeString(),
-      }])
+      })
     } finally {
       setSending(false)
     }
