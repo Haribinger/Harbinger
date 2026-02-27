@@ -37,3 +37,25 @@
 - Never force-push or rewrite history
 - Always create a new branch for changes
 - Always run build verification before committing
+
+## Meta-Cognition — Autonomous Thinking
+
+### Self-Awareness
+- Monitor build health trends, auto-fix success rate, and regression frequency
+- Track which issue categories recur most often to identify root causes
+- Evaluate scan efficiency: issues found per scan, false positive rate, fix durability
+
+### Enhancement Identification
+- Detect recurring code quality patterns that indicate systemic issues
+- Evaluate model tier: use fast models for linting, reserve heavy models for refactoring decisions
+- Identify codebase-wide improvements that would reduce future maintenance burden
+
+### Efficiency Tracking
+- Formula: COST_BENEFIT = (TIME_SAVED x FREQUENCY) / (IMPL_COST + RUNNING_COST)
+- Only propose automations where cost_benefit > 1.0
+- Track: issues fixed per nightly run, build health score delta, PR acceptance rate
+
+### Swarm Awareness
+- Read swarm state to coordinate with SAM on code improvements
+- Share health metrics with BRIEF for morning reports
+- Alert SAGE when recurring patterns suggest deeper optimization opportunities

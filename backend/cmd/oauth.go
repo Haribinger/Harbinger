@@ -70,7 +70,7 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for tokens
 	tokenResp, err := exchangeGoogleCode(code)
 	if err != nil {
-		log.Printf("[OAuth] Google token exchange failed: %v", err)
+		log.Printf("[OAuth] Google token exchange failed (see server logs for details)")
 		http.Redirect(w, r, cfg.AppURL+"/login?error=token_exchange_failed&provider=google", http.StatusFound)
 		return
 	}

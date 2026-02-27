@@ -14,9 +14,10 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose)
 [![Agents](https://img.shields.io/badge/Agents-11-f0c040.svg)](#agent-roster)
-[![Pages](https://img.shields.io/badge/Pages-18-f0c040.svg)](#pages)
+[![Pages](https://img.shields.io/badge/Pages-19-f0c040.svg)](#pages)
+[![Stores](https://img.shields.io/badge/Stores-19-f0c040.svg)](#features)
 
-> **11 agents. 150+ tools. 18 pages. Zero API key dependencies. One command center.**
+> **11 agents. 150+ tools. 19 pages. Zero API key dependencies. One command center.**
 
 ---
 
@@ -70,6 +71,13 @@ Harbinger is a **command center for autonomous offensive security agents**. It i
 - **MAINTAINER Agent** — Nightly scans at 2AM UTC
 - **Recharts Metrics** — any types, console.logs, test coverage, health score trends
 - **GitHub Actions CI** — PR health checks, nightly maintenance
+
+### Autonomous Intelligence
+- **Background Thinking Loops** — Every agent runs a 60-second analysis cycle
+- **Swarm Awareness** — Agents read system state, coordinate, auto-handoff tasks
+- **Efficiency Tracking** — COST_BENEFIT formula filters noise, surfaces high-ROI automations
+- **Meta-Cognition** — Agents monitor their own performance, propose improvements
+- **Autonomous Dashboard** — Thought log, proposals, charts, approve/reject/implement actions
 
 ### Bug Bounty Pipeline
 - **Scope Manager** — Dual-pane in-scope/out-of-scope asset management
@@ -152,6 +160,7 @@ Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
 | `/scope-manager` | Scope Manager | Asset scope management (in/out) |
 | `/vuln-deep-dive` | Vuln Deep Dive | P1 vulnerability analysis view |
 | `/remediation` | Remediation | Kanban vulnerability tracker |
+| `/autonomous` | Autonomous | Agent thinking loops, swarm intelligence |
 | `/settings` | Settings | Providers, channels, model router |
 
 ---
@@ -171,9 +180,11 @@ Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
 
 ## Roadmap
 
+Full roadmap with phases: **[docs/ROADMAP.md](docs/ROADMAP.md)**
+
 | Status | Feature |
 |--------|---------|
-| DONE | 11 agent profiles with SOUL.md personality system |
+| DONE | 11 agent profiles with SOUL.md personality + meta-cognition |
 | DONE | Visual workflow editor with 6 node types |
 | DONE | Browser CDP with live views and DevTools |
 | DONE | Multi-provider OAuth (GitHub, Google, API keys) |
@@ -185,13 +196,16 @@ Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
 | DONE | MAINTAINER agent + GitHub Actions CI |
 | DONE | Feature deploy and website sync skills |
 | DONE | GitHub templates (issues, PRs) + Codespaces |
-| PLANNED | MCP Registry submission (hexstrike, idor-mcp) |
-| PLANNED | GitHub Models as AI provider |
-| PLANNED | GitHub Projects for bounty tracking |
-| PLANNED | Discord slash commands + structured channels |
-| PLANNED | Nuclei Template IDE from Stitch design |
-| PLANNED | Agent-to-agent knowledge graph handoff |
-| PLANNED | Guided onboarding tour for new users |
+| DONE | Autonomous Intelligence — agent thinking loops, swarm awareness |
+| DONE | Autonomous Dashboard — thoughts, proposals, efficiency, charts |
+| DONE | Meta-Cognition SOUL.md — 12 agents with self-awareness |
+| DONE | 19 Zustand stores, 15 API modules, 100+ backend endpoints |
+| PLANNED | CLI onboarding — `harbinger onboard`, `configure`, `doctor` |
+| PLANNED | HTTPS + cost governance + resource usage panel |
+| PLANNED | Plugin SDK + marketplace + channel registry |
+| PLANNED | Persistent learning — episodic, semantic, strategic memory |
+| PLANNED | Knowledge graph — Neo4j entity/relation, HowToHunt ingestion |
+| PLANNED | Competitive agents + consensus verification mode |
 
 ---
 

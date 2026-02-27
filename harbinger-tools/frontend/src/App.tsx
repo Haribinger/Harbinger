@@ -28,6 +28,7 @@ const CodeHealth = lazy(() => import('./pages/CodeHealth/CodeHealth'))
 const ScopeManager = lazy(() => import('./pages/ScopeManager/ScopeManager'))
 const VulnDeepDive = lazy(() => import('./pages/VulnDeepDive/VulnDeepDive'))
 const RemediationTracker = lazy(() => import('./pages/RemediationTracker/RemediationTracker'))
+const Autonomous = lazy(() => import('./pages/Autonomous/Autonomous'))
 const Login = lazy(() => import('./pages/Login/Login'))
 const SetupWizard = lazy(() => import('./pages/Setup/SetupWizard'))
 
@@ -261,6 +262,7 @@ function AnimatedRoutes() {
           <Route path="scope-manager" element={<Suspense fallback={<PageLoader />}><ScopeManager /></Suspense>} />
           <Route path="vuln-deep-dive" element={<Suspense fallback={<PageLoader />}><VulnDeepDive /></Suspense>} />
           <Route path="remediation" element={<Suspense fallback={<PageLoader />}><RemediationTracker /></Suspense>} />
+          <Route path="autonomous" element={<Suspense fallback={<PageLoader />}><Autonomous /></Suspense>} />
           <Route path="sse" element={<SSERoute />} />
           <Route path="*" element={<div className="p-8 text-center font-mono text-gray-400">404 // Page not found</div>} />
         </Route>

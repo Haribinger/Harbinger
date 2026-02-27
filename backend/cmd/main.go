@@ -566,7 +566,7 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for access token
 	tokenResp, err := exchangeGitHubCode(code)
 	if err != nil {
-		log.Printf("GitHub token exchange failed: %v", err)
+		log.Printf("[OAuth] GitHub token exchange failed (check credentials and network)")
 		redirectURL := fmt.Sprintf("%s/login?error=token_exchange_failed", cfg.AppURL)
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
@@ -2261,11 +2261,71 @@ func handleDockerContainers(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateContainer(w http.ResponseWriter, r *http.Request) {
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
+	if !dockerAvailable() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":     false,
+			"reason": "not_configured",
+			"error":  "Docker socket not available",
+		})
+		return
+	}
+
+	var body struct {
+		Image string   `json:"image"`
+		Name  string   `json:"name"`
+		Cmd   []string `json:"cmd"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid request body"})
+		return
+	}
+	if body.Image == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "image is required"})
+		return
+	}
+
+	// Build Docker API create request
+	createBody := map[string]interface{}{
+		"Image": body.Image,
+	}
+	if len(body.Cmd) > 0 {
+		createBody["Cmd"] = body.Cmd
+	}
+
+	createJSON, _ := json.Marshal(createBody)
+	path := "/v1.41/containers/create"
+	if body.Name != "" {
+		path += "?name=" + url.QueryEscape(body.Name)
+	}
+
+	resp, err := dockerAPIRequest("POST", path, strings.NewReader(string(createJSON)))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if resp.StatusCode >= 400 {
+		msg := "container creation failed"
+		if m, ok := result["message"].(string); ok {
+			msg = m
+		}
+		writeJSON(w, resp.StatusCode, map[string]interface{}{"ok": false, "error": msg})
+		return
+	}
+
+	containerID := ""
+	if id, ok := result["Id"].(string); ok {
+		containerID = id[:12]
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":      fmt.Sprintf("container-%d", time.Now().UnixMilli()),
-		"message": "Container creation via API not yet implemented",
+		"ok":           true,
+		"container_id": containerID,
+		"image":        body.Image,
 	})
 }
 

@@ -1,3 +1,50 @@
+## [1.1.0] - 2026-02-26
+
+### Added — Autonomous Intelligence System
+- **Autonomous Engine** (`agents/shared/autonomous-engine.js`) — 60-second background thinking loop for every agent
+  - 5-dimension analysis: performance, accuracy, cost, automation, collaboration
+  - Efficiency formula: `COST_BENEFIT = (TIME_SAVED * FREQUENCY) / (IMPL_COST + RUNNING_COST)`
+  - Automation classification: script, skill, workflow, code_change
+- **Backend API** (`backend/cmd/autonomous.go`) — 7 endpoints, 14 routes (both `/api/` and `/api/v1/`)
+  - `POST /api/agents/thoughts` — agent reports observation/enhancement/proposal/alert
+  - `GET /api/agents/thoughts` — list with filters (agent_id, type, status, category, limit)
+  - `GET /api/agents/thoughts/{id}` — single thought detail
+  - `PATCH /api/agents/thoughts/{id}` — approve, reject, or mark implemented
+  - `DELETE /api/agents/thoughts/{id}` — remove thought
+  - `GET /api/agents/swarm` — full swarm state for agent self-awareness
+  - `GET /api/agents/autonomous/stats` — dashboard summary metrics
+- **Database** — `agent_thoughts` table with indexes on agent_id, status, type
+- **Frontend Dashboard** (`/autonomous`) — Obsidian Command theme
+  - 4 metric cards: Active Thoughts, Pending Proposals, Avg Efficiency, Implemented
+  - 3-column grid: Swarm Overview, Thought Log, Enhancement Proposals
+  - 2 Recharts: Thoughts Over Time (LineChart), Thoughts by Agent (BarChart)
+  - Automation Suggestions panel: categorized by type
+  - Approve/reject/implement/delete actions
+- **Zustand Store** (`autonomousStore.ts`) — state management with filter persistence
+- **API Client** (`autonomous.ts`) — TypeScript interfaces + 7 API methods
+- **Orchestrator** — `reportThought()` method + `autonomousThought` event
+
+### Added — Meta-Cognition SOUL.md
+- All 12 agent SOUL.md files updated with personalized Meta-Cognition sections:
+  - Self-Awareness — what to monitor about their own performance
+  - Enhancement Identification — how to spot improvement opportunities
+  - Efficiency Tracking — COST_BENEFIT formula, minimum threshold > 1.0
+  - Swarm Awareness — how to coordinate with other agents
+
+### Added — Documentation
+- **docs/ROADMAP.md** — comprehensive 7-phase roadmap with shipped/planned tracking
+- README.md updated: 19 pages, 19 stores, roadmap link, Autonomous Intelligence feature
+- Sidebar: Brain icon navigation to `/autonomous`
+
+### Infrastructure
+- Page count: 18 → 19 (Autonomous Intelligence)
+- Zustand stores: 18 → 19 (autonomousStore)
+- API modules: 14 → 15 (autonomous)
+- Backend files: 9 → 10 (autonomous.go)
+- Backend endpoints: 100+ (14 new autonomous routes)
+
+---
+
 ## [1.0.0] - 2026-02-25
 
 ### Added — Authentication

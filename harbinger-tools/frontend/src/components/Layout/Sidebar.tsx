@@ -21,6 +21,7 @@ import {
   Activity,
   Crosshair,
   Wrench,
+  Brain,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -48,6 +49,7 @@ const navItems: NavItem[] = [
   { path: '/scope-manager', label: 'Scope Manager', icon: ShieldCheck },
   { path: '/vuln-deep-dive', label: 'Vuln Deep Dive', icon: Crosshair },
   { path: '/remediation', label: 'Remediation', icon: Wrench },
+  { path: '/autonomous', label: 'Autonomous', icon: Brain },
 ]
 
 const bottomNavItems: NavItem[] = [

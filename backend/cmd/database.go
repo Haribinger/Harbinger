@@ -1000,3 +1000,237 @@ func dbLoadModelRoutes() ([]ModelRoute, ModelRouterConfig, error) {
 
 	return routes, config, nil
 }
+
+// ============================================================================
+// AUTONOMOUS INTELLIGENCE — DB persistence for agent thoughts
+// ============================================================================
+
+// ensureAutonomousTable creates the agent_thoughts table if it doesn't exist.
+func ensureAutonomousTable() {
+	if !dbAvailable() {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS agent_thoughts (
+			id              TEXT PRIMARY KEY,
+			agent_id        TEXT NOT NULL,
+			agent_name      TEXT DEFAULT '',
+			type            TEXT DEFAULT 'observation',
+			category        TEXT DEFAULT '',
+			title           TEXT NOT NULL,
+			content         TEXT DEFAULT '',
+			priority        INT DEFAULT 3,
+			status          TEXT DEFAULT 'pending',
+			efficiency      JSONB,
+			data            JSONB,
+			created_at      BIGINT DEFAULT 0
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create agent_thoughts table: %v", err)
+		return
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_agent ON agent_thoughts(agent_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_status ON agent_thoughts(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_type ON agent_thoughts(type)`)
+}
+
+// dbStoreThought inserts a thought into PostgreSQL.
+func dbStoreThought(t AgentThought) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	effJSON, _ := json.Marshal(t.Efficiency)
+	dataJSON := t.Data
+	if dataJSON == nil {
+		dataJSON = json.RawMessage("null")
+	}
+	_, err := db.Exec(`
+		INSERT INTO agent_thoughts (id, agent_id, agent_name, type, category, title, content, priority, status, efficiency, data, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (id) DO NOTHING`,
+		t.ID, t.AgentID, t.AgentName, t.Type, t.Category, t.Title, t.Content, t.Priority, t.Status, effJSON, dataJSON, t.CreatedAt,
+	)
+	return err
+}
+
+// dbListThoughts queries thoughts with optional filters.
+func dbListThoughts(agentID, thoughtType, status, category string, limit int) ([]AgentThought, error) {
+	if !dbAvailable() {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	query := `SELECT id, agent_id, agent_name, type, category, title, content, priority, status, efficiency, data, created_at
+		FROM agent_thoughts WHERE 1=1`
+	args := []any{}
+	argN := 1
+
+	if agentID != "" {
+		query += fmt.Sprintf(" AND agent_id = $%d", argN)
+		args = append(args, agentID)
+		argN++
+	}
+	if thoughtType != "" {
+		query += fmt.Sprintf(" AND type = $%d", argN)
+		args = append(args, thoughtType)
+		argN++
+	}
+	if status != "" {
+		query += fmt.Sprintf(" AND status = $%d", argN)
+		args = append(args, status)
+		argN++
+	}
+	if category != "" {
+		query += fmt.Sprintf(" AND category = $%d", argN)
+		args = append(args, category)
+		argN++
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argN)
+	args = append(args, limit)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var thoughts []AgentThought
+	for rows.Next() {
+		var t AgentThought
+		var effJSON, dataJSON sql.NullString
+		if err := rows.Scan(&t.ID, &t.AgentID, &t.AgentName, &t.Type, &t.Category, &t.Title, &t.Content, &t.Priority, &t.Status, &effJSON, &dataJSON, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		if effJSON.Valid && effJSON.String != "null" {
+			var eff EfficiencyScore
+			if json.Unmarshal([]byte(effJSON.String), &eff) == nil {
+				t.Efficiency = &eff
+			}
+		}
+		if dataJSON.Valid && dataJSON.String != "null" {
+			t.Data = json.RawMessage(dataJSON.String)
+		}
+		thoughts = append(thoughts, t)
+	}
+	if thoughts == nil {
+		thoughts = []AgentThought{}
+	}
+	return thoughts, nil
+}
+
+// dbGetThought retrieves a single thought by ID.
+func dbGetThought(id string) (*AgentThought, error) {
+	if !dbAvailable() {
+		return nil, fmt.Errorf("database not available")
+	}
+	var t AgentThought
+	var effJSON, dataJSON sql.NullString
+	err := db.QueryRow(`SELECT id, agent_id, agent_name, type, category, title, content, priority, status, efficiency, data, created_at
+		FROM agent_thoughts WHERE id = $1`, id).Scan(
+		&t.ID, &t.AgentID, &t.AgentName, &t.Type, &t.Category, &t.Title, &t.Content, &t.Priority, &t.Status, &effJSON, &dataJSON, &t.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if effJSON.Valid && effJSON.String != "null" {
+		var eff EfficiencyScore
+		if json.Unmarshal([]byte(effJSON.String), &eff) == nil {
+			t.Efficiency = &eff
+		}
+	}
+	if dataJSON.Valid && dataJSON.String != "null" {
+		t.Data = json.RawMessage(dataJSON.String)
+	}
+	return &t, nil
+}
+
+// dbUpdateThoughtStatus updates only the status field.
+func dbUpdateThoughtStatus(id, status string) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	_, err := db.Exec(`UPDATE agent_thoughts SET status = $1 WHERE id = $2`, status, id)
+	return err
+}
+
+// dbDeleteThought removes a thought from the database.
+func dbDeleteThought(id string) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	_, err := db.Exec(`DELETE FROM agent_thoughts WHERE id = $1`, id)
+	return err
+}
+
+// dbGetThoughtStats computes aggregate statistics from the database.
+func dbGetThoughtStats() (*AutonomousStats, error) {
+	if !dbAvailable() {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	stats := &AutonomousStats{
+		AutomationsByType:  map[string]int{},
+		ThoughtsByAgent:    map[string]int{},
+		ThoughtsByCategory: map[string]int{},
+	}
+
+	// Totals by status
+	rows, err := db.Query(`SELECT status, COUNT(*) FROM agent_thoughts GROUP BY status`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var s string
+		var count int
+		if err := rows.Scan(&s, &count); err != nil {
+			continue
+		}
+		stats.TotalThoughts += count
+		switch s {
+		case "pending", "approved":
+			stats.ActiveThoughts += count
+		case "implemented":
+			stats.ImplementedCount += count
+		}
+		if s == "pending" {
+			stats.PendingProposals = count
+		}
+	}
+
+	// By agent
+	rows2, err := db.Query(`SELECT COALESCE(NULLIF(agent_name,''), agent_id), COUNT(*) FROM agent_thoughts GROUP BY 1`)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var name string
+			var count int
+			if rows2.Scan(&name, &count) == nil {
+				stats.ThoughtsByAgent[name] = count
+			}
+		}
+	}
+
+	// By category
+	rows3, err := db.Query(`SELECT category, COUNT(*) FROM agent_thoughts WHERE category != '' GROUP BY category`)
+	if err == nil {
+		defer rows3.Close()
+		for rows3.Next() {
+			var cat string
+			var count int
+			if rows3.Scan(&cat, &count) == nil {
+				stats.ThoughtsByCategory[cat] = count
+			}
+		}
+	}
+
+	// Average efficiency
+	var avgEff sql.NullFloat64
+	db.QueryRow(`SELECT AVG((efficiency->>'cost_benefit')::float) FROM agent_thoughts WHERE efficiency IS NOT NULL AND efficiency != 'null'`).Scan(&avgEff)
+	if avgEff.Valid {
+		stats.AvgEfficiency = avgEff.Float64
+	}
+
+	return stats, nil
+}

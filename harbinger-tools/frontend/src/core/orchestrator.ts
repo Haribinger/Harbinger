@@ -1,4 +1,5 @@
 import { agentsApi } from '../api/agents'
+import { autonomousApi } from '../api/autonomous'
 
 type EventHandler = (...args: any[]) => void
 
@@ -91,7 +92,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
           config.soulVersion = soulResult.soul_version
           this.emit('agentSoulLoaded', { agentId, soul: soulResult.soul, version: soulResult.soul_version })
         }
-      }).catch(() => {})
+      }).catch(() => { /* soul load is best-effort */ })
 
       // Start heartbeat polling for this agent
       this.startHeartbeat(agentId)
@@ -172,7 +173,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
                 config.soul = soulResult.soul
                 this.emit('agentSoulUpdated', { agentId, soul: soulResult.soul, version: soulResult.soul_version })
               }
-            }).catch(() => {})
+            }).catch(() => { /* soul load is best-effort */ })
           }
 
           this.emit('agentStatusChange', config)
@@ -243,6 +244,27 @@ class AgentOrchestrator extends SimpleEventEmitter {
     if (fromAgent && toAgent) {
       console.log(`[Orchestrator] ${fromAgent.codename} sharing findings with ${toAgent.codename}`)
       this.emit('findingsShared', { fromAgentId, toAgentId, findings })
+    }
+  }
+
+  /** Report an autonomous thought from this agent */
+  async reportThought(agentId: string, thought: {
+    type: string; category: string; title: string; content: string; priority?: number
+  }): Promise<void> {
+    const agent = this.agents.get(agentId)
+    try {
+      await autonomousApi.createThought({
+        agent_id: agentId,
+        agent_name: agent?.codename || agentId,
+        type: thought.type as any,
+        category: thought.category as any,
+        title: thought.title,
+        content: thought.content,
+        priority: thought.priority || 3,
+      })
+      this.emit('autonomousThought', { agentId, thought })
+    } catch (err: any) {
+      console.error('[Orchestrator] Failed to report thought:', err.message)
     }
   }
 
