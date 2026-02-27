@@ -222,7 +222,7 @@ export const useThemeStore = create<ThemeState>()(
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
           body: JSON.stringify({ agentId, themeId: themeId || '' }),
-        }).catch(() => {})
+        }).catch(() => { /* agent theme sync to backend is best-effort */ })
       },
 
       getAgentTheme: (agentId) => {
@@ -240,7 +240,7 @@ export const useThemeStore = create<ThemeState>()(
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
           body: JSON.stringify(sched),
-        }).catch(() => {})
+        }).catch(() => { /* schedule sync to backend is best-effort */ })
       },
 
       checkSchedule: () => {
@@ -266,7 +266,7 @@ export const useThemeStore = create<ThemeState>()(
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify(theme),
-          }).catch(() => {})
+          }).catch(() => { /* theme sync to backend is best-effort — local state is primary */ })
         }
       },
 

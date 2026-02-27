@@ -42,7 +42,8 @@ class ApiClient {
       (error: AxiosError) => {
         // Only show toast for non-GET requests or critical errors
         if (error.config?.method !== 'get' || error.response?.status === 401) {
-          const message = (error.response?.data as any)?.message || error.message || 'Unknown error'
+          const data = error.response?.data as Record<string, unknown> | undefined
+          const message = (data?.message as string) || error.message || 'Unknown error'
           console.error(`API Error: ${message}`)
           // Silent fail for offline mode - don't spam user with errors
           if (error.code !== 'ERR_NETWORK') {

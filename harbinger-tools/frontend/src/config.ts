@@ -8,7 +8,7 @@
 // The empty-string default means "same origin" — all /api/* requests are relative,
 // so both Vite dev proxy and Docker nginx proxy work automatically.
 
-const env = (import.meta as any).env || {}
+const env = (import.meta as unknown as Record<string, unknown>).env as Record<string, string | undefined> || {}
 
 /** Base URL for all API requests. Empty string = relative (same-origin proxy). */
 export const API_BASE: string = env.VITE_API_URL ?? ''

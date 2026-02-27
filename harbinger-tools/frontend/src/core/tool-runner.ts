@@ -5,8 +5,8 @@ interface ToolExecutionRecord {
   id: string
   toolName: string
   serverName: string
-  parameters: Record<string, any>
-  result: any
+  parameters: Record<string, unknown>
+  result: unknown
   error?: string
   startTime: number
   endTime: number
@@ -74,10 +74,10 @@ class ToolRunner extends EventEmitter {
 
   async executeToolChain(
     serverName: string,
-    toolSequence: Array<{ name: string; parameters: Record<string, any> }>
+    toolSequence: Array<{ name: string; parameters: Record<string, unknown> }>
   ): Promise<ToolExecutionRecord[]> {
     const records: ToolExecutionRecord[] = [];
-    let previousResult: any = null;
+    let previousResult: unknown = null;
 
     for (const tool of toolSequence) {
       try {

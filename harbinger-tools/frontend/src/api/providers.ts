@@ -66,7 +66,7 @@ export const providersApi = {
       const response = await fetch(`${baseUrl}/api/tags`)
       if (!response.ok) throw new Error('Failed to fetch Ollama models')
       const data = await response.json()
-      return data.models?.map((m: any) => m.name) || []
+      return data.models?.map((m: { name: string }) => m.name) || []
     } catch (error) {
       console.error('Failed to fetch Ollama models:', error)
       return []

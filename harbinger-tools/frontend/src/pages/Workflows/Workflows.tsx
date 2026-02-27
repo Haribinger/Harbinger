@@ -19,6 +19,9 @@ import {
   Search,
   Shield,
   Target,
+  Code,
+  Clock,
+  Bell,
 } from 'lucide-react'
 import { useWorkflowStore } from '../../store/workflowStore'
 import type { Workflow as WorkflowType } from '../../types'
@@ -30,6 +33,10 @@ const TEMPLATE_ICONS: Record<WorkflowTemplateIconKey, typeof Search> = {
   shield: Shield,
   target: Target,
   filetext: FileText,
+  code: Code,
+  clock: Clock,
+  globe: Globe,
+  bell: Bell,
 }
 
 const nodeTypes = [

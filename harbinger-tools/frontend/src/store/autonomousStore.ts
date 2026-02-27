@@ -55,8 +55,8 @@ export const useAutonomousStore = create<AutonomousState>()(
             limit: 200,
           })
           set({ thoughts: data.thoughts || [], isLoading: false })
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to fetch thoughts', isLoading: false })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to fetch thoughts', isLoading: false })
         }
       },
 
@@ -88,8 +88,8 @@ export const useAutonomousStore = create<AutonomousState>()(
           set((s) => ({
             thoughts: s.thoughts.map((t) => (t.id === id ? { ...t, status: 'approved' as const } : t)),
           }))
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to approve thought' })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to approve thought' })
         }
       },
 
@@ -99,8 +99,8 @@ export const useAutonomousStore = create<AutonomousState>()(
           set((s) => ({
             thoughts: s.thoughts.map((t) => (t.id === id ? { ...t, status: 'rejected' as const } : t)),
           }))
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to reject thought' })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to reject thought' })
         }
       },
 
@@ -110,8 +110,8 @@ export const useAutonomousStore = create<AutonomousState>()(
           set((s) => ({
             thoughts: s.thoughts.map((t) => (t.id === id ? { ...t, status: 'implemented' as const } : t)),
           }))
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to mark thought as implemented' })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to mark thought as implemented' })
         }
       },
 
@@ -121,8 +121,8 @@ export const useAutonomousStore = create<AutonomousState>()(
           set((s) => ({
             thoughts: s.thoughts.filter((t) => t.id !== id),
           }))
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to delete thought' })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to delete thought' })
         }
       },
     }),

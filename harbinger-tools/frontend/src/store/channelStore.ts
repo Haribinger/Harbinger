@@ -203,7 +203,7 @@ export const useChannelStore = create<ChannelState>()(
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify(full),
-        }).catch(() => {})
+        }).catch(() => { /* broadcast persistence to backend is best-effort */ })
       },
 
       getAgentMessages: (agentId) => {

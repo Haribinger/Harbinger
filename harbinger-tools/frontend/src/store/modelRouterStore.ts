@@ -57,19 +57,19 @@ export const useModelRouterStore = create<ModelRouterState>()(
             config: data.config || get().config,
             isLoading: false,
           })
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to fetch model routes', isLoading: false })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to fetch model routes', isLoading: false })
         }
       },
 
       updateRoutes: async (routes, config) => {
-        const body: any = { routes }
+        const body: { routes: ModelRoute[]; config?: ModelRouterConfig } = { routes }
         if (config) body.config = config
         try {
           await apiClient.put('/api/settings/model-routes', body)
           set({ routes, ...(config ? { config } : {}) })
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to update routes' })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to update routes' })
         }
       },
 

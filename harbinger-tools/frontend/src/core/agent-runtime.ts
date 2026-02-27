@@ -45,7 +45,7 @@ class AgentRuntime extends EventEmitter {
         if (templateRes.ok) {
           const templates = await templateRes.json()
           const tpl = (Array.isArray(templates) ? templates : templates.templates || [])
-            .find((t: any) => t.type === agentType || t.name?.toLowerCase() === agentType.toLowerCase())
+            .find((t: Record<string, unknown>) => t.type === agentType || (t.name as string)?.toLowerCase() === agentType.toLowerCase())
 
           this.config = {
             name: tpl?.name || agentType,
@@ -94,7 +94,7 @@ class AgentRuntime extends EventEmitter {
     }
   }
 
-  async executeTool(toolName: string, params: any): Promise<any> {
+  async executeTool(toolName: string, params: Record<string, unknown>): Promise<unknown> {
     agentOrchestrator.updateAgentStatus(this.agentId, 'working', `Executing tool: ${toolName}`)
 
     try {

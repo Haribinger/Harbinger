@@ -22,6 +22,8 @@ import {
   Crosshair,
   Wrench,
   Brain,
+  ShieldAlert,
+  Bug,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -50,6 +52,8 @@ const navItems: NavItem[] = [
   { path: '/vuln-deep-dive', label: 'Vuln Deep Dive', icon: Crosshair },
   { path: '/remediation', label: 'Remediation', icon: Wrench },
   { path: '/autonomous', label: 'Autonomous', icon: Brain },
+  { path: '/pentest-dashboard', label: 'Pentest', icon: ShieldAlert },
+  { path: '/cve-monitor', label: 'CVE Monitor', icon: Bug },
 ]
 
 const bottomNavItems: NavItem[] = [

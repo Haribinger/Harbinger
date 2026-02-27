@@ -25,7 +25,7 @@
 - **Orchestrator** — `reportThought()` method + `autonomousThought` event
 
 ### Added — Meta-Cognition SOUL.md
-- All 12 agent SOUL.md files updated with personalized Meta-Cognition sections:
+- All 11 agent SOUL.md files updated with personalized Meta-Cognition sections:
   - Self-Awareness — what to monitor about their own performance
   - Enhancement Identification — how to spot improvement opportunities
   - Efficiency Tracking — COST_BENEFIT formula, minimum threshold > 1.0
@@ -40,7 +40,7 @@
 - Page count: 18 → 19 (Autonomous Intelligence)
 - Zustand stores: 18 → 19 (autonomousStore)
 - API modules: 14 → 15 (autonomous)
-- Backend files: 9 → 10 (autonomous.go)
+- Backend files: 9 → 13 (autonomous.go, codehealth.go, modelrouter.go, oauth.go, themes.go)
 - Backend endpoints: 100+ (14 new autonomous routes)
 
 ---

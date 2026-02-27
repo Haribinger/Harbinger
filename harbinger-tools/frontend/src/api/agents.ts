@@ -86,7 +86,7 @@ export const agentsApi = {
   },
 
   // Get agent status with container details
-  getStatus: async (id: string): Promise<{ agent_id: string; running: boolean; container?: any; agent?: any }> => {
+  getStatus: async (id: string): Promise<{ agent_id: string; running: boolean; container?: Record<string, unknown>; agent?: Record<string, unknown> }> => {
     return apiClient.get(`/api/agents/${id}/status`)
   },
 
@@ -110,12 +110,12 @@ export const agentsApi = {
   },
 
   // Get full agent profile (SOUL, IDENTITY, SKILLS, HEARTBEAT, TOOLS)
-  getProfile: async (id: string): Promise<Record<string, any>> => {
+  getProfile: async (id: string): Promise<Record<string, unknown>> => {
     return apiClient.get(`/api/agents/${id}/profile`)
   },
 
   // Get agent templates
-  getTemplates: async (): Promise<{ ok: boolean; templates: any[]; count: number }> => {
+  getTemplates: async (): Promise<{ ok: boolean; templates: Array<{ type: string; name: string; description: string; capabilities: string[]; personality?: string }>; count: number }> => {
     return apiClient.get('/api/agents/templates')
   },
 }

@@ -4,13 +4,46 @@ import '@xyflow/react/dist/style.css';
 import { useWorkflowEditorStore } from '../store/workflowEditorStore';
 import WorkflowToolbar from '../components/Workflow/WorkflowToolbar';
 import NodePalette from '../components/Workflow/NodePalette';
+import ValidationPanel from '../components/Workflow/ValidationPanel';
 import ToolNode from '../components/Workflow/nodes/ToolNode';
 import AgentNode from '../components/Workflow/nodes/AgentNode';
 import DecisionNode from '../components/Workflow/nodes/DecisionNode';
 import TriggerNode from '../components/Workflow/nodes/TriggerNode';
 import OutputNode from '../components/Workflow/nodes/OutputNode';
 import VariableNode from '../components/Workflow/nodes/VariableNode';
-import { WorkflowNode, TriggerNodeData, OutputNodeData, VariableNodeData, DecisionNodeData } from '../types/workflow';
+import LoopNode from '../components/Workflow/nodes/LoopNode';
+import HttpRequestNode from '../components/Workflow/nodes/HttpRequestNode';
+import DelayNode from '../components/Workflow/nodes/DelayNode';
+import CodeNode from '../components/Workflow/nodes/CodeNode';
+import NotificationNode from '../components/Workflow/nodes/NotificationNode';
+import CustomEdge from '../components/Workflow/edges/CustomEdge';
+import ParallelEdge from '../components/Workflow/edges/ParallelEdge';
+import { useWorkflowKeyboard } from '../components/Workflow/hooks/useWorkflowKeyboard';
+import {
+  WorkflowNode,
+  TriggerNodeData,
+  OutputNodeData,
+  VariableNodeData,
+  DecisionNodeData,
+  LoopNodeData,
+  HttpRequestNodeData,
+  DelayNodeData,
+  CodeNodeData,
+  NotificationNodeData,
+} from '../types/workflow';
+import {
+  isToolNodeData,
+  isAgentNodeData,
+  isDecisionNodeData,
+  isTriggerNodeData,
+  isOutputNodeData,
+  isVariableNodeData,
+  isLoopNodeData,
+  isHttpRequestNodeData,
+  isDelayNodeData,
+  isCodeNodeData,
+  isNotificationNodeData,
+} from '../types/workflow-guards';
 
 const nodeTypes = {
   toolNode: ToolNode,
@@ -19,6 +52,16 @@ const nodeTypes = {
   triggerNode: TriggerNode,
   outputNode: OutputNode,
   variableNode: VariableNode,
+  loopNode: LoopNode,
+  httpRequestNode: HttpRequestNode,
+  delayNode: DelayNode,
+  codeNode: CodeNode,
+  notificationNode: NotificationNode,
+};
+
+const edgeTypes = {
+  custom: CustomEdge,
+  parallel: ParallelEdge,
 };
 
 let id = 0;
@@ -39,7 +82,12 @@ const WorkflowEditorContent: React.FC = () => {
     executionState,
     updateNode,
     deleteNode,
+    snapToGrid,
+    gridSize,
+    pushSnapshot,
   } = useWorkflowEditorStore();
+
+  useWorkflowKeyboard();
 
   const [propertiesTab, setPropertiesTab] = useState<'config' | 'variables' | 'output'>('config');
 
@@ -63,6 +111,8 @@ const WorkflowEditorContent: React.FC = () => {
         y: event.clientY,
       });
 
+      pushSnapshot();
+
       let newNode: WorkflowNode;
 
       switch (type) {
@@ -73,8 +123,8 @@ const WorkflowEditorContent: React.FC = () => {
             position,
             data: {
               toolName: toolName || 'New Tool',
-              category: (category as any) || 'Recon',
-              status: 'pending',
+              category: (category || 'Recon') as 'Recon',
+              status: 'pending' as const,
               outputPreview: '',
               parameters: {},
               variables: {},
@@ -113,7 +163,7 @@ const WorkflowEditorContent: React.FC = () => {
               webhookPath: '',
               eventFilter: '',
               enabled: true,
-            } as TriggerNodeData,
+            } satisfies TriggerNodeData,
           };
           break;
 
@@ -127,7 +177,7 @@ const WorkflowEditorContent: React.FC = () => {
               destination: '',
               format: 'markdown',
               template: '',
-            } as OutputNodeData,
+            } satisfies OutputNodeData,
           };
           break;
 
@@ -140,7 +190,87 @@ const WorkflowEditorContent: React.FC = () => {
               variableName: 'myVar',
               expression: '{{prev.output}}',
               dataType: 'string',
-            } as VariableNodeData,
+            } satisfies VariableNodeData,
+          };
+          break;
+
+        case 'loopNode':
+          newNode = {
+            id: getId(),
+            type,
+            position,
+            data: {
+              iteratorExpression: '{{prev.output}}',
+              itemVariable: 'item',
+              indexVariable: 'index',
+              maxIterations: 100,
+              parallelism: 1,
+              status: 'pending',
+            } satisfies LoopNodeData,
+          };
+          break;
+
+        case 'httpRequestNode':
+          newNode = {
+            id: getId(),
+            type,
+            position,
+            data: {
+              method: 'GET',
+              url: '',
+              headers: {},
+              body: '',
+              bodyType: 'none',
+              timeout: 30,
+              verifySsl: true,
+              status: 'pending',
+            } satisfies HttpRequestNodeData,
+          };
+          break;
+
+        case 'delayNode':
+          newNode = {
+            id: getId(),
+            type,
+            position,
+            data: {
+              delayType: 'fixed',
+              durationMs: 5000,
+              minMs: 1000,
+              maxMs: 10000,
+              untilExpression: '',
+              status: 'pending',
+            } satisfies DelayNodeData,
+          };
+          break;
+
+        case 'codeNode':
+          newNode = {
+            id: getId(),
+            type,
+            position,
+            data: {
+              language: 'javascript',
+              code: '// Your code here\nreturn input;',
+              entryFunction: 'main',
+              timeout: 30,
+              status: 'pending',
+            } satisfies CodeNodeData,
+          };
+          break;
+
+        case 'notificationNode':
+          newNode = {
+            id: getId(),
+            type,
+            position,
+            data: {
+              channel: 'discord',
+              messageTemplate: '{{prev.output}}',
+              severity: 'info',
+              destination: '',
+              status: 'pending',
+            } satisfies NotificationNodeData,
           };
           break;
 
@@ -154,14 +284,14 @@ const WorkflowEditorContent: React.FC = () => {
               condition: 'if (true)',
               trueLabel: 'Yes',
               falseLabel: 'No',
-            } as DecisionNodeData,
+            } satisfies DecisionNodeData,
           };
           break;
       }
 
       addNode(newNode);
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode, pushSnapshot]
   );
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: WorkflowNode) => {
@@ -173,7 +303,7 @@ const WorkflowEditorContent: React.FC = () => {
     setSelectedNode(null);
   }, [setSelectedNode]);
 
-  const handlePropertyChange = useCallback((key: string, value: any) => {
+  const handlePropertyChange = useCallback((key: string, value: unknown) => {
     if (selectedNode) {
       updateNode(selectedNode.id, { [key]: value });
       setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, [key]: value } });
@@ -182,10 +312,11 @@ const WorkflowEditorContent: React.FC = () => {
 
   const handleDeleteSelected = useCallback(() => {
     if (selectedNode) {
+      pushSnapshot();
       deleteNode(selectedNode.id);
       setSelectedNode(null);
     }
-  }, [selectedNode, deleteNode, setSelectedNode]);
+  }, [selectedNode, deleteNode, setSelectedNode, pushSnapshot]);
 
   const animatedEdges = edges.map(edge => {
     const sourceNodeStatus = executionState?.nodeStatuses[edge.source];
@@ -194,13 +325,17 @@ const WorkflowEditorContent: React.FC = () => {
 
     return {
       ...edge,
+      type: edge.type || 'custom',
       animated: isAnimated,
       markerEnd: { type: MarkerType.ArrowClosed, color: '#f0c040' },
       style: { strokeWidth: 2, stroke: isAnimated ? '#f0c040' : '#1a1a2e' },
+      data: {
+        status: isAnimated ? 'running' : (sourceNodeStatus === 'success' ? 'success' : undefined),
+      },
     };
   });
 
-  const nodeColor = (node: any) => {
+  const nodeColor = (node: { type?: string }) => {
     switch (node.type) {
       case 'toolNode': return '#f0c040';
       case 'agentNode': return '#00b0ff';
@@ -208,9 +343,16 @@ const WorkflowEditorContent: React.FC = () => {
       case 'triggerNode': return '#22c55e';
       case 'outputNode': return '#f0c040';
       case 'variableNode': return '#06b6d4';
+      case 'loopNode': return '#8b5cf6';
+      case 'httpRequestNode': return '#0ea5e9';
+      case 'delayNode': return '#f59e0b';
+      case 'codeNode': return '#10b981';
+      case 'notificationNode': return '#ec4899';
       default: return '#eee';
     }
   };
+
+  const selectedData = selectedNode?.data;
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0a0a0f] text-white font-mono">
@@ -231,6 +373,10 @@ const WorkflowEditorContent: React.FC = () => {
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            snapToGrid={snapToGrid}
+            snapGrid={[gridSize, gridSize]}
+            defaultEdgeOptions={{ type: 'custom' }}
             fitView
           >
             <MiniMap style={{ backgroundColor: '#0d0d15' }} nodeColor={nodeColor} />
@@ -253,7 +399,7 @@ const WorkflowEditorContent: React.FC = () => {
             )}
           </div>
 
-          {selectedNode ? (
+          {selectedNode && selectedData ? (
             <div className="flex-1 overflow-y-auto">
               {/* Tabs */}
               <div className="flex border-b border-[#1a1a2e]">
@@ -282,68 +428,132 @@ const WorkflowEditorContent: React.FC = () => {
                 {propertiesTab === 'config' && (
                   <>
                     {/* Tool Node Config */}
-                    {selectedNode.type === 'toolNode' && (
+                    {isToolNodeData(selectedData) && (
                       <>
-                        <PropertyField label="Tool Name" value={(selectedNode.data as any).toolName || ''} onChange={(v) => handlePropertyChange('toolName', v)} />
-                        <PropertySelect label="Category" value={(selectedNode.data as any).category || 'Recon'} options={['Recon', 'Web', 'Cloud', 'OSINT', 'Binary', 'Reporting', 'Browser']} onChange={(v) => handlePropertyChange('category', v)} />
-                        <PropertyField label="Timeout (sec)" value={String((selectedNode.data as any).timeout || 300)} onChange={(v) => handlePropertyChange('timeout', parseInt(v) || 0)} type="number" />
-                        <PropertyField label="Retry Count" value={String((selectedNode.data as any).retryCount || 0)} onChange={(v) => handlePropertyChange('retryCount', parseInt(v) || 0)} type="number" />
-                        <PropertyCheckbox label="Continue on Error" checked={(selectedNode.data as any).continueOnError || false} onChange={(v) => handlePropertyChange('continueOnError', v)} />
+                        <PropertyField label="Tool Name" value={selectedData.toolName} onChange={(v) => handlePropertyChange('toolName', v)} />
+                        <PropertySelect label="Category" value={selectedData.category} options={['Recon', 'Web', 'Cloud', 'OSINT', 'Binary', 'Reporting', 'Browser']} onChange={(v) => handlePropertyChange('category', v)} />
+                        <PropertyField label="Timeout (sec)" value={String(selectedData.timeout)} onChange={(v) => handlePropertyChange('timeout', parseInt(v) || 0)} type="number" />
+                        <PropertyField label="Retry Count" value={String(selectedData.retryCount)} onChange={(v) => handlePropertyChange('retryCount', parseInt(v) || 0)} type="number" />
+                        <PropertyCheckbox label="Continue on Error" checked={selectedData.continueOnError} onChange={(v) => handlePropertyChange('continueOnError', v)} />
                       </>
                     )}
 
                     {/* Agent Node Config */}
-                    {selectedNode.type === 'agentNode' && (
+                    {isAgentNodeData(selectedData) && (
                       <>
-                        <PropertyField label="Codename" value={(selectedNode.data as any).codename || ''} onChange={(v) => handlePropertyChange('codename', v)} />
-                        <PropertyField label="Agent ID" value={(selectedNode.data as any).agentId || ''} onChange={(v) => handlePropertyChange('agentId', v)} placeholder="auto-detected" />
-                        <PropertySelect label="Agent Type" value={(selectedNode.data as any).agentType || 'general'} options={['recon', 'web', 'cloud', 'osint', 'binary', 'report', 'coding-assistant', 'reporter', 'general']} onChange={(v) => handlePropertyChange('agentType', v)} />
-                        <PropertyCheckbox label="Auto-chain findings" checked={(selectedNode.data as any).autoChain !== false} onChange={(v) => handlePropertyChange('autoChain', v)} />
+                        <PropertyField label="Codename" value={selectedData.codename} onChange={(v) => handlePropertyChange('codename', v)} />
+                        <PropertyField label="Agent ID" value={selectedData.agentId} onChange={(v) => handlePropertyChange('agentId', v)} placeholder="auto-detected" />
+                        <PropertySelect label="Agent Type" value={selectedData.agentType} options={['recon', 'web', 'cloud', 'osint', 'binary', 'report', 'coding-assistant', 'reporter', 'general']} onChange={(v) => handlePropertyChange('agentType', v)} />
+                        <PropertyCheckbox label="Auto-chain findings" checked={selectedData.autoChain !== false} onChange={(v) => handlePropertyChange('autoChain', v)} />
                       </>
                     )}
 
                     {/* Decision Node Config */}
-                    {selectedNode.type === 'decisionNode' && (
+                    {isDecisionNodeData(selectedData) && (
                       <>
-                        <PropertyTextarea label="Condition" value={(selectedNode.data as any).condition || ''} onChange={(v) => handlePropertyChange('condition', v)} placeholder='{{prev.output}} contains "critical"' />
-                        <PropertyField label="True Label" value={(selectedNode.data as any).trueLabel || 'Yes'} onChange={(v) => handlePropertyChange('trueLabel', v)} />
-                        <PropertyField label="False Label" value={(selectedNode.data as any).falseLabel || 'No'} onChange={(v) => handlePropertyChange('falseLabel', v)} />
+                        <PropertyTextarea label="Condition" value={selectedData.condition} onChange={(v) => handlePropertyChange('condition', v)} placeholder='{{prev.output}} contains "critical"' />
+                        <PropertyField label="True Label" value={selectedData.trueLabel} onChange={(v) => handlePropertyChange('trueLabel', v)} />
+                        <PropertyField label="False Label" value={selectedData.falseLabel} onChange={(v) => handlePropertyChange('falseLabel', v)} />
                       </>
                     )}
 
                     {/* Trigger Node Config */}
-                    {selectedNode.type === 'triggerNode' && (
+                    {isTriggerNodeData(selectedData) && (
                       <>
-                        <PropertySelect label="Trigger Type" value={(selectedNode.data as any).triggerType || 'manual'} options={['manual', 'cron', 'webhook', 'on-finding', 'on-agent-message', 'on-event']} onChange={(v) => handlePropertyChange('triggerType', v)} />
-                        {(selectedNode.data as any).triggerType === 'cron' && (
-                          <PropertyField label="Cron Expression" value={(selectedNode.data as any).cronExpression || ''} onChange={(v) => handlePropertyChange('cronExpression', v)} placeholder="0 */6 * * *" />
+                        <PropertySelect label="Trigger Type" value={selectedData.triggerType} options={['manual', 'cron', 'webhook', 'on-finding', 'on-agent-message', 'on-event']} onChange={(v) => handlePropertyChange('triggerType', v)} />
+                        {selectedData.triggerType === 'cron' && (
+                          <PropertyField label="Cron Expression" value={selectedData.cronExpression} onChange={(v) => handlePropertyChange('cronExpression', v)} placeholder="0 */6 * * *" />
                         )}
-                        {(selectedNode.data as any).triggerType === 'webhook' && (
-                          <PropertyField label="Webhook Path" value={(selectedNode.data as any).webhookPath || ''} onChange={(v) => handlePropertyChange('webhookPath', v)} placeholder="/webhooks/start" />
+                        {selectedData.triggerType === 'webhook' && (
+                          <PropertyField label="Webhook Path" value={selectedData.webhookPath} onChange={(v) => handlePropertyChange('webhookPath', v)} placeholder="/webhooks/start" />
                         )}
-                        {['on-finding', 'on-agent-message', 'on-event'].includes((selectedNode.data as any).triggerType) && (
-                          <PropertyField label="Event Filter" value={(selectedNode.data as any).eventFilter || ''} onChange={(v) => handlePropertyChange('eventFilter', v)} placeholder="finding.critical" />
+                        {['on-finding', 'on-agent-message', 'on-event'].includes(selectedData.triggerType) && (
+                          <PropertyField label="Event Filter" value={selectedData.eventFilter} onChange={(v) => handlePropertyChange('eventFilter', v)} placeholder="finding.critical" />
                         )}
-                        <PropertyCheckbox label="Enabled" checked={(selectedNode.data as any).enabled !== false} onChange={(v) => handlePropertyChange('enabled', v)} />
+                        <PropertyCheckbox label="Enabled" checked={selectedData.enabled !== false} onChange={(v) => handlePropertyChange('enabled', v)} />
                       </>
                     )}
 
                     {/* Output Node Config */}
-                    {selectedNode.type === 'outputNode' && (
+                    {isOutputNodeData(selectedData) && (
                       <>
-                        <PropertySelect label="Output Type" value={(selectedNode.data as any).outputType || 'report'} options={['report', 'notify', 'save', 'broadcast', 'webhook-out']} onChange={(v) => handlePropertyChange('outputType', v)} />
-                        <PropertyField label="Destination" value={(selectedNode.data as any).destination || ''} onChange={(v) => handlePropertyChange('destination', v)} placeholder="#discord, telegram, ./reports/" />
-                        <PropertySelect label="Format" value={(selectedNode.data as any).format || 'markdown'} options={['json', 'markdown', 'pdf', 'text']} onChange={(v) => handlePropertyChange('format', v)} />
-                        <PropertyTextarea label="Template" value={(selectedNode.data as any).template || ''} onChange={(v) => handlePropertyChange('template', v)} placeholder="# {{workflow.name}} Report\n\n{{results}}" />
+                        <PropertySelect label="Output Type" value={selectedData.outputType} options={['report', 'notify', 'save', 'broadcast', 'webhook-out']} onChange={(v) => handlePropertyChange('outputType', v)} />
+                        <PropertyField label="Destination" value={selectedData.destination} onChange={(v) => handlePropertyChange('destination', v)} placeholder="#discord, telegram, ./reports/" />
+                        <PropertySelect label="Format" value={selectedData.format} options={['json', 'markdown', 'pdf', 'text']} onChange={(v) => handlePropertyChange('format', v)} />
+                        <PropertyTextarea label="Template" value={selectedData.template} onChange={(v) => handlePropertyChange('template', v)} placeholder="# {{workflow.name}} Report\n\n{{results}}" />
                       </>
                     )}
 
                     {/* Variable Node Config */}
-                    {selectedNode.type === 'variableNode' && (
+                    {isVariableNodeData(selectedData) && (
                       <>
-                        <PropertyField label="Variable Name" value={(selectedNode.data as any).variableName || ''} onChange={(v) => handlePropertyChange('variableName', v)} />
-                        <PropertyField label="Expression" value={(selectedNode.data as any).expression || ''} onChange={(v) => handlePropertyChange('expression', v)} placeholder="{{prev.output}} | count" />
-                        <PropertySelect label="Data Type" value={(selectedNode.data as any).dataType || 'string'} options={['string', 'number', 'boolean', 'array', 'object']} onChange={(v) => handlePropertyChange('dataType', v)} />
+                        <PropertyField label="Variable Name" value={selectedData.variableName} onChange={(v) => handlePropertyChange('variableName', v)} />
+                        <PropertyField label="Expression" value={selectedData.expression} onChange={(v) => handlePropertyChange('expression', v)} placeholder="{{prev.output}} | count" />
+                        <PropertySelect label="Data Type" value={selectedData.dataType} options={['string', 'number', 'boolean', 'array', 'object']} onChange={(v) => handlePropertyChange('dataType', v)} />
+                      </>
+                    )}
+
+                    {/* Loop Node Config */}
+                    {isLoopNodeData(selectedData) && (
+                      <>
+                        <PropertyField label="Iterator Expression" value={selectedData.iteratorExpression} onChange={(v) => handlePropertyChange('iteratorExpression', v)} placeholder="{{prev.output}}" />
+                        <PropertyField label="Item Variable" value={selectedData.itemVariable} onChange={(v) => handlePropertyChange('itemVariable', v)} />
+                        <PropertyField label="Index Variable" value={selectedData.indexVariable} onChange={(v) => handlePropertyChange('indexVariable', v)} />
+                        <PropertyField label="Max Iterations" value={String(selectedData.maxIterations)} onChange={(v) => handlePropertyChange('maxIterations', parseInt(v) || 100)} type="number" />
+                        <PropertyField label="Parallelism" value={String(selectedData.parallelism)} onChange={(v) => handlePropertyChange('parallelism', parseInt(v) || 1)} type="number" />
+                      </>
+                    )}
+
+                    {/* HTTP Request Node Config */}
+                    {isHttpRequestNodeData(selectedData) && (
+                      <>
+                        <PropertySelect label="Method" value={selectedData.method} options={['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']} onChange={(v) => handlePropertyChange('method', v)} />
+                        <PropertyField label="URL" value={selectedData.url} onChange={(v) => handlePropertyChange('url', v)} placeholder="https://api.example.com/endpoint" />
+                        <PropertySelect label="Body Type" value={selectedData.bodyType} options={['none', 'json', 'form', 'raw']} onChange={(v) => handlePropertyChange('bodyType', v)} />
+                        {selectedData.bodyType !== 'none' && (
+                          <PropertyTextarea label="Body" value={selectedData.body} onChange={(v) => handlePropertyChange('body', v)} placeholder='{"key": "value"}' />
+                        )}
+                        <PropertyField label="Timeout (sec)" value={String(selectedData.timeout)} onChange={(v) => handlePropertyChange('timeout', parseInt(v) || 30)} type="number" />
+                        <PropertyCheckbox label="Verify SSL" checked={selectedData.verifySsl} onChange={(v) => handlePropertyChange('verifySsl', v)} />
+                      </>
+                    )}
+
+                    {/* Delay Node Config */}
+                    {isDelayNodeData(selectedData) && (
+                      <>
+                        <PropertySelect label="Delay Type" value={selectedData.delayType} options={['fixed', 'random', 'until']} onChange={(v) => handlePropertyChange('delayType', v)} />
+                        {selectedData.delayType === 'fixed' && (
+                          <PropertyField label="Duration (ms)" value={String(selectedData.durationMs)} onChange={(v) => handlePropertyChange('durationMs', parseInt(v) || 1000)} type="number" />
+                        )}
+                        {selectedData.delayType === 'random' && (
+                          <>
+                            <PropertyField label="Min (ms)" value={String(selectedData.minMs)} onChange={(v) => handlePropertyChange('minMs', parseInt(v) || 0)} type="number" />
+                            <PropertyField label="Max (ms)" value={String(selectedData.maxMs)} onChange={(v) => handlePropertyChange('maxMs', parseInt(v) || 10000)} type="number" />
+                          </>
+                        )}
+                        {selectedData.delayType === 'until' && (
+                          <PropertyField label="Until Expression" value={selectedData.untilExpression} onChange={(v) => handlePropertyChange('untilExpression', v)} placeholder="{{env.READY}} == true" />
+                        )}
+                      </>
+                    )}
+
+                    {/* Code Node Config */}
+                    {isCodeNodeData(selectedData) && (
+                      <>
+                        <PropertySelect label="Language" value={selectedData.language} options={['javascript', 'python', 'bash']} onChange={(v) => handlePropertyChange('language', v)} />
+                        <PropertyTextarea label="Code" value={selectedData.code} onChange={(v) => handlePropertyChange('code', v)} placeholder="// Your code here" />
+                        <PropertyField label="Entry Function" value={selectedData.entryFunction} onChange={(v) => handlePropertyChange('entryFunction', v)} placeholder="main" />
+                        <PropertyField label="Timeout (sec)" value={String(selectedData.timeout)} onChange={(v) => handlePropertyChange('timeout', parseInt(v) || 30)} type="number" />
+                      </>
+                    )}
+
+                    {/* Notification Node Config */}
+                    {isNotificationNodeData(selectedData) && (
+                      <>
+                        <PropertySelect label="Channel" value={selectedData.channel} options={['discord', 'telegram', 'slack', 'email', 'webhook']} onChange={(v) => handlePropertyChange('channel', v)} />
+                        <PropertySelect label="Severity" value={selectedData.severity} options={['info', 'warning', 'critical']} onChange={(v) => handlePropertyChange('severity', v)} />
+                        <PropertyField label="Destination" value={selectedData.destination} onChange={(v) => handlePropertyChange('destination', v)} placeholder="#alerts, @user, https://..." />
+                        <PropertyTextarea label="Message Template" value={selectedData.messageTemplate} onChange={(v) => handlePropertyChange('messageTemplate', v)} placeholder="Alert: {{prev.output}}" />
                       </>
                     )}
                   </>
@@ -351,14 +561,13 @@ const WorkflowEditorContent: React.FC = () => {
 
                 {propertiesTab === 'variables' && (
                   <div className="space-y-2">
-                    <p className="text-[10px] text-gray-500">Variable bindings for this node's parameters. Use expressions like {'{{nodeId.output}}'} to reference outputs from other nodes.</p>
+                    <p className="text-[10px] text-gray-500">Variable bindings for this node&apos;s parameters. Use expressions like {'{{nodeId.output}}'} to reference outputs from other nodes.</p>
 
-                    {/* Show editable key-value pairs for tool parameters */}
-                    {selectedNode.type === 'toolNode' && (
+                    {isToolNodeData(selectedData) && (
                       <>
-                        <PropertyField label="target" value={(selectedNode.data as any).variables?.target || ''} onChange={(v) => handlePropertyChange('variables', { ...(selectedNode.data as any).variables, target: v })} placeholder="{{trigger.data.target}}" />
-                        <PropertyField label="wordlist" value={(selectedNode.data as any).variables?.wordlist || ''} onChange={(v) => handlePropertyChange('variables', { ...(selectedNode.data as any).variables, wordlist: v })} placeholder="/usr/share/wordlists/common.txt" />
-                        <PropertyField label="output_file" value={(selectedNode.data as any).variables?.output_file || ''} onChange={(v) => handlePropertyChange('variables', { ...(selectedNode.data as any).variables, output_file: v })} placeholder="{{workflow.name}}-results.json" />
+                        <PropertyField label="target" value={selectedData.variables?.target as string || ''} onChange={(v) => handlePropertyChange('variables', { ...selectedData.variables, target: v })} placeholder="{{trigger.data.target}}" />
+                        <PropertyField label="wordlist" value={selectedData.variables?.wordlist as string || ''} onChange={(v) => handlePropertyChange('variables', { ...selectedData.variables, wordlist: v })} placeholder="/usr/share/wordlists/common.txt" />
+                        <PropertyField label="output_file" value={selectedData.variables?.output_file as string || ''} onChange={(v) => handlePropertyChange('variables', { ...selectedData.variables, output_file: v })} placeholder="{{workflow.name}}-results.json" />
                       </>
                     )}
 
@@ -408,25 +617,28 @@ const WorkflowEditorContent: React.FC = () => {
         </div>
       </div>
 
-      {/* Execution Log */}
-      <div className="h-36 border-t border-[#1a1a2e] flex flex-col overflow-hidden">
-        <div className="px-4 py-1.5 border-b border-[#1a1a2e] flex items-center justify-between bg-[#0d0d15]">
-          <h3 className="text-xs font-bold text-[#f0c040]">Execution Log</h3>
-          {executionState && (
-            <StatusBadge status={executionState.status} />
-          )}
+      {/* Execution Log + Validation */}
+      <div className="border-t border-[#1a1a2e] flex flex-col overflow-hidden">
+        <div className="h-32 flex flex-col overflow-hidden">
+          <div className="px-4 py-1.5 border-b border-[#1a1a2e] flex items-center justify-between bg-[#0d0d15]">
+            <h3 className="text-xs font-bold text-[#f0c040]">Execution Log</h3>
+            {executionState && (
+              <StatusBadge status={executionState.status} />
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 bg-[#0a0a0f] font-mono text-[11px]">
+            {executionState?.log.map((entry, index) => (
+              <p key={index} className="mb-0.5 text-gray-400">
+                <span className="text-gray-600 mr-2">[{String(index).padStart(3, '0')}]</span>
+                {entry}
+              </p>
+            ))}
+            {(!executionState || executionState.log.length === 0) && (
+              <p className="text-gray-600 italic">Drag nodes from the palette, connect them, and hit Run.</p>
+            )}
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 bg-[#0a0a0f] font-mono text-[11px]">
-          {executionState?.log.map((entry, index) => (
-            <p key={index} className="mb-0.5 text-gray-400">
-              <span className="text-gray-600 mr-2">[{String(index).padStart(3, '0')}]</span>
-              {entry}
-            </p>
-          ))}
-          {(!executionState || executionState.log.length === 0) && (
-            <p className="text-gray-600 italic">Drag nodes from the palette, connect them, and hit Run.</p>
-          )}
-        </div>
+        <ValidationPanel />
       </div>
     </div>
   );

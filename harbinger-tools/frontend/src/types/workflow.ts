@@ -53,7 +53,52 @@ export interface VariableNodeData extends Record<string, unknown> {
   dataType: 'string' | 'number' | 'boolean' | 'array' | 'object';
 }
 
-export type AnyNodeData = ToolNodeData | AgentNodeData | DecisionNodeData | TriggerNodeData | OutputNodeData | VariableNodeData;
+export interface LoopNodeData extends Record<string, unknown> {
+  iteratorExpression: string;
+  itemVariable: string;
+  indexVariable: string;
+  maxIterations: number;
+  parallelism: number;
+  status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
+}
+
+export interface HttpRequestNodeData extends Record<string, unknown> {
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS';
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+  bodyType: 'json' | 'form' | 'raw' | 'none';
+  timeout: number;
+  verifySsl: boolean;
+  status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
+}
+
+export interface DelayNodeData extends Record<string, unknown> {
+  delayType: 'fixed' | 'random' | 'until';
+  durationMs: number;
+  minMs: number;
+  maxMs: number;
+  untilExpression: string;
+  status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
+}
+
+export interface CodeNodeData extends Record<string, unknown> {
+  language: 'javascript' | 'python' | 'bash';
+  code: string;
+  entryFunction: string;
+  timeout: number;
+  status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
+}
+
+export interface NotificationNodeData extends Record<string, unknown> {
+  channel: 'discord' | 'telegram' | 'slack' | 'email' | 'webhook';
+  messageTemplate: string;
+  severity: 'info' | 'warning' | 'critical';
+  destination: string;
+  status: 'running' | 'waiting' | 'error' | 'pending' | 'success';
+}
+
+export type AnyNodeData = ToolNodeData | AgentNodeData | DecisionNodeData | TriggerNodeData | OutputNodeData | VariableNodeData | LoopNodeData | HttpRequestNodeData | DelayNodeData | CodeNodeData | NotificationNodeData;
 export type WorkflowNode = Node<AnyNodeData>;
 export type WorkflowEdge = Edge;
 
@@ -86,4 +131,23 @@ export interface WorkflowExecution {
   nodeStatuses: Record<string, 'running' | 'waiting' | 'error' | 'pending' | 'success'>;
   nodeOutputs: Record<string, unknown>;
   variables: Record<string, unknown>;
+}
+
+export interface WorkflowSnapshot {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  timestamp: number;
+}
+
+export interface ValidationError {
+  nodeId: string;
+  field: string;
+  message: string;
+  severity: 'error' | 'warning';
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationError[];
 }

@@ -654,7 +654,7 @@ function BrowserManager() {
                               key={action.label}
                               onClick={() => {
                                 setJsInput(action.script)
-                                browserApi.executeScript(selectedSession.id, action.script).catch(() => {})
+                                browserApi.executeScript(selectedSession.id, action.script).catch((err: unknown) => { console.error('browser script execution failed:', err) })
                               }}
                               className="p-2.5 text-left bg-surface-light border border-border rounded-lg hover:border-[#f0c040]/30 transition-colors"
                             >

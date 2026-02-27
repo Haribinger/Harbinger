@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import ErrorBoundary from '../ErrorBoundary'
 import { useSettingsStore } from '../../store/settingsStore'
 
 function Layout() {
@@ -26,7 +27,9 @@ function Layout() {
       >
         <Header />
         <main className="flex-1 overflow-hidden">
-          <Outlet />
+          <ErrorBoundary compact>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

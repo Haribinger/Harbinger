@@ -26,6 +26,10 @@ const TOOL_CATALOG: Record<string, { tools: string[]; color: string }> = {
     tools: ['screenshot', 'navigate', 'execute-js', 'click', 'type-text', 'network-log'],
     color: '#06b6d4',
   },
+  Network: {
+    tools: ['http-request', 'curl', 'dns-lookup', 'port-check', 'ssl-check'],
+    color: '#0ea5e9',
+  },
 };
 
 // Agent roster
@@ -200,7 +204,7 @@ const NodePalette: React.FC = () => {
               ))}
             </div>
 
-            {/* Decision */}
+            {/* Logic */}
             <div>
               <h4 className="text-[10px] uppercase tracking-wider text-gray-500 px-2 mb-1">Logic</h4>
               <div
@@ -208,8 +212,37 @@ const NodePalette: React.FC = () => {
                 onDragStart={(e) => onDragStart(e, 'decisionNode')}
                 draggable
               >
-                <span className="text-sm text-pink-400">\u25c7</span>
+                <span className="text-sm text-pink-400">&#x25C7;</span>
                 <span className="text-xs text-gray-300">Decision / If-Else</span>
+              </div>
+              <div
+                className="px-3 py-2 rounded cursor-grab hover:bg-[#1a1a2e] transition-colors border border-transparent hover:border-violet-500/20 flex items-center gap-2"
+                onDragStart={(e) => onDragStart(e, 'loopNode')}
+                draggable
+              >
+                <span className="text-sm text-violet-400">&#x21BB;</span>
+                <span className="text-xs text-gray-300">Loop / Iterator</span>
+              </div>
+              <div
+                className="px-3 py-2 rounded cursor-grab hover:bg-[#1a1a2e] transition-colors border border-transparent hover:border-amber-500/20 flex items-center gap-2"
+                onDragStart={(e) => onDragStart(e, 'delayNode')}
+                draggable
+              >
+                <span className="text-sm text-amber-400">&#x23F1;</span>
+                <span className="text-xs text-gray-300">Delay / Timer</span>
+              </div>
+            </div>
+
+            {/* Alerts */}
+            <div>
+              <h4 className="text-[10px] uppercase tracking-wider text-gray-500 px-2 mb-1">Alerts</h4>
+              <div
+                className="px-3 py-2 rounded cursor-grab hover:bg-[#1a1a2e] transition-colors border border-transparent hover:border-pink-500/20 flex items-center gap-2"
+                onDragStart={(e) => onDragStart(e, 'notificationNode')}
+                draggable
+              >
+                <span className="text-sm text-pink-400">&#x1F514;</span>
+                <span className="text-xs text-gray-300">Notification</span>
               </div>
             </div>
 
@@ -243,6 +276,30 @@ const NodePalette: React.FC = () => {
               >
                 <span className="text-sm text-cyan-400">{'{ }'}</span>
                 <span className="text-xs text-gray-300">Variable / Transform</span>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] uppercase tracking-wider text-gray-500 px-2 mb-1">Code</h4>
+              <div
+                className="px-3 py-2 rounded cursor-grab hover:bg-[#1a1a2e] transition-colors border border-transparent hover:border-emerald-500/20 flex items-center gap-2"
+                onDragStart={(e) => onDragStart(e, 'codeNode')}
+                draggable
+              >
+                <span className="text-sm text-emerald-400">{'</>'}</span>
+                <span className="text-xs text-gray-300">Code / Script</span>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] uppercase tracking-wider text-gray-500 px-2 mb-1">HTTP</h4>
+              <div
+                className="px-3 py-2 rounded cursor-grab hover:bg-[#1a1a2e] transition-colors border border-transparent hover:border-sky-500/20 flex items-center gap-2"
+                onDragStart={(e) => onDragStart(e, 'httpRequestNode')}
+                draggable
+              >
+                <span className="text-sm text-sky-400">&#x1F310;</span>
+                <span className="text-xs text-gray-300">HTTP Request</span>
               </div>
             </div>
 

@@ -261,7 +261,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({ token: state.token, user: state.user }),
       storage: createJSONStorage(() => {
         // Prevent SSR crash
-        if (!isBrowser()) return undefined as any
+        if (!isBrowser()) return undefined as unknown as Storage
         return window.localStorage
       }),
     }

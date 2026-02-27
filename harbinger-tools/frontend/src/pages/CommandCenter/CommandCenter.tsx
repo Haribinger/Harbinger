@@ -86,11 +86,11 @@ function CommandCenter() {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchAgents().catch(() => {})
-    fetchContainers().catch(() => {})
+    fetchAgents().catch(() => { /* initial agent fetch is non-critical */ })
+    fetchContainers().catch(() => { /* initial container fetch is non-critical */ })
     const interval = setInterval(() => {
-      fetchAgents().catch(() => {})
-      fetchContainers().catch(() => {})
+      fetchAgents().catch(() => { /* periodic agent poll failure is transient */ })
+      fetchContainers().catch(() => { /* periodic container poll failure is transient */ })
     }, 10_000)
     return () => clearInterval(interval)
   }, [fetchAgents, fetchContainers])
@@ -183,11 +183,11 @@ function CommandCenter() {
           onLogs={(a) => openAgentLogs(a.id, a.codename || a.name)}
           onBrowser={(a) => openAgentBrowser(a.id, a.codename || a.name)}
           onSpawn={(a) => {
-            spawnAgentById(a.id).catch(() => {})
+            spawnAgentById(a.id).catch((err: unknown) => { console.error('agent spawn failed:', err) })
             addActivity({ agentId: a.id, agentName: a.codename || a.name, agentColor: a.color, message: 'Agent spawned', type: 'success' })
           }}
           onStop={(a) => {
-            stopAgent(a.id).catch(() => {})
+            stopAgent(a.id).catch((err: unknown) => { console.error('agent stop failed:', err) })
             addActivity({ agentId: a.id, agentName: a.codename || a.name, agentColor: a.color, message: 'Agent stopped', type: 'warning' })
           }}
         />
@@ -245,7 +245,7 @@ function CommandCenter() {
         {(showVMPanel || showActivityPanel) && (
           <div className="w-72 border-l border-border flex flex-col overflow-hidden bg-surface shrink-0">
             {showVMPanel && (
-              <VMPanel containers={containers} onRefresh={() => fetchContainers().catch(() => {})} />
+              <VMPanel containers={containers} onRefresh={() => fetchContainers().catch((err: unknown) => { console.error('container refresh failed:', err) })} />
             )}
             {showActivityPanel && (
               <ActivityPanel events={activityEvents} />

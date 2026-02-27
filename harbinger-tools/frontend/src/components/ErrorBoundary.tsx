@@ -1,21 +1,25 @@
 import { Component, type ReactNode } from 'react'
-import { AlertTriangle, RefreshCw, Home, Bug } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Home, Bug, Copy, Check } from 'lucide-react'
 
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  compact?: boolean
 }
 
 interface State {
   hasError: boolean
   error: Error | null
   errorInfo: string
+  copied: boolean
 }
 
 class ErrorBoundary extends Component<Props, State> {
+  private copyTimeout: ReturnType<typeof setTimeout> | null = null
+
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false, error: null, errorInfo: '' }
+    this.state = { hasError: false, error: null, errorInfo: '', copied: false }
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
@@ -25,8 +29,11 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     const errorInfo = info.componentStack || ''
     this.setState({ errorInfo })
-    // Log to console for debugging
     console.error('[ErrorBoundary]', error.message, errorInfo)
+  }
+
+  componentWillUnmount() {
+    if (this.copyTimeout) clearTimeout(this.copyTimeout)
   }
 
   handleReload = () => {
@@ -38,12 +45,65 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleDismiss = () => {
-    this.setState({ hasError: false, error: null, errorInfo: '' })
+    this.setState({ hasError: false, error: null, errorInfo: '', copied: false })
+  }
+
+  handleCopyError = () => {
+    const { error, errorInfo } = this.state
+    const text = `[HARBINGER ERROR]\n${error?.message || 'Unknown error'}\n\nStack:\n${error?.stack || 'N/A'}\n\nComponent:\n${errorInfo}`
+    navigator.clipboard.writeText(text).catch(() => { /* clipboard API may not be available */ })
+    this.setState({ copied: true })
+    this.copyTimeout = setTimeout(() => this.setState({ copied: false }), 2000)
   }
 
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback
+
+      const timestamp = new Date().toISOString()
+      const isCompact = this.props.compact
+
+      if (isCompact) {
+        return (
+          <div className="flex-1 flex items-center justify-center p-8 bg-[#0a0a0f]">
+            <div className="max-w-lg w-full bg-[#0d0d15] border border-red-500/30 rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+                <span className="text-sm font-bold text-red-400 font-mono">PAGE RENDER FAILURE</span>
+                <span className="ml-auto text-[10px] text-gray-600 font-mono">{timestamp}</span>
+              </div>
+              <div className="bg-[#0a0a0f] border border-[#1a1a2e] rounded-lg p-3 mb-4 max-h-32 overflow-auto">
+                <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
+                  {this.state.error?.message || 'Unknown error'}
+                </pre>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={this.handleDismiss}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 rounded-lg text-xs font-mono transition-colors"
+                >
+                  <Bug className="w-3.5 h-3.5" />
+                  Retry
+                </button>
+                <button
+                  onClick={this.handleCopyError}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-xs font-mono transition-colors"
+                >
+                  {this.state.copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {this.state.copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  onClick={this.handleReload}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-xs font-mono transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Reload
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
       return (
         <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-8">
@@ -55,13 +115,19 @@ class ErrorBoundary extends Component<Props, State> {
                   <AlertTriangle className="w-6 h-6 text-red-400" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white font-mono">Runtime Error</h1>
+                  <h1 className="text-lg font-bold text-white font-mono">FATAL // Runtime Error</h1>
                   <p className="text-sm text-gray-400 font-mono">Component crashed unexpectedly</p>
                 </div>
               </div>
 
+              {/* Timestamp */}
+              <div className="flex items-center gap-2 mb-4 text-[10px] text-gray-600 font-mono">
+                <span>TIMESTAMP: {timestamp}</span>
+              </div>
+
               {/* Error details */}
               <div className="bg-[#0a0a0f] border border-[#1a1a2e] rounded-lg p-4 mb-6 overflow-auto max-h-48">
+                <div className="text-[10px] text-gray-600 font-mono mb-1">ERROR OUTPUT</div>
                 <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
                   {this.state.error?.message || 'Unknown error'}
                 </pre>
@@ -87,24 +153,29 @@ class ErrorBoundary extends Component<Props, State> {
                   Retry
                 </button>
                 <button
-                  onClick={this.handleGoHome}
+                  onClick={this.handleCopyError}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-sm font-mono transition-colors"
                 >
+                  {this.state.copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  {this.state.copied ? 'Copied' : 'Copy Error'}
+                </button>
+                <button
+                  onClick={this.handleGoHome}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-sm font-mono transition-colors"
+                >
                   <Home className="w-4 h-4" />
-                  Dashboard
                 </button>
                 <button
                   onClick={this.handleReload}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-sm font-mono transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border border-[#1a1a2e] text-gray-400 hover:text-white hover:border-gray-500 rounded-lg text-sm font-mono transition-colors"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Reload
                 </button>
               </div>
             </div>
 
             <p className="text-center text-xs text-gray-600 font-mono mt-4">
-              HARBINGER v1.0 // Error boundary caught a rendering failure
+              HARBINGER v1.1 // Error boundary caught a rendering failure
             </p>
           </div>
         </div>

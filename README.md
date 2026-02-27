@@ -198,7 +198,7 @@ Full roadmap with phases: **[docs/ROADMAP.md](docs/ROADMAP.md)**
 | DONE | GitHub templates (issues, PRs) + Codespaces |
 | DONE | Autonomous Intelligence — agent thinking loops, swarm awareness |
 | DONE | Autonomous Dashboard — thoughts, proposals, efficiency, charts |
-| DONE | Meta-Cognition SOUL.md — 12 agents with self-awareness |
+| DONE | Meta-Cognition SOUL.md — 11 agents with self-awareness |
 | DONE | 19 Zustand stores, 15 API modules, 100+ backend endpoints |
 | PLANNED | CLI onboarding — `harbinger onboard`, `configure`, `doctor` |
 | PLANNED | HTTPS + cost governance + resource usage panel |

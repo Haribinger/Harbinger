@@ -50,7 +50,20 @@ function sourceBaseUrl(source: DataSource): string {
 }
 
 // Fetch raw data from a specific platform with timeout and size guard
-async function fetchPlatformData(platform: string, baseUrl = DEFAULT_DATA_SOURCE): Promise<any[]> {
+interface RawPlatformEntry {
+  name?: string
+  url?: string
+  handle?: string
+  targets?: { in_scope?: Array<{ target: string }> }
+  domains?: Array<{ name: string } | string>
+  wildcards?: string[]
+  max_reward?: string
+  response_time?: string | number
+  launch_date?: string
+  start_date?: string
+}
+
+async function fetchPlatformData(platform: string, baseUrl = DEFAULT_DATA_SOURCE): Promise<RawPlatformEntry[]> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30_000) // 30s timeout
@@ -99,56 +112,59 @@ async function fetchWildcards(baseUrl = DEFAULT_DATA_SOURCE): Promise<string[]> 
 }
 
 // Parse Bugcrowd data
-function parseBugcrowdData(data: any[]): BugBountyProgram[] {
+function parseBugcrowdData(data: RawPlatformEntry[]): BugBountyProgram[] {
   return data.map((item) => ({
     name: item.name || 'Unknown',
     url: item.url || '',
-    platform: 'bugcrowd',
-    domains: item.targets?.in_scope?.map((t: any) => t.target).filter((t: string) => !t.includes('*')) || [],
-    wildcards: item.targets?.in_scope?.map((t: any) => t.target).filter((t: string) => t.includes('*')) || [],
-    targets: item.targets?.in_scope?.map((t: any) => t.target) || [],
+    platform: 'bugcrowd' as const,
+    domains: item.targets?.in_scope?.map((t) => t.target).filter((t) => !t.includes('*')) || [],
+    wildcards: item.targets?.in_scope?.map((t) => t.target).filter((t) => t.includes('*')) || [],
+    targets: item.targets?.in_scope?.map((t) => t.target) || [],
     maxBounty: item.max_reward,
-    responseTime: item.response_time,
+    responseTime: item.response_time?.toString(),
     launchDate: item.launch_date,
   }))
 }
 
 // Parse HackerOne data
-function parseHackerOneData(data: any[]): BugBountyProgram[] {
+function parseHackerOneData(data: RawPlatformEntry[]): BugBountyProgram[] {
   return data.map((item) => ({
     name: item.name || 'Unknown',
     url: `https://hackerone.com/${item.handle}`,
-    platform: 'hackerone',
-    domains: item.targets?.in_scope?.map((t: any) => t.target).filter((t: string) => !t.includes('*')) || [],
-    wildcards: item.targets?.in_scope?.map((t: any) => t.target).filter((t: string) => t.includes('*')) || [],
-    targets: item.targets?.in_scope?.map((t: any) => t.target) || [],
+    platform: 'hackerone' as const,
+    domains: item.targets?.in_scope?.map((t) => t.target).filter((t) => !t.includes('*')) || [],
+    wildcards: item.targets?.in_scope?.map((t) => t.target).filter((t) => t.includes('*')) || [],
+    targets: item.targets?.in_scope?.map((t) => t.target) || [],
     responseTime: item.response_time?.toString(),
     launchDate: item.start_date,
   }))
 }
 
 // Parse Intigriti data
-function parseIntigritiData(data: any[]): BugBountyProgram[] {
+function parseIntigritiData(data: RawPlatformEntry[]): BugBountyProgram[] {
   return data.map((item) => ({
     name: item.name || 'Unknown',
     url: item.url || '',
-    platform: 'intigriti',
-    domains: item.domains?.map((d: any) => d.name).filter((d: string) => !d.includes('*')) || [],
-    wildcards: item.domains?.map((d: any) => d.name).filter((d: string) => d.includes('*')) || [],
-    targets: item.domains?.map((d: any) => d.name) || [],
+    platform: 'intigriti' as const,
+    domains: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name).filter((d) => !d.includes('*')) || [],
+    wildcards: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name).filter((d) => d.includes('*')) || [],
+    targets: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name) || [],
   }))
 }
 
 // Parse other platform data (Federacy, YesWeHack)
-function parseGenericData(data: any[], platform: BugBountyProgram['platform']): BugBountyProgram[] {
-  return data.map((item) => ({
-    name: item.name || 'Unknown',
-    url: item.url || '',
-    platform,
-    domains: item.domains || [],
-    wildcards: item.wildcards || [],
-    targets: [...(item.domains || []), ...(item.wildcards || [])],
-  }))
+function parseGenericData(data: RawPlatformEntry[], platform: BugBountyProgram['platform']): BugBountyProgram[] {
+  return data.map((item) => {
+    const rawDomains = (item.domains || []).map((d) => typeof d === 'string' ? d : d.name)
+    return {
+      name: item.name || 'Unknown',
+      url: item.url || '',
+      platform,
+      domains: rawDomains.filter((d) => !d.includes('*')),
+      wildcards: rawDomains.filter((d) => d.includes('*')),
+      targets: rawDomains,
+    }
+  })
 }
 
 // Main API

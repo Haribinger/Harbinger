@@ -35,8 +35,8 @@ export const useCodeHealthStore = create<CodeHealthState>()(
         try {
           const data = await codeHealthApi.getHistory(get().range)
           set({ metrics: data.metrics || [], isLoading: false })
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to fetch health history', isLoading: false })
+        } catch (err: unknown) {
+          set({ error: (err instanceof Error ? err.message : '') || 'Failed to fetch health history', isLoading: false })
         }
       },
 

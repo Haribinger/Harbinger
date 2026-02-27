@@ -1,5 +1,5 @@
 // n8n API client
-const env = (import.meta as any).env || {}
+const env = (import.meta as unknown as Record<string, unknown>).env as Record<string, string | undefined> || {}
 const N8N_API_BASE_URL = env.VITE_N8N_API_BASE_URL || '/api/n8n'
 const N8N_API_KEY = env.VITE_N8N_API_KEY || ''
 

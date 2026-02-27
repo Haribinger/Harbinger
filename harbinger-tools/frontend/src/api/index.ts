@@ -9,6 +9,7 @@ export { mcpApi } from './mcp'
 export { workflowsApi } from './workflows'
 export { dashboardApi } from './dashboard'
 export { autonomousApi } from './autonomous'
+export { skillsApi } from './skills'
 
 // Re-export types
 export type { ModelInfo, ProviderInfo, ProviderTestResult } from './providers'
@@ -20,3 +21,4 @@ export type { CreateMCPRequest, MCPTool, MCPResource, MCPPrompt } from './mcp'
 export type { CreateWorkflowRequest, WorkflowExecution } from './workflows'
 export type { ActivityItem, SystemStats, ServiceHealth } from './dashboard'
 export type { AgentThought, SwarmState, AutonomousStats, EfficiencyScore } from './autonomous'
+export type { SkillCategory, Skill, SkillParameter, SkillExecutionResult } from './skills'

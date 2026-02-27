@@ -126,7 +126,7 @@ function Dashboard() {
         .catch(() => setActivityErr(true)),
       dashboardApi.getServiceHealth()
         .then(setHealth)
-        .catch(() => {}),
+        .catch(() => { /* service health check is non-critical — dashboard degrades gracefully */ }),
       fetchChannels(),
     ])
     setLastRefresh(formatTime())

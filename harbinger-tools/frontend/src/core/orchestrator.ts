@@ -1,7 +1,7 @@
 import { agentsApi } from '../api/agents'
 import { autonomousApi } from '../api/autonomous'
 
-type EventHandler = (...args: any[]) => void
+type EventHandler = (...args: unknown[]) => void
 
 class SimpleEventEmitter {
   private listeners: Map<string, Set<EventHandler>> = new Map()
@@ -17,7 +17,7 @@ class SimpleEventEmitter {
     this.listeners.get(event)?.delete(handler)
   }
 
-  emit(event: string, ...args: any[]): void {
+  emit(event: string, ...args: unknown[]): void {
     this.listeners.get(event)?.forEach((handler) => {
       try {
         handler(...args)
@@ -70,14 +70,15 @@ class AgentOrchestrator extends SimpleEventEmitter {
 
       // Fetch fresh agent state from backend
       const status = await agentsApi.getStatus(agentId)
+      const agent = status.agent as { type?: string; name?: string; capabilities?: string[] } | undefined
       const config: AgentConfig = {
         id: agentId,
-        type: status.agent?.type || 'unknown',
+        type: agent?.type || 'unknown',
         status: 'running',
-        personality: status.agent?.name || '',
-        codename: status.agent?.name || '',
+        personality: agent?.name || '',
+        codename: agent?.name || '',
         currentTask: 'Container started',
-        toolsCount: status.agent?.capabilities?.length || 0,
+        toolsCount: agent?.capabilities?.length || 0,
         findingsCount: 0,
         containerId: result.container_id,
       }
@@ -99,9 +100,9 @@ class AgentOrchestrator extends SimpleEventEmitter {
 
       console.log(`[Orchestrator] Agent ${agentId} spawned → container ${result.container_id}`)
       return config
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Orchestrator] Spawn error:', err)
-      this.emit('error', { agentId, error: err.message })
+      this.emit('error', { agentId, error: err instanceof Error ? err.message : 'spawn failed' })
       return null
     }
   }
@@ -111,7 +112,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
     try {
       const agent = await agentsApi.create({ name, type, description, capabilities })
       return this.spawnAgent(agent.id)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Orchestrator] Create+Spawn error:', err)
       return null
     }
@@ -130,7 +131,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
       this.stopHeartbeat(agentId)
       this.agents.delete(agentId)
       console.log(`[Orchestrator] Agent ${agentId} stopped`)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Orchestrator] Stop error:', err)
     }
   }
@@ -216,7 +217,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
       this.emit('agentStatusChange', config)
     }
     // Also send to backend
-    agentsApi.heartbeat(agentId).catch(() => {})
+    agentsApi.heartbeat(agentId).catch(() => { /* heartbeat sync to backend is best-effort */ })
   }
 
   handoffTask(fromAgentId: string, toAgentId: string, task: string): void {
@@ -237,7 +238,7 @@ class AgentOrchestrator extends SimpleEventEmitter {
     }
   }
 
-  shareFindings(fromAgentId: string, toAgentId: string, findings: any): void {
+  shareFindings(fromAgentId: string, toAgentId: string, findings: unknown): void {
     const fromAgent = this.agents.get(fromAgentId)
     const toAgent = this.agents.get(toAgentId)
 
@@ -256,15 +257,15 @@ class AgentOrchestrator extends SimpleEventEmitter {
       await autonomousApi.createThought({
         agent_id: agentId,
         agent_name: agent?.codename || agentId,
-        type: thought.type as any,
-        category: thought.category as any,
+        type: thought.type as 'observation' | 'enhancement' | 'proposal' | 'alert',
+        category: thought.category as 'performance' | 'accuracy' | 'cost' | 'automation' | 'collaboration',
         title: thought.title,
         content: thought.content,
         priority: thought.priority || 3,
       })
       this.emit('autonomousThought', { agentId, thought })
-    } catch (err: any) {
-      console.error('[Orchestrator] Failed to report thought:', err.message)
+    } catch (err: unknown) {
+      console.error('[Orchestrator] Failed to report thought:', err instanceof Error ? err.message : err)
     }
   }
 

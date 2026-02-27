@@ -1517,6 +1517,26 @@ func main() {
 	mux.HandleFunc("POST /api/v1/teleport/push", authMiddleware(handleTeleportPush))
 	mux.HandleFunc("GET /api/v1/teleport/pull", authMiddleware(handleTeleportPull))
 
+	// ── Pentest Dashboard ────────────────────────────────────────────────
+	mux.HandleFunc("GET /api/pentest/dashboard", authMiddleware(handlePentestDashboard))
+	mux.HandleFunc("GET /api/pentest/attack-paths", authMiddleware(handlePentestAttackPaths))
+	mux.HandleFunc("GET /api/pentest/credentials", authMiddleware(handlePentestCredentials))
+	mux.HandleFunc("POST /api/pentest/engagements", authMiddleware(handleCreateEngagement))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/pentest/dashboard", authMiddleware(handlePentestDashboard))
+	mux.HandleFunc("GET /api/v1/pentest/attack-paths", authMiddleware(handlePentestAttackPaths))
+	mux.HandleFunc("GET /api/v1/pentest/credentials", authMiddleware(handlePentestCredentials))
+	mux.HandleFunc("POST /api/v1/pentest/engagements", authMiddleware(handleCreateEngagement))
+
+	// ── CVE Monitor (CISA KEV Feed) ─────────────────────────────────────
+	mux.HandleFunc("GET /api/cve/feed", authMiddleware(handleCVEFeed))
+	mux.HandleFunc("GET /api/cve/matches", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("POST /api/cve/refresh", authMiddleware(handleCVERefresh))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/cve/feed", authMiddleware(handleCVEFeed))
+	mux.HandleFunc("GET /api/v1/cve/matches", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("POST /api/v1/cve/refresh", authMiddleware(handleCVERefresh))
+
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux
 	handler = maxBodyMiddleware(handler)

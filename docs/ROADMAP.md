@@ -11,12 +11,12 @@
 | Status | Item |
 |--------|------|
 | DONE | Agent Runtime Interface — `start_session`, `dispatch_task`, `stream_events` via orchestrator |
-| DONE | Workflow Graph Model — 6 node types: agent, tool, condition, approval, handoff, output |
+| DONE | Workflow Graph Model — 11 node types: tool, agent, decision, trigger, output, variable, loop, http-request, delay, code, notification |
 | DONE | Observability Event Schema — `agentStatusChange`, `taskHandoff`, `findingsShared`, `autonomousThought`, `error` |
 | DONE | Minimal PentAGI Adapter — registered as MCP plugin at `mcp-plugins/pentagi/` |
 | DONE | UI: Timeline view (Command Center) + graph view (Workflow Editor) + expandable tool calls + cost panel |
 | DONE | Autonomous Intelligence — background thinking loops, swarm awareness, efficiency tracking |
-| DONE | Meta-Cognition SOUL.md — all 12 agents have self-awareness, enhancement identification, swarm coordination |
+| DONE | Meta-Cognition SOUL.md — all 11 agents have self-awareness, enhancement identification, swarm coordination |
 | DONE | Autonomous Dashboard — `/autonomous` page with thought log, proposals, charts, automation suggestions |
 
 ---
@@ -146,7 +146,7 @@
 
 ## Feature Matrix
 
-### Pages (19)
+### Pages (21)
 
 | Route | Page | Status |
 |-------|------|--------|
@@ -168,6 +168,8 @@
 | `/vuln-deep-dive` | Vuln Deep Dive | SHIPPED |
 | `/remediation` | Remediation Tracker | SHIPPED |
 | `/autonomous` | Autonomous Intelligence | SHIPPED |
+| `/pentest-dashboard` | Pentest Dashboard | SHIPPED |
+| `/cve-monitor` | CVE Monitor | SHIPPED |
 | `/settings` | Settings | SHIPPED |
 
 ### Agents (11 + Template)
@@ -215,11 +217,11 @@ Organized by domain: Auth, Agents, Workflows, Jobs, Docker, MCP, Browser, Channe
 
 | Category | Shipped | Planned | Total |
 |----------|---------|---------|-------|
-| Pages | 19 | 0 | 19 |
+| Pages | 21 | 0 | 21 |
 | Agents | 11 | 0 | 11 |
-| Backend Files | 9 | 0 | 9 |
-| Zustand Stores | 19 | 0 | 19 |
-| API Modules | 15 | 0 | 15 |
+| Backend Files | 15 | 0 | 15 |
+| Zustand Stores | 21 | 0 | 21 |
+| API Modules | 18 | 0 | 18 |
 | Skills Categories | 14 | 0 | 14 |
 | Phase Items | 38 | 22 | 60 |
 

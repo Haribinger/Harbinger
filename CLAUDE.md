@@ -81,16 +81,18 @@ HARBINGER COMMAND CENTER v1.1
 │   ├── shared/                  # Shared engine (autonomous-engine.js)
 │   └── _template/               # For creating custom agents
 │
+├── backend/                     # Go API server (see Backend Inventory)
+│   └── cmd/                     # 15 handler files (main.go, autonomous.go, agents.go, ...)
+│
 ├── harbinger-tools/
-│   ├── frontend/                # React + Vite + TypeScript UI (19 pages)
-│   │   └── src/
-│   │       ├── pages/           # 21 page components (see Page Inventory)
-│   │       ├── components/      # Reusable UI components + Layout/
-│   │       ├── core/            # Orchestrator, MCP, Docker, license
-│   │       ├── store/           # 19 Zustand state stores
-│   │       ├── api/             # 16 API client modules
-│   │       └── types/           # TypeScript interfaces
-│   └── backend/                 # Go API server (see Backend Inventory)
+│   └── frontend/                # React + Vite + TypeScript UI (21 pages)
+│       └── src/
+│           ├── pages/           # 23 page components (see Page Inventory)
+│           ├── components/      # Reusable UI components + Layout/
+│           ├── core/            # Orchestrator, MCP, Docker, license
+│           ├── store/           # 21 Zustand state stores
+│           ├── api/             # 18 API client modules
+│           └── types/           # TypeScript interfaces
 │
 ├── mcp-plugins/                 # MCP server containers
 │   ├── hexstrike-ai/            # 150+ security tools
@@ -143,7 +145,7 @@ HARBINGER COMMAND CENTER v1.1
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19 + Vite 6 + TypeScript + Zustand + Radix UI + Monaco Editor + @xyflow/react + Recharts |
-| Backend | Go 1.24 (13 handler files, 100+ routes) |
+| Backend | Go 1.24 (15 handler files, 100+ routes) |
 | Database | PostgreSQL 17 (pgvector) + Redis 7.4 + Neo4j 2025.01 |
 | Containers | Docker + Docker Compose (9 services) |
 | Package Manager | pnpm 9+ |
@@ -188,7 +190,7 @@ Principles: information-dense, three-column layouts, interactive graphs, live fe
 
 Each agent has a `SOUL.md` with personality, capabilities, and a **Meta-Cognition** section for the autonomous thinking loop.
 
-## Backend Inventory (13 Go Files)
+## Backend Inventory (15 Go Files)
 
 | File | Responsibility |
 |------|---------------|
@@ -204,13 +206,15 @@ Each agent has a `SOUL.md` with personality, capabilities, and a **Meta-Cognitio
 | `codehealth.go` | Code health scans, metrics, in-memory store |
 | `modelrouter.go` | Smart model routing, provider management |
 | `oauth.go` | OAuth2 flows (GitHub, Google) |
+| `pentest.go` | Pentest dashboard, attack paths, credentials |
+| `cve.go` | CISA KEV feed, CVE matching, scope auto-match |
 | `themes.go` | Theme management |
 
 **Pattern:** Every endpoint registered at both `/api/` and `/api/v1/` prefixes.
 
 ## Frontend Inventory
 
-### Pages (21 Components → 19 Routes)
+### Pages (23 Components → 21 Routes)
 
 | Page | Route | Purpose |
 |------|-------|---------|
@@ -234,15 +238,17 @@ Each agent has a `SOUL.md` with personality, capabilities, and a **Meta-Cognitio
 | Chat | `/chat` | Agent chat interface |
 | Settings | `/settings` | Config, providers, channels, secrets |
 | Login | `/login` | Authentication |
+| PentestDashboard | `/pentest-dashboard` | Pentest metrics, attack paths, credentials |
+| CVEMonitor | `/cve-monitor` | CISA KEV feed, scope matching |
 | SetupWizard | `/setup` | First-run configuration |
 
-### Stores (19 Zustand)
+### Stores (21 Zustand)
 
-`authStore` `agentStore` `autonomousStore` `mcpStore` `dockerStore` `browserStore` `workflowStore` `workflowEditorStore` `settingsStore` `secretsStore` `skillsStore` `bugBountyStore` `bountyHubStore` `setupStore` `channelStore` `codeHealthStore` `commandCenterStore` `modelRouterStore` `themeStore`
+`authStore` `agentStore` `autonomousStore` `mcpStore` `dockerStore` `browserStore` `workflowStore` `workflowEditorStore` `settingsStore` `secretsStore` `skillsStore` `bugBountyStore` `bountyHubStore` `setupStore` `channelStore` `codeHealthStore` `commandCenterStore` `modelRouterStore` `themeStore` `pentestDashboardStore` `cveMonitorStore`
 
-### API Modules (16)
+### API Modules (18)
 
-`agents` `auth` `autonomous` `browser` `bugbounty` `chat` `client` `codeHealth` `dashboard` `docker` `mcp` `n8n` `providers` `skills` `workflows` + `index.ts` barrel
+`agents` `auth` `autonomous` `browser` `bugbounty` `chat` `client` `codeHealth` `cve` `dashboard` `docker` `mcp` `n8n` `pentest` `providers` `skills` `workflows` + `index.ts` barrel
 
 ## Critical Code Patterns
 

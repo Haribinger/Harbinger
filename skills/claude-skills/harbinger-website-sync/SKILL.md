@@ -54,7 +54,7 @@ Each feature needs entries in:
 2. Compare feature count vs docs
 3. Update README.md
    - Agent roster (current: 11 agents)
-   - Pages table (current: 18 pages)
+   - Pages table (current: 19 pages)
    - Features section
 4. Update CHANGELOG.md
    - Add new entries since last sync

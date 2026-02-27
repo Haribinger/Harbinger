@@ -13,9 +13,9 @@
               │                                 │
     ┌─────────▼──────────┐         ┌────────────▼───────────┐
     │   REACT FRONTEND   │         │     GO BACKEND API     │
-    │  Vite 6 + TS + SPA │         │    :8080 (44+ routes)  │
+    │  Vite 6 + TS + SPA │         │    :8080 (100+ routes) │
     │                     │         │                        │
-    │  18 Pages           │         │  Auth (OAuth/JWT)      │
+    │  19 Pages           │         │  Auth (OAuth/JWT)      │
     │  14 Zustand Stores  │         │  Agent CRUD + Spawn    │
     │  Orchestrator       │         │  Skills Engine         │
     │  Workflow Editor    │         │  MCP Gateway           │
@@ -48,14 +48,14 @@ Location: `harbinger-tools/frontend/src/`
 
 | Layer | Purpose | Key Files |
 |-------|---------|-----------|
-| Pages (18) | Route-level views | `pages/{Name}/{Name}.tsx` |
-| Stores (14) | Zustand state management | `store/{name}Store.ts` |
+| Pages (19) | Route-level views | `pages/{Name}/{Name}.tsx` |
+| Stores (19) | Zustand state management | `store/{name}Store.ts` |
 | API Clients | Backend communication | `api/{name}.ts` |
 | Core | Orchestrator, MCP, Docker | `core/orchestrator.ts` |
 | Components | Reusable UI | `components/Layout/`, `components/ErrorBoundary.tsx` |
 
 **Pages:**
-Dashboard, Chat, Agents, Workflows, WorkflowEditor, MCPManager, DockerManager, BrowserManager, RedTeam, BountyHub, CommandCenter, SkillsHub, OpenClaw, CodeHealth, ScopeManager, VulnDeepDive, RemediationTracker, Settings
+Dashboard, Chat, Agents, Workflows, WorkflowEditor, MCPManager, DockerManager, BrowserManager, RedTeam, BountyHub, CommandCenter, SkillsHub, OpenClaw, CodeHealth, ScopeManager, VulnDeepDive, RemediationTracker, Autonomous, Settings
 
 **Design System — Obsidian Command:**
 - Background: `#0a0a0f` | Surface: `#0d0d15` | Border: `#1a1a2e`
@@ -80,6 +80,8 @@ Location: `backend/cmd/`
 | `channels.go` | Discord/Telegram/Slack config and webhooks |
 | `comms.go` | Agent message bus, user context, relay |
 | `browsers.go` | CDP browser sessions, navigate, screenshot |
+| `autonomous.go` | Autonomous thinking loop, thoughts CRUD, swarm state |
+| `themes.go` | Theme management |
 
 **Auth Flow:**
 ```

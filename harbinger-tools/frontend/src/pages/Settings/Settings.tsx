@@ -1192,7 +1192,7 @@ function ThemeSection({ autoSave, updateSettings }: { autoSave: boolean; updateS
       if (data.ok) {
         toast.success('Theme prompt generated — use it with any AI agent to create the token JSON, then import it')
         // Copy the prompt to clipboard for use with agents
-        navigator.clipboard.writeText(data.prompt).catch(() => {})
+        navigator.clipboard.writeText(data.prompt).catch(() => { /* clipboard API may not be available */ })
         toast('AI prompt copied to clipboard', { icon: '📋' })
       } else {
         toast.error(data.error || 'Generation failed')
@@ -1754,7 +1754,7 @@ function ChannelsSection() {
     })
       .then(r => r.ok ? r.json() : {})
       .then(setChannels)
-      .catch(() => {})
+      .catch(() => { /* channel config load is best-effort on mount */ })
   }, [])
 
   const saveChannel = async (channel: string) => {
