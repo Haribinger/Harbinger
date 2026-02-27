@@ -36,6 +36,14 @@ Start here for onboarding and reference. All paths below are relative to the rep
 
 ---
 
+## Testing and debugging
+
+| Doc | Purpose |
+|-----|---------|
+| [TESTING_GUIDE](TESTING_GUIDE.md) | Full testing guide: automated tests, health scans, manual flows, debug workflow, bug-finding checklist. |
+| [harbinger-bugfix](../skills/claude-skills/harbinger-bugfix/SKILL.md) | Build-check script, common errors, debug workflow. |
+| [harbinger-healthcheck](../skills/claude-skills/harbinger-healthcheck/SKILL.md) | Codebase health scans (types, placeholders, consistency). |
+
 ## Contributing and improvement
 
 | Doc | Purpose |
