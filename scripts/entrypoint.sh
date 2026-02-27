@@ -55,7 +55,7 @@ NEO4J_USER=$NEO4J_USER
 NEO4J_PASSWORD=$NEO4J_PASSWORD
 MCP_ENABLED=$MCP_ENABLED
 MCP_PLUGINS_DIR=$MCP_PLUGINS_DIR
-MCP_HEXRIDGE_URL=$MCP_HEXRIDGE_URL
+MCP_HEXSTRIKE_URL=$MCP_HEXSTRIKE_URL
 MCP_PENTAGI_URL=$MCP_PENTAGI_URL
 MCP_UI_URL=$MCP_UI_URL
 JWT_SECRET=$JWT_SECRET
@@ -74,7 +74,7 @@ HACKERONE_API_KEY=$HACKERONE_API_KEY
 HACKERONE_USERNAME=$HACKERONE_USERNAME
 BUGCROWD_API_URL=$BUGCROWD_API_URL
 BUGCROWD_API_KEY=$BUGCROWD_API_KEY
-BUGCROW_USERNAME=$BUGCROW_USERNAME
+BUGCROWD_USERNAME=$BUGCROWD_USERNAME
 NIKTO_PATH=$NIKTO_PATH
 DIRSEARCH_PATH=$DIRSEARCH_PATH
 NUCLEI_PATH=$NUCLEI_PATH
@@ -95,49 +95,49 @@ S3_SECRET_KEY=$S3_SECRET_KEY
 CDN_URL=$CDN_URL
 EOF
 
-    # Create JSON configuration
+    # Create JSON configuration with safe defaults for unset numeric/boolean vars
     cat > /app/config/runtime.json << EOF
 {
   "application": {
-    "name": "$APP_NAME",
-    "version": "$APP_VERSION",
-    "environment": "$APP_ENV",
-    "port": $APP_PORT,
-    "host": "$APP_HOST"
+    "name": "${APP_NAME:-Harbinger}",
+    "version": "${APP_VERSION:-1.1.0}",
+    "environment": "${APP_ENV:-development}",
+    "port": ${APP_PORT:-8080},
+    "host": "${APP_HOST:-0.0.0.0}"
   },
   "database": {
-    "host": "$DB_HOST",
-    "port": $DB_PORT,
-    "name": "$DB_NAME",
-    "user": "$DB_USER",
-    "ssl": $DB_SSL
+    "host": "${DB_HOST:-postgres}",
+    "port": ${DB_PORT:-5432},
+    "name": "${DB_NAME:-harbinger}",
+    "user": "${DB_USER:-harbinger}",
+    "ssl": ${DB_SSL:-false}
   },
   "redis": {
-    "host": "$REDIS_HOST",
-    "port": $REDIS_PORT,
-    "db": $REDIS_DB
+    "host": "${REDIS_HOST:-redis}",
+    "port": ${REDIS_PORT:-6379},
+    "db": ${REDIS_DB:-0}
   },
   "neo4j": {
-    "host": "$NEO4J_HOST",
-    "port": $NEO4J_PORT,
-    "user": "$NEO4J_USER"
+    "host": "${NEO4J_HOST:-neo4j}",
+    "port": ${NEO4J_PORT:-7687},
+    "user": "${NEO4J_USER:-neo4j}"
   },
   "mcp": {
-    "enabled": $MCP_ENABLED,
-    "plugins_dir": "$MCP_PLUGINS_DIR",
-    "hexridge_url": "$MCP_HEXRIDGE_URL",
-    "pentagi_url": "$MCP_PENTAGI_URL",
-    "ui_url": "$MCP_UI_URL"
+    "enabled": ${MCP_ENABLED:-true},
+    "plugins_dir": "${MCP_PLUGINS_DIR:-/app/mcp-plugins}",
+    "hexstrike_url": "${MCP_HEXSTRIKE_URL:-http://hexstrike:3001}",
+    "pentagi_url": "${MCP_PENTAGI_URL:-http://pentagi:3002}",
+    "ui_url": "${MCP_UI_URL:-http://mcp-ui:3003}"
   },
   "security": {
-    "jwt_expires_in": "$JWT_EXPIRES_IN",
-    "cors_origin": "$CORS_ORIGIN",
-    "rate_limit_requests": $RATE_LIMIT_REQUESTS
+    "jwt_expires_in": "${JWT_EXPIRES_IN:-24h}",
+    "cors_origin": "${CORS_ORIGIN:-*}",
+    "rate_limit_requests": ${RATE_LIMIT_REQUESTS:-100}
   },
   "logging": {
-    "level": "$LOG_LEVEL",
-    "format": "$LOG_FORMAT",
-    "file": "$LOG_FILE"
+    "level": "${LOG_LEVEL:-info}",
+    "format": "${LOG_FORMAT:-json}",
+    "file": "${LOG_FILE:-/app/logs/harbinger.log}"
   }
 }
 EOF
@@ -152,8 +152,8 @@ health_check() {
         exit 1
     fi
     
-    if ! command -v harbinger &> /dev/null; then
-        echo "❌ ERROR: harbinger binary not found"
+    if ! command -v harbinger-api &> /dev/null && [ ! -f "/app/harbinger-api" ]; then
+        echo "❌ ERROR: harbinger-api binary not found"
         exit 1
     fi
     
@@ -164,8 +164,8 @@ health_check() {
 start_application() {
     echo "🚀 Starting Harbinger application..."
     
-    chmod +x /app/harbinger
-    exec /app/harbinger server --config=/app/config/runtime.env
+    chmod +x /app/harbinger-api
+    exec /app/harbinger-api server --config=/app/config/runtime.env
 }
 
 # Function to display startup banner

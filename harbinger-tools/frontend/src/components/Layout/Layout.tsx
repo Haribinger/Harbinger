@@ -9,13 +9,8 @@ function Layout() {
   const { sidebarCollapsed, theme } = useSettingsStore()
 
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      root.classList.toggle('light', !isDark)
-    } else {
-      root.classList.toggle('light', theme === 'light')
-    }
+    // Dark theme only — ensure light class is never applied
+    document.documentElement.classList.remove('light')
   }, [theme])
 
   return (

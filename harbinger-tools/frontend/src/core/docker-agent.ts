@@ -46,7 +46,6 @@ class DockerAgentManager {
     const container = await this.createContainer(config, image);
     this.containers.set(container.containerId, container);
 
-    console.log(`Agent container spawned: ${container.containerId} (${config.agentType})`);
     return container;
   }
 

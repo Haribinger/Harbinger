@@ -19,9 +19,21 @@ vi.mock('../../api/client', () => ({
 
 vi.mock('../../api/agents', () => ({
   agentsApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: '1', name: 'Recon Scout', codename: 'PATHFINDER', type: 'recon-scout', status: 'idle', color: '#3b82f6' },
-      { id: '2', name: 'Web Hacker', codename: 'BREACH', type: 'web-hacker', status: 'running', color: '#ef4444' },
+    getAll: vi.fn().mockResolvedValue([
+      {
+        id: '1',
+        name: 'Recon Scout',
+        type: 'recon-scout',
+        status: 'idle',
+        capabilities: [],
+      },
+      {
+        id: '2',
+        name: 'Web Hacker',
+        type: 'web-hacker',
+        status: 'running',
+        capabilities: [],
+      },
     ]),
     spawn: vi.fn().mockResolvedValue({ ok: true, container_id: 'abc123' }),
     stop: vi.fn().mockResolvedValue({ ok: true }),
@@ -55,7 +67,7 @@ describe('agentStore', () => {
     await fetchAgents()
     const state = useAgentStore.getState()
     expect(state.agents).toHaveLength(2)
-    expect(state.agents[0].codename).toBe('PATHFINDER')
-    expect(state.agents[1].codename).toBe('BREACH')
+    expect(state.agents[0].name).toBe('Recon Scout')
+    expect(state.agents[1].name).toBe('Web Hacker')
   })
 })

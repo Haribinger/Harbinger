@@ -231,7 +231,7 @@ function Sidebar() {
             }}
             className="text-[9px] tracking-widest mt-2 pt-2 text-center"
           >
-            v1.0.0 // MIT
+            v1.1.0 // MIT
           </div>
         )}
       </div>

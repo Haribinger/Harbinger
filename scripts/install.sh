@@ -11,7 +11,7 @@ command -v git >/dev/null 2>&1 || { echo "Git required."; exit 1; }
 
 # Clone if not already in repo
 if [ ! -f "docker-compose.yml" ]; then
-  git clone https://github.com/Haribinger/Harbinger.git
+  git clone https://github.com/kdairatchi/harbinger.git Harbinger
   cd Harbinger
 fi
 

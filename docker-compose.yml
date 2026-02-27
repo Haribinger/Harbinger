@@ -69,7 +69,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        - VERSION=${APP_VERSION:-1.0.0}
+        - VERSION=${APP_VERSION:-1.1.0}
     container_name: harbinger-backend
     restart: unless-stopped
     environment:
@@ -214,7 +214,7 @@ services:
     ports:
       - "${HEXSTRIKE_PORT:-3001}:3001"
     volumes:
-      - ./mcp-plugins/hexstrike:/app/plugins
+      - ./mcp-plugins/hexstrike-ai:/app/plugins
       - ./data/reports:/app/reports
     networks:
       - harbinger-network
@@ -236,7 +236,7 @@ services:
     ports:
       - "${MCP_UI_PORT:-3003}:3003"
     volumes:
-      - ./mcp-plugins/visualizers:/app/plugins
+      - ./mcp-plugins/mcp-ui:/app/plugins
     networks:
       - harbinger-network
     depends_on:

@@ -98,7 +98,6 @@ class AgentOrchestrator extends SimpleEventEmitter {
       // Start heartbeat polling for this agent
       this.startHeartbeat(agentId)
 
-      console.log(`[Orchestrator] Agent ${agentId} spawned → container ${result.container_id}`)
       return config
     } catch (err: unknown) {
       console.error('[Orchestrator] Spawn error:', err)
@@ -130,7 +129,6 @@ class AgentOrchestrator extends SimpleEventEmitter {
       }
       this.stopHeartbeat(agentId)
       this.agents.delete(agentId)
-      console.log(`[Orchestrator] Agent ${agentId} stopped`)
     } catch (err: unknown) {
       console.error('[Orchestrator] Stop error:', err)
     }
@@ -167,7 +165,6 @@ class AgentOrchestrator extends SimpleEventEmitter {
 
           // Detect soul version changes (hot-reload of SOUL.md)
           if (result.soul_version && config.soulVersion && result.soul_version !== config.soulVersion) {
-            console.log(`[Orchestrator] Soul updated for ${agentId}, reloading...`)
             config.soulVersion = result.soul_version
             agentsApi.getSoul(agentId).then((soulResult) => {
               if (soulResult.ok && soulResult.soul) {
@@ -233,7 +230,6 @@ class AgentOrchestrator extends SimpleEventEmitter {
       toAgent.currentTask = task
       this.emit('agentStatusChange', toAgent)
 
-      console.log(`[Orchestrator] Handoff: ${fromAgent.codename} → ${toAgent.codename}: ${task}`)
       this.emit('taskHandoff', { fromAgentId, toAgentId, task })
     }
   }
@@ -243,7 +239,6 @@ class AgentOrchestrator extends SimpleEventEmitter {
     const toAgent = this.agents.get(toAgentId)
 
     if (fromAgent && toAgent) {
-      console.log(`[Orchestrator] ${fromAgent.codename} sharing findings with ${toAgent.codename}`)
       this.emit('findingsShared', { fromAgentId, toAgentId, findings })
     }
   }

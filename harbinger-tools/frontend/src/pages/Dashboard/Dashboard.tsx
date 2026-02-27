@@ -27,7 +27,7 @@ import { useWorkflowStore } from '../../store/workflowStore'
 import { useChannelStore } from '../../store/channelStore'
 import { dashboardApi, type ActivityItem, type ServiceHealth } from '../../api/dashboard'
 
-// Design tokens — Obsidian Command / REDCLAW aesthetic
+// Design tokens — Obsidian Command aesthetic
 const C = {
   bg: '#0a0a0f',
   surface: '#0d0d15',
@@ -181,7 +181,7 @@ function Dashboard() {
             <span style={{ color: C.gold, fontSize: '11px', letterSpacing: '0.2em', fontWeight: 700 }}>
               HARBINGER COMMAND CENTER
             </span>
-            <span style={{ color: C.dim, fontSize: '10px' }}>// v1.0.0</span>
+            <span style={{ color: C.dim, fontSize: '10px' }}>// v1.1.0</span>
           </div>
           <div style={{ width: '1px', height: '14px', background: C.border }} />
           <div className="flex items-center gap-1">

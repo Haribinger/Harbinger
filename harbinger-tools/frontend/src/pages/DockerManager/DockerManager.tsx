@@ -83,8 +83,8 @@ function DockerManager() {
     try {
       const imageData = await dockerApi.getImages()
       setImages(imageData)
-    } catch (error) {
-      console.log('Docker images API not available')
+    } catch {
+      /* Docker images API not available — container list still shown */
     } finally {
       setIsLoading(false)
     }

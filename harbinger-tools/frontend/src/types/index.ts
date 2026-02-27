@@ -308,7 +308,7 @@ export interface AdvancedSettings {
 }
 
 export interface AppSettings {
-  theme: 'dark' | 'light' | 'system'
+  theme: 'dark'
   language: string
   notifications: boolean
   autoSave: boolean

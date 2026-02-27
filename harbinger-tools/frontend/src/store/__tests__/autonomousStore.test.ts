@@ -84,7 +84,18 @@ describe('autonomousStore', () => {
     // Pre-populate thoughts
     useAutonomousStore.setState({
       thoughts: [
-        { id: '1', agent_id: 'test', agent_name: 'TEST', type: 'observation', category: 'performance', title: 'T', content: '', status: 'pending', priority: 3, created_at: '' },
+        {
+          id: '1',
+          agent_id: 'test',
+          agent_name: 'TEST',
+          type: 'observation',
+          category: 'performance',
+          title: 'T',
+          content: '',
+          status: 'pending',
+          priority: 3,
+          created_at: Date.now(),
+        },
       ],
     })
 
@@ -96,7 +107,18 @@ describe('autonomousStore', () => {
   it('deleteThought removes thought from array', async () => {
     useAutonomousStore.setState({
       thoughts: [
-        { id: '1', agent_id: 'test', agent_name: 'TEST', type: 'observation', category: 'performance', title: 'T', content: '', status: 'pending', priority: 3, created_at: '' },
+        {
+          id: '1',
+          agent_id: 'test',
+          agent_name: 'TEST',
+          type: 'observation',
+          category: 'performance',
+          title: 'T',
+          content: '',
+          status: 'pending',
+          priority: 3,
+          created_at: Date.now(),
+        },
       ],
     })
 

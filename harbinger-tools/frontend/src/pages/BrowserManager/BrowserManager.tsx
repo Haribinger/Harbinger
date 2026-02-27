@@ -69,7 +69,7 @@ function BrowserManager() {
       const data = await browserApi.getSessions()
       setSessions(data)
     } catch {
-      console.log('Browser API not available, using local sessions')
+      /* Browser API not available — degrade to local sessions */
     }
   }
 

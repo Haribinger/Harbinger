@@ -122,8 +122,8 @@ check('Docker Compose available', () => {
 })
 
 check('Frontend dependencies installed', () => {
-  if (!existsSync('frontend/node_modules')) {
-    throw new Error('Run: pnpm install')
+  if (!existsSync('harbinger-tools/frontend/node_modules')) {
+    throw new Error('Run: cd harbinger-tools/frontend && pnpm install')
   }
 })
 
@@ -179,7 +179,7 @@ async function runFix() {
   }
 
   // Install dependencies
-  if (!existsSync('frontend/node_modules')) {
+  if (!existsSync('harbinger-tools/frontend/node_modules')) {
     log.info('Installing frontend dependencies...')
     try {
       execSync('pnpm install', { stdio: 'inherit' })

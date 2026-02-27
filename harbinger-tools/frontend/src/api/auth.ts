@@ -1,4 +1,4 @@
-import apiClient from './client'
+import { apiClient } from './client'
 
 export interface GitHubAuthResponse {
   ok: boolean
@@ -26,24 +26,21 @@ export const authApi = {
    * Returns the GitHub authorization URL to redirect to
    */
   async initiateGitHubAuth(): Promise<GitHubAuthResponse> {
-    const response = await apiClient.get<GitHubAuthResponse>('/api/auth/github')
-    return response.data
+    // Named apiClient.get already unwraps .data
+    return apiClient.get<GitHubAuthResponse>('/api/auth/github')
   },
 
   /**
    * Get current user info (requires authentication)
    */
   async getMe(): Promise<UserResponse> {
-    const response = await apiClient.get<UserResponse>('/api/auth/me')
-    return response.data
+    return apiClient.get<UserResponse>('/api/auth/me')
   },
 
   /**
    * Logout (requires authentication)
-   * Note: In a real implementation, this might invalidate the token server-side
    */
   async logout(): Promise<{ ok: boolean; message?: string }> {
-    const response = await apiClient.post<{ ok: boolean; message?: string }>('/api/auth/logout')
-    return response.data
+    return apiClient.post<{ ok: boolean; message?: string }>('/api/auth/logout')
   },
 }

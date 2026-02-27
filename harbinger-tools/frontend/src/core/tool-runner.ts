@@ -46,7 +46,6 @@ class ToolRunner extends EventEmitter {
       this.executionHistory.push(record);
       this.emit('toolComplete', record);
 
-      console.log(`Tool execution completed: ${toolName} (${record.duration}ms)`);
       return record;
     } catch (error) {
       const endTime = Date.now();

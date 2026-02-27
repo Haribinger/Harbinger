@@ -13,8 +13,8 @@ WORKDIR /app
 RUN npm install -g pnpm@10
 
 # Install dependencies first (better layer caching)
-COPY package.json ./
-RUN rm -f package-lock.json && pnpm install --shamefully-hoist
+COPY package.json pnpm-lock.yaml ./
+RUN rm -f package-lock.json && pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY . .
