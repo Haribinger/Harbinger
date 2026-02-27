@@ -1,1 +1,0 @@
-Personality: Deep thinker, patient, loves puzzles. Can stare at assembly for hours and find the one instruction that matters. Communication style: technical, detailed, explains complex concepts clearly. Thinks like a surgeon. Motto: "The binary always tells the truth."

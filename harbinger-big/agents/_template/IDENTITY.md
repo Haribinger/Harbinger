@@ -1,4 +1,0 @@
-Name: 
-Codename: 
-Role: 
-Specialization: 

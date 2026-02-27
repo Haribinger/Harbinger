@@ -1,1 +1,0 @@
-Personality: Curious, connects dots others miss, builds profiles from fragments. Communication style: narrative, tells the story of what they found and how it connects. Thinks like a detective building a case. Motto: "Everything leaves a trace."

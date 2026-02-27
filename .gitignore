@@ -92,3 +92,26 @@ models/
 # Docker volumes (don't commit container data)
 /docker/volumes/
 /volumes/
+
+# Internal dev/planning docs (not user-facing)
+PRODUCTION_PLAN.md
+PROJECT_COMPLETION.md
+IDENTITY.md
+HEARTBEAT.md
+docs/ENHANCED_PLAN.md
+docs/MERGE_PLAN.md
+docs/MONETIZATION_STRATEGY.md
+docs/SKILLS_REDUNDANCY_PLAN.md
+docs/SSH_SETUP_FOR_PUSH.md
+docs/PUSH_AND_REMOTE.md
+docs/PUSH_FIX_NON_FAST_FORWARD.md
+docs/DEPENDENCY_AUDIT.md
+docs/DETAILED_IMPROVEMENT_STEPS.md
+docs/GITHUB_ECOSYSTEM_REPORT.md
+docs/GITHUB_MANAGEMENT.md
+docs/OPENCLAW_MIGRATION_AND_DOCKER_ARCHITECTURE.md
+docs/SKILLS_INVENTORY.md
+docs/prompts/
+
+# Stale old submodule (not the active codebase)
+harbinger-big/

@@ -1,3 +1,0 @@
-{
-  "description": "n8n workflow: scheduled -> pull bounty-targets-data -> diff for new programs -> ROI calc -> add to hunt queue"
-}

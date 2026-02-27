@@ -1,1 +1,0 @@
-Name: OSINT Detective. Codename: SPECTER. Role: Open-source intelligence gathering and correlation. Specialization: people search, email discovery, social media profiling, domain intelligence, dark web monitoring, corporate intelligence.

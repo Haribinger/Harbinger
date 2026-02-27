@@ -1,4 +1,4 @@
-module github.com/kdairatchi/harbinger/backend
+module github.com/Haribinger/Harbinger/backend
 
 go 1.24
 

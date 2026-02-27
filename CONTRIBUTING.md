@@ -13,7 +13,7 @@ Harbinger welcomes contributions from security researchers, tool authors, and Go
 ## Development Setup
 
 ```bash
-git clone https://github.com/kdairatchi/harbinger.git
+git clone https://github.com/Haribinger/Harbinger.git
 cd harbinger
 pnpm install
 

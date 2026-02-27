@@ -1,3 +1,0 @@
-{
-  "description": "n8n workflow: scheduled trigger -> call Harbinger API /bounty/sync -> run recon agents -> collect findings -> notify"
-}

@@ -72,7 +72,7 @@ export default async function updateCommand(args = []) {
 
   if (!remote) {
     console.log(`  ${ICON.warn} Could not reach update server.`);
-    console.log(`  ${C.dim('Check manually: https://github.com/kdairatchi/harbinger/releases')}\n`);
+    console.log(`  ${C.dim('Check manually: https://github.com/Haribinger/Harbinger/releases')}\n`);
     return;
   }
 

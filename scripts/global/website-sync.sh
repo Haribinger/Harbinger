@@ -181,7 +181,7 @@ generate_mcp() {
 {
   "name": "@harbinger/$PLUGIN_NAME",
   "description": "Harbinger $PLUGIN_NAME MCP server",
-  "repository": "https://github.com/kdairatchi/harbinger/tree/main/mcp-plugins/$PLUGIN_NAME",
+  "repository": "https://github.com/Haribinger/Harbinger/tree/main/mcp-plugins/$PLUGIN_NAME",
   "transport": ["stdio", "sse"],
   "installation": {
     "docker": {
