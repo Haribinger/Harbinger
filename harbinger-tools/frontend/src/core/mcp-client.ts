@@ -15,10 +15,10 @@ class MCPClient {
   private servers: Map<string, MCPServer> = new Map();
 
   constructor() {
-    // Initialize with default servers
+    // Initialize with default servers - use proxy paths instead of hardcoded localhost
     this.servers.set('hexstrike', {
       name: 'HexStrike MCP',
-      url: 'http://localhost:3001',
+      url: '/mcp/hexstrike',
       tools: [],
       connected: false,
     });

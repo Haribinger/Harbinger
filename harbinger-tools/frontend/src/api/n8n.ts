@@ -1,5 +1,5 @@
-const N8N_API_BASE_URL = process.env.N8N_API_BASE_URL || 'http://localhost:5678/api/v1';
-const N8N_API_KEY = process.env.N8N_API_KEY || 'YOUR_N8N_API_KEY'; // Replace with actual API key or use environment variable
+const N8N_API_BASE_URL = (import.meta as any).env.VITE_N8N_API_BASE_URL || 'http://localhost:5678/api/v1';
+const N8N_API_KEY = (import.meta as any).env.VITE_N8N_API_KEY || '';
 
 const headers = {
   'Content-Type': 'application/json',

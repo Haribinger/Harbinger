@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard/Dashboard'
 import Chat from './pages/Chat/Chat'
 import Agents from './pages/Agents/Agents'
 import Workflows from './pages/Workflows/Workflows'
+import WorkflowEditor from './pages/WorkflowEditor'
 import MCPManager from './pages/MCPManager/MCPManager'
 import DockerManager from './pages/DockerManager/DockerManager'
 import BrowserManager from './pages/BrowserManager/BrowserManager'
@@ -89,6 +90,7 @@ function AnimatedRoutes() {
           <Route path="chat/:agentId?" element={<Chat />} />
           <Route path="agents" element={<Agents />} />
           <Route path="workflows" element={<Workflows />} />
+          <Route path="workflow-editor" element={<WorkflowEditor />} />
           <Route path="mcp" element={<MCPManager />} />
           <Route path="docker" element={<DockerManager />} />
           <Route path="browsers" element={<BrowserManager />} />

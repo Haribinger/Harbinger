@@ -23,7 +23,14 @@ export interface Agent {
   updatedAt: string
 }
 
-export type AgentPersonality = { id: string; name?: string; description?: string }
+export type AgentPersonality = {
+  id: string
+  name?: string
+  description?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
 
 export interface AgentConfig {
   model: string
