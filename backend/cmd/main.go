@@ -1534,6 +1534,23 @@ func main() {
 	mux.HandleFunc("GET /api/v1/pentest/credentials", authMiddleware(handlePentestCredentials))
 	mux.HandleFunc("POST /api/v1/pentest/engagements", authMiddleware(handleCreateEngagement))
 
+	// ── Chat Sessions & Messages ────────────────────────────────────────
+	mux.HandleFunc("GET /api/chat/sessions", authMiddleware(handleListChatSessions))
+	mux.HandleFunc("POST /api/chat/sessions", authMiddleware(handleCreateChatSession))
+	mux.HandleFunc("GET /api/chat/sessions/{id}", authMiddleware(handleGetChatSession))
+	mux.HandleFunc("DELETE /api/chat/sessions/{id}", authMiddleware(handleDeleteChatSession))
+	mux.HandleFunc("POST /api/chat/sessions/{id}/clear", authMiddleware(handleClearChatSession))
+	mux.HandleFunc("POST /api/chat/message", authMiddleware(handleChatMessage))
+	mux.HandleFunc("POST /api/chat/stream", authMiddleware(handleChatStream))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/chat/sessions", authMiddleware(handleListChatSessions))
+	mux.HandleFunc("POST /api/v1/chat/sessions", authMiddleware(handleCreateChatSession))
+	mux.HandleFunc("GET /api/v1/chat/sessions/{id}", authMiddleware(handleGetChatSession))
+	mux.HandleFunc("DELETE /api/v1/chat/sessions/{id}", authMiddleware(handleDeleteChatSession))
+	mux.HandleFunc("POST /api/v1/chat/sessions/{id}/clear", authMiddleware(handleClearChatSession))
+	mux.HandleFunc("POST /api/v1/chat/message", authMiddleware(handleChatMessage))
+	mux.HandleFunc("POST /api/v1/chat/stream", authMiddleware(handleChatStream))
+
 	// ── CVE Monitor (CISA KEV Feed) ─────────────────────────────────────
 	mux.HandleFunc("GET /api/cve/feed", authMiddleware(handleCVEFeed))
 	mux.HandleFunc("GET /api/cve/matches", authMiddleware(handleCVEMatching))

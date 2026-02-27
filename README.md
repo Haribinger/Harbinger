@@ -14,10 +14,10 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose)
 [![Agents](https://img.shields.io/badge/Agents-11-f0c040.svg)](#agent-roster)
-[![Pages](https://img.shields.io/badge/Pages-19-f0c040.svg)](#pages)
-[![Stores](https://img.shields.io/badge/Stores-19-f0c040.svg)](#features)
+[![Pages](https://img.shields.io/badge/Pages-23-f0c040.svg)](#pages)
+[![Stores](https://img.shields.io/badge/Stores-21-f0c040.svg)](#features)
 
-> **11 agents. 150+ tools. 19 pages. Zero API key dependencies. One command center.**
+> **11 agents. 150+ tools. 23 pages. Zero API key dependencies. One command center.**
 
 ---
 
@@ -78,6 +78,17 @@ Harbinger is a **command center for autonomous offensive security agents**. It i
 - **Efficiency Tracking** — COST_BENEFIT formula filters noise, surfaces high-ROI automations
 - **Meta-Cognition** — Agents monitor their own performance, propose improvements
 - **Autonomous Dashboard** — Thought log, proposals, charts, approve/reject/implement actions
+
+### Pentest Dashboard
+- **Interactive Attack Path Graph** — Draggable nodes, edge highlighting, MiniMap, detail panel
+- **Credential Cracking** — hashcat/john job tracking with progress bars
+- **CVE Auto-Triage** — Priority scoring, agent assignment, scan triggers
+
+### Chat System
+- **SSE Streaming** — Word-by-word token streaming with abort control
+- **Agent Personalities** — 11 agent-specific response profiles
+- **Session Management** — Create, list, clear, delete chat sessions
+- **Terminal-Style UI** — No chat bubbles, monospace command center aesthetic
 
 ### Bug Bounty Pipeline
 - **Scope Manager** — Dual-pane in-scope/out-of-scope asset management
@@ -145,7 +156,7 @@ Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
 |-------|------|-------------|
 | `/` | Dashboard | Live agent status, system metrics, quick ops |
 | `/command-center` | Command Center | Full ops view with agent controls |
-| `/chat` | Chat | Direct agent conversation |
+| `/chat` | Chat | Streaming agent chat with SSE and auto-scroll |
 | `/agents` | Agents | Agent roster, spawn, stop, personalities |
 | `/workflows` | Workflows | Workflow list and management |
 | `/workflow-editor` | Workflow Editor | Visual drag-and-drop pipeline builder |
@@ -161,7 +172,11 @@ Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
 | `/vuln-deep-dive` | Vuln Deep Dive | P1 vulnerability analysis view |
 | `/remediation` | Remediation | Kanban vulnerability tracker |
 | `/autonomous` | Autonomous | Agent thinking loops, swarm intelligence |
+| `/pentest-dashboard` | Pentest Dashboard | Interactive attack paths, credential cracking |
+| `/cve-monitor` | CVE Monitor | CISA KEV feed, auto-triage, agent scans |
 | `/settings` | Settings | Providers, channels, model router |
+| `/login` | Login | OAuth, device flow, token auth |
+| `/setup` | Setup Wizard | 5-step first-run configuration |
 
 ---
 
@@ -199,7 +214,10 @@ Full roadmap with phases: **[docs/ROADMAP.md](docs/ROADMAP.md)**
 | DONE | Autonomous Intelligence — agent thinking loops, swarm awareness |
 | DONE | Autonomous Dashboard — thoughts, proposals, efficiency, charts |
 | DONE | Meta-Cognition SOUL.md — 11 agents with self-awareness |
-| DONE | 19 Zustand stores, 15 API modules, 100+ backend endpoints |
+| DONE | Chat system — SSE streaming, agent personalities, session management |
+| DONE | Interactive pentest dashboard — attack paths, credential cracking UI |
+| DONE | CVE auto-triage — priority scoring, agent scan triggers |
+| DONE | 21 Zustand stores, 18 API modules, 120+ backend endpoints |
 | PLANNED | CLI onboarding — `harbinger onboard`, `configure`, `doctor` |
 | PLANNED | HTTPS + cost governance + resource usage panel |
 | PLANNED | Plugin SDK + marketplace + channel registry |

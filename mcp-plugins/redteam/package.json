@@ -1,7 +1,7 @@
 {
   "name": "@harbinger/mcp-redteam",
   "version": "0.1.0",
-  "description": "Red team operations MCP server placeholder",
+  "description": "Red team operations MCP server — 25 offensive ops (C2 integration, AD attacks, persistence, evasion techniques)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

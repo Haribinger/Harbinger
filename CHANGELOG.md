@@ -1,3 +1,68 @@
+## [1.2.0] - 2026-02-27
+
+### Added — Chat System
+- **Chat backend** (`backend/cmd/chat.go`) — full in-memory chat session and message store
+  - `GET /api/chat/sessions` — list sessions (sorted by updatedAt)
+  - `POST /api/chat/sessions` — create session with optional agent binding
+  - `GET /api/chat/sessions/{id}` — get session with messages
+  - `DELETE /api/chat/sessions/{id}` — delete session
+  - `POST /api/chat/sessions/{id}/clear` — clear session messages
+  - `POST /api/chat/message` — send message (non-streaming)
+  - `POST /api/chat/stream` — SSE streaming (word-by-word with natural delay)
+  - `generateAgentResponse()` — 11 agent-specific personality responses
+  - 14 routes registered (7 endpoints × 2 prefixes)
+- **Chat streaming UI** — full rewrite of `/chat` page
+  - SSE streaming with `sendMessageStream` (onChunk/onDone/onError)
+  - Auto-scroll using messagesEndRef + scrollIntoView
+  - Fixed-height layout with min-h-0 and overflow-y-auto
+  - Stop button to abort in-flight streams
+  - Streaming cursor animation (pulsing gold bar)
+  - Terminal-style message blocks (not chat bubbles per design rules)
+  - Graceful fallback to non-streaming on error
+  - Right panel with context, tools, configuration, session info
+
+### Added — Slack Relay
+- **Slack webhook dispatch** in `comms.go` — `sendSlackWebhook()` with Block Kit formatting
+- Channel relay now dispatches to Discord, Telegram, AND Slack
+
+### Enhanced — Pentest Dashboard
+- **Interactive attack path graph** — draggable nodes, selectable with glow effects
+  - NODE_TYPE_CONFIG with color/label per type (host, service, vulnerability, credential, entry, target)
+  - MiniMap with node coloring
+  - Node detail panel showing connected edges on selection
+  - Edge highlighting when node selected
+- **5-column metric cards** — added CRACKED metric
+- **Tabbed bottom section** — Engagements / Credentials / Cracking
+- **CrackJobCard** component with progress bar and tool indicator
+- **Enhanced credential table** — hash type, cracked password, tool, duration columns
+- **Pentest API** — CrackJobStatus type, credential cracking fields, startCrackJob/getCrackJobs methods
+
+### Enhanced — CVE Monitor
+- **Auto-triage** — priority scoring (critical/high/medium/low), agent assignment, action classification
+- **Agent scan triggers** — PATHFINDER recon scan and BREACH exploit check per CVE
+- **TRIAGE_COLORS** constant for priority badge coloring
+- **CVE triage store** — triageResults, triaging state, autoTriage/triggerAgentScan actions
+
+### Fixed — Skill Scripts
+- **5 broken scripts** replaced (were copies of recon-full.sh):
+  - `network-pivot.sh` — real network pivoting (nmap, proxychains, chisel/ligolo templates)
+  - `apk-recon.sh` — APK analysis (apktool, jadx, secrets grep, SSL pinning detection)
+  - `web-fuzz.sh` — web fuzzing (ffuf directory/parameter fuzzing, radamsa mutation)
+  - `tls-audit.sh` — TLS/crypto audit (testssl.sh, sslscan, openssl, jwt_tool)
+  - `email-auth-check.sh` — email auth (SPF/DKIM/DMARC checks, MX enum, spoofability scoring)
+
+### Fixed — Code Quality
+- **MCP plugin descriptions** — hexstrike-ai, pentagi, redteam package.json updated from "placeholder"
+- **console.error removal** — CommandCenter (3), BrowserManager (1), DockerManager (5), Chat (1) replaced with comments
+- Error states used instead of console output
+
+### Infrastructure
+- Page count: 21 → 23 (Login, Setup Wizard added to matrix)
+- Backend files: 15 → 16 (chat.go)
+- Backend endpoints: 100+ → 120+ (14 chat routes + pentest/CVE additions)
+
+---
+
 ## [1.1.0] - 2026-02-26
 
 ### Added — Autonomous Intelligence System

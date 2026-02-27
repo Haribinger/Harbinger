@@ -28,6 +28,15 @@ export interface CVEMatch {
   reason: string
 }
 
+export interface CVETriageResult {
+  cveID: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  agentAssigned: string
+  action: 'scan' | 'exploit_check' | 'monitor' | 'ignore'
+  reason: string
+  autoTriagedAt: string
+}
+
 export const cveApi = {
   getFeed: async (vendor?: string): Promise<CVEFeedResponse> => {
     const params = vendor ? `?vendor=${encodeURIComponent(vendor)}` : ''
@@ -40,5 +49,13 @@ export const cveApi = {
 
   refresh: async (): Promise<{ ok: boolean; count: number }> => {
     return apiClient.post<{ ok: boolean; count: number }>('/api/cve/refresh', {})
+  },
+
+  autoTriage: async (cveIDs: string[]): Promise<{ ok: boolean; results: CVETriageResult[] }> => {
+    return apiClient.post<{ ok: boolean; results: CVETriageResult[] }>('/api/cve/auto-triage', { cveIDs })
+  },
+
+  triggerAgentScan: async (cveID: string, agentType: string): Promise<{ ok: boolean; taskId: string }> => {
+    return apiClient.post<{ ok: boolean; taskId: string }>('/api/cve/agent-scan', { cveID, agentType })
   },
 }

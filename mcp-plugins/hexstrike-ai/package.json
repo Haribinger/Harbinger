@@ -1,7 +1,7 @@
 {
   "name": "@harbinger/mcp-hexstrike-ai",
   "version": "0.1.0",
-  "description": "HexStrike AI security tools MCP server placeholder",
+  "description": "HexStrike AI MCP server — 55+ security tools (nmap, nuclei, sqlmap, subfinder, httpx, ffuf, and more)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

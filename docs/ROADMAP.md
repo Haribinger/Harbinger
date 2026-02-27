@@ -4,6 +4,33 @@
 
 ---
 
+## How to read this roadmap
+
+| Status    | Meaning |
+|-----------|--------|
+| **DONE**  | Shipped and production-ready. |
+| **PLANNED** | Not yet started; scope agreed. |
+| **IN PROGRESS** | Actively being worked on (use sparingly). |
+
+- **Phases** are roughly ordered by dependency (0.9 → 6.0). Later phases can have items started in parallel.
+- **Feature Matrix** below is the single source of truth for pages, agents, skills, and backend size. When you add a page or ship a feature, update both the phase table and the matrix.
+- **Sync:** After editing, run the `harbinger-website-sync` skill or update the website/docs so external views stay in sync.
+
+---
+
+## Current focus (next 3 months)
+
+**Priority order for planning and demos:**
+
+1. **Chat & channels** — Backend `/api/chat/*` persistence, Slack relay, cross-channel conversation feed in UI.
+2. **CLI** — `harbinger onboard`, `harbinger configure`, `harbinger doctor` (Phase 1.5).
+3. **Production hardening** — HTTPS (Let's Encrypt or custom), cost governance, resource panel (Phase 2.0).
+4. **Knowledge graph** — Neo4j entity/relation CRUD and query API (Phase 5.0).
+
+*Adjust this block as priorities change; it is not part of the phase tables.*
+
+---
+
 ## Phase 0.9 — Agent Runtime MVP
 
 **Goal:** Make agent-to-agent workflows observable and composable.
@@ -86,6 +113,9 @@
 | DONE | Agent communication bus — broadcast, messages, shared context |
 | DONE | OpenClaw event bus — command routing, skill listing, webhook integration |
 | DONE | MCP plugin architecture — hexstrike (150+ tools), pentagi, mcp-ui, idor-mcp |
+| DONE | Chat backend — sessions, messages, SSE streaming, agent-specific responses |
+| DONE | Slack relay — webhook dispatch with Block Kit formatting |
+| DONE | Chat streaming UI — SSE word-by-word, auto-scroll, abort, terminal-style blocks |
 | PLANNED | Channel registry — Telegram, Discord, Web, GitHub, CLI as plugins |
 | PLANNED | Orchestrator refactored to `dispatch(event)` pattern |
 | PLANNED | Plugin Development Kit — tool, agent, channel, workflow, report types |
@@ -118,6 +148,8 @@
 |--------|------|
 | DONE | Neo4j integration — configured in Docker Compose |
 | DONE | Agent swarm state — `/api/agents/swarm` endpoint for collective awareness |
+| DONE | Interactive attack path graph — draggable nodes, edge highlighting, MiniMap, detail panel |
+| DONE | CVE auto-triage — priority scoring, agent assignment, PATHFINDER/BREACH scan triggers |
 | PLANNED | Full Neo4j knowledge graph — entity/relation CRUD, query API |
 | PLANNED | HowToHunt methodology ingestion — automated technique library |
 | PLANNED | Community contribution portal — share workflows, skills, templates |
@@ -141,18 +173,22 @@
 | PLANNED | Discord slash commands + structured channels |
 | PLANNED | Nuclei Template IDE from Stitch design |
 | PLANNED | Guided onboarding tour for new users |
+| PLANNED | Workflow editor beginner UX — guided tour, template gallery, node tooltips |
+| PLANNED | Credential cracking integration — hashcat/john job management UI |
+| PLANNED | Cross-channel conversation feed — unified message history across Discord/Telegram/Slack/Web |
+| PLANNED | Command Center ChatPanel persistence — messages survive page navigation |
 
 ---
 
 ## Feature Matrix
 
-### Pages (21)
+### Pages (23)
 
 | Route | Page | Status |
 |-------|------|--------|
 | `/` | Dashboard | SHIPPED |
 | `/command-center` | Command Center | SHIPPED |
-| `/chat` | Chat | SHIPPED |
+| `/chat` | Chat | SHIPPED (v1.2 — streaming, auto-scroll) |
 | `/agents` | Agents | SHIPPED |
 | `/workflows` | Workflows | SHIPPED |
 | `/workflow-editor` | Workflow Editor | SHIPPED |
@@ -168,9 +204,11 @@
 | `/vuln-deep-dive` | Vuln Deep Dive | SHIPPED |
 | `/remediation` | Remediation Tracker | SHIPPED |
 | `/autonomous` | Autonomous Intelligence | SHIPPED |
-| `/pentest-dashboard` | Pentest Dashboard | SHIPPED |
-| `/cve-monitor` | CVE Monitor | SHIPPED |
+| `/pentest-dashboard` | Pentest Dashboard | SHIPPED (v1.2 — interactive attack paths, cracking) |
+| `/cve-monitor` | CVE Monitor | SHIPPED (v1.2 — auto-triage, agent scans) |
 | `/settings` | Settings | SHIPPED |
+| `/login` | Login | SHIPPED |
+| `/setup` | Setup Wizard | SHIPPED |
 
 ### Agents (11 + Template)
 
@@ -207,9 +245,9 @@
 | Crypto | TLS analysis, JWT attacks | CIPHER |
 | Network | pivoting, lateral movement | PHANTOM |
 
-### Backend Endpoints (100+)
+### Backend Endpoints (120+)
 
-Organized by domain: Auth, Agents, Workflows, Jobs, Docker, MCP, Browser, Channels, OpenClaw, Themes, Code Health, Model Router, Teleport, Autonomous Intelligence. Every endpoint has both `/api/` and `/api/v1/` prefixes.
+Organized by domain: Auth, Agents, Workflows, Jobs, Docker, MCP, Browser, Channels, Chat, OpenClaw, Themes, Code Health, Model Router, Pentest, CVE, Autonomous Intelligence. Every endpoint has both `/api/` and `/api/v1/` prefixes.
 
 ---
 
@@ -217,12 +255,36 @@ Organized by domain: Auth, Agents, Workflows, Jobs, Docker, MCP, Browser, Channe
 
 | Category | Shipped | Planned | Total |
 |----------|---------|---------|-------|
-| Pages | 21 | 0 | 21 |
+| Pages | 23 | 0 | 23 |
 | Agents | 11 | 0 | 11 |
-| Backend Files | 15 | 0 | 15 |
+| Backend Files | 16 | 0 | 16 |
 | Zustand Stores | 21 | 0 | 21 |
 | API Modules | 18 | 0 | 18 |
 | Skills Categories | 14 | 0 | 14 |
-| Phase Items | 38 | 22 | 60 |
+| Phase Items | 45 | 26 | 71 |
 
 **Completion: 63% of full roadmap shipped.**
+
+### Phase completion (by phase)
+
+| Phase | Goal | Done | Planned | % |
+|-------|------|------|---------|---|
+| 0.9 | Agent Runtime MVP | 9 | 0 | 100% |
+| 1.0 | Production Blockers | 8 | 0 | 100% |
+| 1.5 | CLI Onboarding | 7 | 4 | 64% |
+| 2.0 | Production Hardening | 7 | 3 | 70% |
+| 3.0 | Hybrid Architecture | 6 | 4 | 60% |
+| 4.0 | Persistent Learning | 4 | 4 | 50% |
+| 5.0 | Knowledge Graph | 4 | 4 | 50% |
+| 6.0 | Advanced Features | 0 | 15 | 0% |
+
+---
+
+## Related docs
+
+- **[DETAILED_IMPROVEMENT_STEPS.md](DETAILED_IMPROVEMENT_STEPS.md)** — Step-by-step tasks for quick wins, type safety, tests, skills, MCP, workflows.
+- **[CHANNELS.md](CHANNELS.md)** — Discord, Telegram, Slack, WebChat: config, relay, webhooks.
+- **[CHAT_INTEGRATIONS_AND_ENHANCEMENTS.md](CHAT_INTEGRATIONS_AND_ENHANCEMENTS.md)** — Chat interfaces and channel integration ideas.
+- **[AGENT_GUIDE.md](AGENT_GUIDE.md)** — Agent roster and usage.
+
+**Last updated:** 2026-02-26

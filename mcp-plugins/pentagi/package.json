@@ -1,7 +1,7 @@
 {
   "name": "@harbinger/mcp-pentagi",
   "version": "0.1.0",
-  "description": "PentAGI autonomous agent MCP server placeholder",
+  "description": "PentAGI MCP server — autonomous penetration testing with 10 capabilities (auto_recon, exploit_chain, vuln_assessment, and more)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

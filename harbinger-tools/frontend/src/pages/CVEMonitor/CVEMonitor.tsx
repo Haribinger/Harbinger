@@ -8,12 +8,23 @@ import {
   Database,
   Crosshair,
   Bug,
+  Zap,
+  Bot,
+  Play,
+  CheckCircle,
 } from 'lucide-react'
 import { useCVEMonitorStore } from '../../store/cveMonitorStore'
 import type { CVEEntry } from '../../api/cve'
 
 const FONT = 'JetBrains Mono, Fira Code, monospace'
 const MAX_VISIBLE = 100
+
+const TRIAGE_COLORS: Record<string, string> = {
+  critical: '#ef4444',
+  high: '#f59e0b',
+  medium: '#f0c040',
+  low: '#22c55e',
+}
 
 // Entries added within the last 7 days are considered "recent"
 function isRecent(dateAdded: string): boolean {
@@ -32,10 +43,12 @@ const CVEMonitor: FC = () => {
   const {
     vulnerabilities,
     matches,
+    triageResults,
     totalInCatalog,
     catalogVersion,
     loading,
     refreshing,
+    triaging,
     error,
     vendorFilter,
     cachedAt,
@@ -43,9 +56,12 @@ const CVEMonitor: FC = () => {
     fetchMatches,
     refresh,
     setVendorFilter,
+    autoTriage,
+    triggerAgentScan,
   } = useCVEMonitorStore()
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [scanningCves, setScanningCves] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchFeed()
@@ -113,6 +129,21 @@ const CVEMonitor: FC = () => {
             <span className="text-[10px]" style={{ color: '#555' }}>
               cached {new Date(cachedAt).toLocaleTimeString()}
             </span>
+          )}
+          {matches.length > 0 && (
+            <button
+              onClick={() => autoTriage(matches.map((m) => m.cve.cveID))}
+              disabled={triaging}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style={{
+                background: triaging ? '#ef444410' : '#0d0d15',
+                border: '1px solid #ef444430',
+                color: triaging ? '#ef4444' : '#ef4444',
+              }}
+            >
+              <Zap size={12} className={triaging ? 'animate-pulse' : ''} />
+              {triaging ? 'TRIAGING...' : `AUTO-TRIAGE (${matches.length})`}
+            </button>
           )}
           <button
             onClick={refresh}
@@ -267,40 +298,86 @@ const CVEMonitor: FC = () => {
                 </p>
               </div>
             ) : (
-              matches.map((m, i) => (
-                <div
-                  key={`${m.cve.cveID}-${m.target}-${i}`}
-                  className="rounded p-3 space-y-1.5"
-                  style={{ background: '#0a0a0f', border: '1px solid #1a1a2e' }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="text-[11px] font-bold"
-                      style={{ color: '#f0c040' }}
-                    >
-                      {m.cve.cveID}
-                    </span>
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded"
-                      style={{ background: '#ef444420', color: '#ef4444' }}
-                    >
-                      MATCH
-                    </span>
+              matches.map((m, i) => {
+                const triage = triageResults.find((t) => t.cveID === m.cve.cveID)
+                const isScanning = scanningCves.has(m.cve.cveID)
+                return (
+                  <div
+                    key={`${m.cve.cveID}-${m.target}-${i}`}
+                    className="rounded p-3 space-y-1.5"
+                    style={{ background: '#0a0a0f', border: `1px solid ${triage ? TRIAGE_COLORS[triage.priority] + '40' : '#1a1a2e'}` }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="text-[11px] font-bold"
+                        style={{ color: '#f0c040' }}
+                      >
+                        {m.cve.cveID}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {triage && (
+                          <span
+                            className="text-[8px] px-1.5 py-0.5 rounded uppercase tracking-wider"
+                            style={{ background: TRIAGE_COLORS[triage.priority] + '20', color: TRIAGE_COLORS[triage.priority] }}
+                          >
+                            {triage.priority}
+                          </span>
+                        )}
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded"
+                          style={{ background: '#ef444420', color: '#ef4444' }}
+                        >
+                          MATCH
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px]" style={{ color: '#9ca3af' }}>
+                      {truncate(m.cve.shortDescription, 80)}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Crosshair size={10} style={{ color: '#00d4ff' }} />
+                      <span className="text-[10px]" style={{ color: '#00d4ff' }}>
+                        {m.target}
+                      </span>
+                    </div>
+                    {triage && (
+                      <div className="flex items-center gap-1.5">
+                        <Bot size={10} style={{ color: '#f0c040' }} />
+                        <span className="text-[9px]" style={{ color: '#9ca3af' }}>
+                          {triage.agentAssigned} → {triage.action}
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-[9px]" style={{ color: '#666' }}>
+                      {triage?.reason || m.reason}
+                    </p>
+                    {/* Agent scan buttons */}
+                    <div className="flex gap-1 pt-1">
+                      {(['PATHFINDER', 'BREACH'] as const).map((agent) => (
+                        <button
+                          key={agent}
+                          onClick={() => {
+                            setScanningCves((prev) => new Set(prev).add(m.cve.cveID))
+                            triggerAgentScan(m.cve.cveID, agent).finally(() => {
+                              setScanningCves((prev) => { const next = new Set(prev); next.delete(m.cve.cveID); return next })
+                            })
+                          }}
+                          disabled={isScanning}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors"
+                          style={{
+                            background: isScanning ? '#f0c04010' : '#0d0d15',
+                            border: '1px solid #1a1a2e',
+                            color: isScanning ? '#f0c040' : '#555555',
+                          }}
+                        >
+                          {isScanning ? <RefreshCw size={8} className="animate-spin" /> : <Play size={8} />}
+                          {agent}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-[10px]" style={{ color: '#9ca3af' }}>
-                    {truncate(m.cve.shortDescription, 80)}
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <Crosshair size={10} style={{ color: '#00d4ff' }} />
-                    <span className="text-[10px]" style={{ color: '#00d4ff' }}>
-                      {m.target}
-                    </span>
-                  </div>
-                  <p className="text-[9px]" style={{ color: '#666' }}>
-                    {m.reason}
-                  </p>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

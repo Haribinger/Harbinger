@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Send,
-  Paperclip,
   Settings,
   Copy,
   Check,
@@ -10,6 +9,8 @@ import {
   Maximize2,
   Minimize2,
   AlertCircle,
+  Trash2,
+  StopCircle,
 } from 'lucide-react'
 import { useAgentStore } from '../../store/agentStore'
 import { useSettingsStore } from '../../store/settingsStore'
@@ -17,12 +18,17 @@ import { chatApi } from '../../api/chat'
 import type { Message, ChatSession } from '../../types'
 import toast from 'react-hot-toast'
 
+const FONT = 'JetBrains Mono, Fira Code, monospace'
+
 function Chat() {
   const [input, setInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const abortRef = useRef(false)
   const {
     activeAgent,
     activeChat,
@@ -33,15 +39,20 @@ function Chat() {
   } = useAgentStore()
   const { rightPanelVisible, toggleRightPanel, modelDefaults } = useSettingsStore()
 
-  const scrollToBottom = () => {
+  // Auto-scroll to bottom when messages change or during streaming
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [activeChat?.messages])
+  }, [activeChat?.messages, streamingContent, scrollToBottom])
 
-  // Create a new chat session if none exists
+  // Focus input on mount and agent change
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [activeAgent])
+
   const ensureActiveChat = async (): Promise<ChatSession | null> => {
     if (activeChat) return activeChat
     if (!activeAgent) return null
@@ -63,14 +74,14 @@ function Chat() {
   }
 
   const handleSend = async () => {
-    if (!input.trim() || !activeAgent) return
+    if (!input.trim() || !activeAgent || isStreaming) return
 
     const messageContent = input.trim()
     setInput('')
     setError(null)
+    abortRef.current = false
 
     try {
-      // Ensure we have an active chat
       const chat = await ensureActiveChat()
       if (!chat) {
         setError('No active chat or agent selected')
@@ -85,154 +96,244 @@ function Chat() {
         content: messageContent,
         timestamp: new Date().toISOString(),
       }
-
       addMessage(chat.id, userMessage)
-      setIsTyping(true)
 
-      const response = await chatApi.sendMessage({
-        content: messageContent,
-        agentId: activeAgent.id,
-        sessionId: chat.id,
-        stream: false,
-      })
+      // Start streaming
+      setIsStreaming(true)
+      setStreamingContent('')
 
-      const agentMessage: Message = {
-        id: response.id || `msg-${Date.now() + 1}`,
-        agentId: activeAgent.id,
-        role: 'assistant',
-        content: response.content || 'No response',
-        timestamp: new Date().toISOString(),
-      }
-      addMessage(chat.id, agentMessage)
+      let accumulated = ''
 
-    } catch (err) {
-      console.error('Failed to send message:', err)
+      await chatApi.sendMessageStream(
+        {
+          content: messageContent,
+          agentId: activeAgent.id,
+          sessionId: chat.id,
+          stream: true,
+        },
+        // onChunk
+        (chunk: string) => {
+          if (abortRef.current) return
+          accumulated += chunk
+          setStreamingContent(accumulated)
+        },
+        // onDone
+        () => {
+          if (abortRef.current) return
+          const agentMessage: Message = {
+            id: `msg-${Date.now() + 1}`,
+            agentId: activeAgent.id,
+            role: 'assistant',
+            content: accumulated || 'No response',
+            timestamp: new Date().toISOString(),
+          }
+          addMessage(chat.id, agentMessage)
+          setStreamingContent('')
+          setIsStreaming(false)
+        },
+        // onError
+        (err: Error) => {
+          // Fallback to non-streaming
+          setStreamingContent('')
+          setIsStreaming(false)
+          chatApi.sendMessage({
+            content: messageContent,
+            agentId: activeAgent.id,
+            sessionId: chat.id,
+            stream: false,
+          }).then((response) => {
+            const agentMessage: Message = {
+              id: response.id || `msg-${Date.now() + 1}`,
+              agentId: activeAgent.id,
+              role: 'assistant',
+              content: response.content || 'No response',
+              timestamp: new Date().toISOString(),
+            }
+            addMessage(chat.id, agentMessage)
+          }).catch(() => {
+            setError('Failed to send message. Check backend connection.')
+            toast.error('Failed to send message')
+          })
+        }
+      )
+    } catch {
       setError('Failed to send message. Please try again.')
       toast.error('Failed to send message')
-      setIsTyping(false)
+      setIsStreaming(false)
+      setStreamingContent('')
+    }
+  }
+
+  const handleStop = () => {
+    abortRef.current = true
+    if (streamingContent && activeChat) {
+      const agentMessage: Message = {
+        id: `msg-${Date.now() + 1}`,
+        agentId: activeAgent?.id || '',
+        role: 'assistant',
+        content: streamingContent + ' [stopped]',
+        timestamp: new Date().toISOString(),
+      }
+      addMessage(activeChat.id, agentMessage)
+    }
+    setStreamingContent('')
+    setIsStreaming(false)
+  }
+
+  const handleClear = () => {
+    if (activeChat) {
+      chatApi.clearSession(activeChat.id).catch(() => { /* non-critical */ })
     }
   }
 
   const messages: Message[] = activeChat?.messages || []
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex" style={{ fontFamily: FONT }}>
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Chat Header */}
-        <div className="h-14 border-b border-border flex items-center justify-between px-4">
+        <div
+          className="h-14 flex items-center justify-between px-4 shrink-0"
+          style={{ borderBottom: '1px solid #1a1a2e' }}
+        >
           <div className="flex items-center gap-3">
             {activeAgent ? (
               <>
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
-                  style={{ backgroundColor: activeAgent.color }}
+                  className="w-8 h-8 rounded flex items-center justify-center text-sm font-bold"
+                  style={{ backgroundColor: activeAgent.color + '20', color: activeAgent.color, border: `1px solid ${activeAgent.color}40` }}
                 >
                   {activeAgent.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-medium">{activeAgent.name}</p>
-                  <p className="text-xs text-text-secondary">{activeAgent.description}</p>
+                  <p className="text-sm font-bold" style={{ color: '#e5e7eb' }}>{activeAgent.name}</p>
+                  <p className="text-[10px]" style={{ color: '#555555' }}>{activeAgent.description}</p>
                 </div>
               </>
             ) : (
-              <p className="text-text-secondary">Select an agent to start chatting</p>
+              <p className="text-xs" style={{ color: '#555555' }}>Select an agent to start chatting</p>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            {activeChat && messages.length > 0 && (
+              <button
+                onClick={handleClear}
+                className="p-2 rounded transition-colors hover:bg-white/5"
+                style={{ color: '#555555' }}
+                title="Clear chat"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
             <button
-              onClick={() => setShowSettings(!showSettings)}
-              className={`p-2 rounded-lg transition-colors ${
-                showSettings ? 'bg-[#f0c040]/10 text-[#f0c040]' : 'hover:bg-surface-light text-text-secondary'
-              }`}
+              onClick={() => {}}
+              className="p-2 rounded transition-colors hover:bg-white/5"
+              style={{ color: '#555555' }}
             >
-              <Settings className="w-5 h-5" />
+              <Settings size={14} />
             </button>
             <button
               onClick={toggleRightPanel}
-              className="p-2 hover:bg-surface-light rounded-lg transition-colors text-text-secondary"
+              className="p-2 rounded transition-colors hover:bg-white/5"
+              style={{ color: '#555555' }}
             >
-              {rightPanelVisible ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              {rightPanelVisible ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
           </div>
         </div>
 
         {/* Error Banner */}
         {error && (
-          <div className="bg-red-500/10 border-b border-red-500/20 p-3 flex items-center gap-2 text-red-400">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="ml-auto text-xs hover:underline"
-            >
+          <div
+            className="flex items-center gap-2 px-4 py-2 text-xs shrink-0"
+            style={{ background: '#ef444410', borderBottom: '1px solid #ef444430', color: '#ef4444' }}
+          >
+            <AlertCircle size={14} />
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto text-[10px] hover:underline">
               Dismiss
             </button>
           </div>
         )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2 text-red-400">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">{error}</span>
-              <button
-                onClick={() => setError(null)}
-                className="ml-auto text-xs hover:underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-text-secondary">
-              <div className="w-16 h-16 rounded-full bg-surface-light flex items-center justify-center mb-4">
-                <Send className="w-8 h-8 opacity-50" />
-              </div>
-              <p className="text-lg font-medium">Start a conversation</p>
-              <p className="text-sm">Send a message to begin chatting with the agent</p>
+        {/* Messages — fixed height, scrollable */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
+          style={{ background: '#0a0a0f' }}
+        >
+          {messages.length === 0 && !isStreaming ? (
+            <div className="h-full flex flex-col items-center justify-center">
+              <Terminal size={32} style={{ color: '#1a1a2e' }} />
+              <p className="text-sm mt-3" style={{ color: '#9ca3af' }}>
+                {activeAgent ? `Start chatting with ${activeAgent.name}` : 'Select an agent to begin'}
+              </p>
+              <p className="text-[10px] mt-1" style={{ color: '#555555' }}>
+                Messages are sent to the agent via the backend API
+              </p>
             </div>
           ) : (
-            messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                isUser={message.role === 'user'}
-                agentColor={activeAgent?.color}
-              />
-            ))
-          )}
+            <>
+              {messages.map((message) => (
+                <MessageBlock
+                  key={message.id}
+                  message={message}
+                  isUser={message.role === 'user'}
+                  agentColor={activeAgent?.color}
+                  agentName={activeAgent?.name}
+                />
+              ))}
 
-          {isTyping && (
-            <div className="flex items-start gap-3">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                style={{ backgroundColor: activeAgent?.color }}
-              >
-                {activeAgent?.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="typing-bubble">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-          )}
+              {/* Streaming message */}
+              {isStreaming && streamingContent && (
+                <div className="flex gap-3">
+                  <div
+                    className="w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+                    style={{ backgroundColor: activeAgent?.color + '20', color: activeAgent?.color }}
+                  >
+                    {activeAgent?.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold" style={{ color: activeAgent?.color || '#f0c040' }}>
+                      {activeAgent?.name}
+                    </span>
+                    <div
+                      className="mt-1 text-xs leading-relaxed"
+                      style={{ color: '#e5e7eb' }}
+                    >
+                      <span className="whitespace-pre-wrap">{streamingContent}</span>
+                      <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse" style={{ background: '#f0c040' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
+              {/* Streaming indicator (no content yet) */}
+              {isStreaming && !streamingContent && (
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#f0c040', animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#f0c040', animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#f0c040', animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-[10px]" style={{ color: '#555555' }}>
+                    {activeAgent?.name} is thinking...
+                  </span>
+                </div>
+              )}
+            </>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-border p-4">
+        <div className="shrink-0 p-3" style={{ borderTop: '1px solid #1a1a2e', background: '#0d0d15' }}>
           <div className="flex items-end gap-2">
-            <button className="p-2 hover:bg-surface-light rounded-lg transition-colors text-text-secondary">
-              <Paperclip className="w-5 h-5" />
-            </button>
-
             <div className="flex-1 relative">
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -241,67 +342,97 @@ function Chat() {
                     handleSend()
                   }
                 }}
-                placeholder={activeAgent ? "Type your message..." : "Select an agent first"}
-                disabled={!activeAgent}
-                className="w-full bg-surface-light border border-border rounded-lg px-4 py-3 pr-12 resize-none focus:outline-none focus:border-primary disabled:opacity-50"
+                placeholder={activeAgent ? `Message ${activeAgent.name}...` : 'Select an agent first'}
+                disabled={!activeAgent || isStreaming}
+                className="w-full rounded px-3 py-2.5 text-xs resize-none outline-none disabled:opacity-40 placeholder:text-gray-600"
                 rows={1}
-                style={{ minHeight: '48px', maxHeight: '200px' }}
+                style={{
+                  minHeight: '40px',
+                  maxHeight: '120px',
+                  background: '#0a0a0f',
+                  border: '1px solid #1a1a2e',
+                  color: '#e5e7eb',
+                  fontFamily: FONT,
+                }}
               />
             </div>
 
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || !activeAgent}
-              className="p-3 bg-transparent border border-[#f0c040] text-[#f0c040] hover:bg-[#f0c040]/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+            {isStreaming ? (
+              <button
+                onClick={handleStop}
+                className="p-2.5 rounded transition-colors"
+                style={{ background: '#ef444420', border: '1px solid #ef444440', color: '#ef4444' }}
+              >
+                <StopCircle size={16} />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || !activeAgent}
+                className="p-2.5 rounded transition-colors disabled:opacity-30"
+                style={{ background: '#f0c04010', border: '1px solid #f0c04030', color: '#f0c040' }}
+              >
+                <Send size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Right Panel */}
+      {/* Right Panel — Context */}
       {rightPanelVisible && (
         <motion.div
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 320, opacity: 1 }}
+          animate={{ width: 280, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
-          className="border-l border-border bg-surface overflow-y-auto"
+          className="overflow-y-auto shrink-0"
+          style={{ borderLeft: '1px solid #1a1a2e', background: '#0d0d15' }}
         >
-          <div className="p-4">
-            <h3 className="font-semibold mb-4">Context</h3>
+          <div className="p-4 space-y-5">
+            <h3 className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#9ca3af' }}>
+              Context
+            </h3>
 
             {/* Active Tools */}
-            <div className="mb-6">
-              <p className="text-sm text-text-secondary mb-2">Active Tools</p>
+            {activeAgent?.tools && activeAgent.tools.length > 0 && (
+              <div>
+                <p className="text-[10px] tracking-wider mb-2" style={{ color: '#555555' }}>TOOLS</p>
+                <div className="space-y-1">
+                  {activeAgent.tools.slice(0, 8).map((tool) => (
+                    <div
+                      key={tool.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded text-[10px]"
+                      style={{ background: '#0a0a0f', border: '1px solid #1a1a2e', color: '#9ca3af' }}
+                    >
+                      <Terminal size={10} style={{ color: '#f0c040' }} />
+                      {tool.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Agent Config */}
+            <div>
+              <p className="text-[10px] tracking-wider mb-2" style={{ color: '#555555' }}>CONFIGURATION</p>
               <div className="space-y-2">
-                {activeAgent?.tools.slice(0, 5).map((tool) => (
-                  <div key={tool.id} className="flex items-center gap-2 p-2 bg-surface-light rounded-lg">
-                    <Terminal className="w-4 h-4 text-primary" />
-                    <span className="text-sm">{tool.name}</span>
-                  </div>
-                ))}
+                <ConfigRow label="Model" value={activeAgent?.config.model || modelDefaults.model} />
+                <ConfigRow label="Temperature" value={String(activeAgent?.config.temperature || 0.7)} />
+                <ConfigRow label="Max Tokens" value={String(activeAgent?.config.maxTokens || 4096)} />
               </div>
             </div>
 
-            {/* Agent Info */}
-            <div className="mb-6">
-              <p className="text-sm text-text-secondary mb-2">Agent Configuration</p>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-text-secondary">Model</p>
-                  <p className="text-sm font-medium">{activeAgent?.config.model || modelDefaults.model}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-secondary">Temperature</p>
-                  <p className="text-sm font-medium">{activeAgent?.config.temperature || 0.7}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-secondary">Max Tokens</p>
-                  <p className="text-sm font-medium">{activeAgent?.config.maxTokens || 4096}</p>
+            {/* Session info */}
+            {activeChat && (
+              <div>
+                <p className="text-[10px] tracking-wider mb-2" style={{ color: '#555555' }}>SESSION</p>
+                <div className="space-y-2">
+                  <ConfigRow label="Messages" value={String(messages.length)} />
+                  <ConfigRow label="Session ID" value={activeChat.id.slice(0, 12) + '...'} />
+                  <ConfigRow label="Created" value={new Date(activeChat.createdAt).toLocaleDateString()} />
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </motion.div>
       )}
@@ -309,65 +440,84 @@ function Chat() {
   )
 }
 
-function MessageBubble({
+// ── Message Block (terminal-style, not chat bubbles) ────────────────────────
+
+function MessageBlock({
   message,
   isUser,
   agentColor,
+  agentName,
 }: {
   message: Message
   isUser: boolean
   agentColor?: string
+  agentName?: string
 }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
     const text = typeof message.content === 'string' ? message.content : ''
-    navigator.clipboard.writeText(text)
+    navigator.clipboard.writeText(text).catch(() => { /* clipboard may not be available */ })
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+      className="flex gap-3 group"
     >
       <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${
-          isUser ? 'bg-[#f0c040]/20 border border-[#f0c040]/30 text-[#f0c040]' : ''
-        }`}
-        style={{ backgroundColor: isUser ? undefined : agentColor }}
+        className="w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+        style={{
+          backgroundColor: isUser ? '#f0c04020' : (agentColor || '#f0c040') + '20',
+          color: isUser ? '#f0c040' : agentColor || '#f0c040',
+          border: `1px solid ${isUser ? '#f0c04030' : (agentColor || '#f0c040') + '30'}`,
+        }}
       >
-        {isUser ? 'U' : 'A'}
+        {isUser ? 'U' : agentName?.charAt(0).toUpperCase() || 'A'}
       </div>
 
-      <div className={`flex-1 max-w-[80%] ${isUser ? 'text-right' : ''}`}>
-        <div
-          className={`inline-block text-left px-4 py-3 rounded-2xl ${
-            isUser
-              ? 'bg-[#f0c040]/10 border border-[#f0c040]/20 text-white rounded-tr-sm'
-              : 'bg-surface-light text-white border border-border rounded-tl-sm'
-          }`}
-        >
-          <p className="whitespace-pre-wrap">{typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}</p>
-        </div>
-
-        <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : ''}`}>
-          <span className="text-xs text-text-secondary">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-bold" style={{ color: isUser ? '#f0c040' : agentColor || '#9ca3af' }}>
+            {isUser ? 'You' : agentName || 'Agent'}
+          </span>
+          <span className="text-[9px]" style={{ color: '#555555' }}>
             {new Date(message.timestamp).toLocaleTimeString()}
           </span>
           {!isUser && (
             <button
               onClick={handleCopy}
-              className="p-1 hover:bg-surface-light rounded text-text-secondary"
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity"
+              style={{ color: '#555555' }}
             >
-              {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+              {copied ? <Check size={10} className="text-green-500" /> : <Copy size={10} />}
             </button>
           )}
         </div>
+        <div
+          className="text-xs leading-relaxed whitespace-pre-wrap"
+          style={{ color: isUser ? '#e5e7eb' : '#d1d5db' }}
+        >
+          {content}
+        </div>
       </div>
     </motion.div>
+  )
+}
+
+// ── Config Row ──────────────────────────────────────────────────────────────
+
+function ConfigRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-[10px]">
+      <span style={{ color: '#555555' }}>{label}</span>
+      <span style={{ color: '#9ca3af' }}>{value}</span>
+    </div>
   )
 }
 

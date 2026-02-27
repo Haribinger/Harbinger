@@ -350,6 +350,10 @@ func handleRelayMessage(w http.ResponseWriter, r *http.Request) {
 		if channelCfg.Telegram.BotToken != "" && channelCfg.Telegram.ChatID != "" {
 			go sendTelegramMessage(channelCfg.Telegram.BotToken, channelCfg.Telegram.ChatID, formatted)
 		}
+	case "slack":
+		if channelCfg.Slack.WebhookURL != "" {
+			go sendSlackWebhook(channelCfg.Slack.WebhookURL, formatted)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "formatted": formatted})
@@ -388,4 +392,21 @@ func sendTelegramMessage(token, chatID, text string) {
 		"parse_mode": "Markdown",
 	})
 	http.Post(apiURL, "application/json", bytes.NewReader(payload))
+}
+
+// Send message via Slack webhook
+func sendSlackWebhook(webhookURL, text string) {
+	payload, _ := json.Marshal(map[string]any{
+		"text": text,
+		"blocks": []map[string]any{
+			{
+				"type": "section",
+				"text": map[string]string{
+					"type": "mrkdwn",
+					"text": text,
+				},
+			},
+		},
+	})
+	http.Post(webhookURL, "application/json", bytes.NewReader(payload))
 }

@@ -67,7 +67,7 @@ function DockerManager() {
       setContainers(containers)
       setConnectionStatus('connected')
     } catch (error: any) {
-      console.error('Docker API error:', error)
+      // Error handled via toast below
       // Check if it's a "not_configured" response from backend
       if (error.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
@@ -121,7 +121,7 @@ function DockerManager() {
       updateContainer(container.id, { status: 'running', startedAt: new Date().toISOString() })
       toast.success('Container is running!')
     } catch (error: any) {
-      console.error('Failed to create container:', error)
+      // Error handled via toast below
       if (error?.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
@@ -143,7 +143,7 @@ function DockerManager() {
       updateContainer(container.id, { status: 'running', startedAt: new Date().toISOString() })
       toast.success('Container started!')
     } catch (error: any) {
-      console.error('Failed to start:', error)
+      // Error handled via toast below
       if (error?.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
@@ -163,7 +163,7 @@ function DockerManager() {
       updateContainer(container.id, { status: 'exited' })
       toast.success('Container stopped!')
     } catch (error: any) {
-      console.error('Failed to stop:', error)
+      // Error handled via toast below
       if (error?.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
@@ -184,7 +184,7 @@ function DockerManager() {
       if (selectedContainer?.id === container.id) setSelectedContainer(null)
       toast.success('Container removed!')
     } catch (error: any) {
-      console.error('Failed to remove:', error)
+      // Error handled via toast below
       if (error?.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
