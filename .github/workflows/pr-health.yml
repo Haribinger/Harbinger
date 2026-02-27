@@ -1,3 +1,11 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  HARBINGER PR HEALTH CHECK
+#  MAINTAINER agent scans code health on every PR, posts a score comment,
+#  and applies health labels. Fails on critical scores (< 30).
+#
+#  Docs: docs/github-actions/README.md
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: PR Health Check
 
 on:
@@ -6,6 +14,14 @@ on:
   pull_request_review:
     types: [submitted]
 
+concurrency:
+  group: pr-health-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '10'
+
 permissions:
   contents: write
   pull-requests: write
@@ -13,22 +29,24 @@ permissions:
 
 jobs:
   health-check:
+    name: Health Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup pnpm
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep

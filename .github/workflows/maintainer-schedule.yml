@@ -1,3 +1,12 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  HARBINGER NIGHTLY MAINTENANCE
+#  MAINTAINER agent runs at 02:00 UTC, applies safe auto-fixes
+#  (console.log removal), and opens a PR if anything changed.
+#
+#  Manual: Actions → Nightly Maintenance → Run workflow
+#  Docs:   docs/github-actions/README.md
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Nightly Maintenance
 
 on:
@@ -5,29 +14,35 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '10'
+
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   nightly-maintenance:
+    name: Nightly Scan & Fix
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
+      - name: Setup Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup pnpm
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep

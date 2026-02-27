@@ -56,10 +56,30 @@
 - **console.error removal** — CommandCenter (3), BrowserManager (1), DockerManager (5), Chat (1) replaced with comments
 - Error states used instead of console output
 
+### Enhanced — Chat Page UI
+- **Session sidebar** — create, select, delete sessions with agent-keyed history
+- **Agent picker** — dropdown selector with status indicators and color-coded avatars
+- **Scroll-to-bottom button** — appears when user scrolls up, auto-hides at bottom
+- **Empty state** — feature badges (Streaming, Multi-Agent, Session History), Select Agent CTA
+- **Channel indicators** — WebChat/Discord/Telegram/Slack status badges in sidebar footer
+- **Terminal-style messages** — grouped by sender run, avatar only on first message in a run
+
+### Enhanced — Command Center ChatPanel
+- **Message persistence** — chat messages stored in `commandCenterStore.chatMessages` keyed by agentId
+- Messages survive tab close/reopen within the same browser session
+- Added `addChatMessage`, `getChatMessages`, `clearChatMessages` actions to store
+
+### Enhanced — OpenClaw Channel Sync
+- **Real channel status** — OpenClaw page now calls `GET /api/channels` to show Discord/Telegram/Slack as connected/configured/offline based on actual backend config
+- WebChat always shows as connected
+- Channel status badges dynamically colored (green=connected, gold=configured, red=offline)
+
 ### Infrastructure
 - Page count: 21 → 23 (Login, Setup Wizard added to matrix)
 - Backend files: 15 → 16 (chat.go)
 - Backend endpoints: 100+ → 120+ (14 chat routes + pentest/CVE additions)
+- ROADMAP.md — full rewrite with target dates, dependencies, success criteria, release targets, backlog
+- ROADMAP_TIMELINE.md — Mermaid dependency flowchart and Gantt chart
 
 ---
 

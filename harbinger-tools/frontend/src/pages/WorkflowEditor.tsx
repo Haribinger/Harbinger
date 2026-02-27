@@ -67,6 +67,64 @@ const edgeTypes = {
 let id = 0;
 const getId = () => `node_${Date.now()}_${id++}`;
 
+// ── Workflow templates for beginner UX ──────────────────────────────────────
+const WORKFLOW_TEMPLATES = [
+  {
+    id: 'recon-pipeline',
+    name: 'Recon Pipeline',
+    description: 'Subdomain enum → live host probe → port scan → nuclei',
+    category: 'Recon',
+    color: '#3b82f6',
+    nodes: [
+      { type: 'triggerNode', x: 100, y: 200, data: { triggerType: 'manual', enabled: true, status: 'pending' } },
+      { type: 'toolNode', x: 350, y: 200, data: { toolName: 'subfinder', category: 'Recon', status: 'pending', timeout: 300, retryCount: 1, continueOnError: false, variables: {} } },
+      { type: 'toolNode', x: 600, y: 200, data: { toolName: 'httpx', category: 'Recon', status: 'pending', timeout: 300, retryCount: 1, continueOnError: false, variables: {} } },
+      { type: 'toolNode', x: 850, y: 200, data: { toolName: 'nuclei', category: 'Web', status: 'pending', timeout: 600, retryCount: 0, continueOnError: true, variables: {} } },
+      { type: 'outputNode', x: 1100, y: 200, data: { outputType: 'report', destination: './reports/', format: 'markdown', template: '# Recon Report\n\n{{results}}', status: 'pending' } },
+    ],
+  },
+  {
+    id: 'vuln-scan',
+    name: 'Vulnerability Scan',
+    description: 'Nuclei → SQLi check → XSS check → Report',
+    category: 'Web',
+    color: '#ef4444',
+    nodes: [
+      { type: 'triggerNode', x: 100, y: 200, data: { triggerType: 'manual', enabled: true, status: 'pending' } },
+      { type: 'agentNode', x: 350, y: 200, data: { codename: 'BREACH', agentType: 'web', agentId: '', autoChain: true, status: 'pending' } },
+      { type: 'decisionNode', x: 600, y: 200, data: { condition: '{{prev.output}} contains "critical"', trueLabel: 'Critical', falseLabel: 'Continue' } },
+      { type: 'notificationNode', x: 850, y: 100, data: { channel: 'discord', severity: 'critical', destination: '#alerts', messageTemplate: 'Critical finding: {{prev.output}}', status: 'pending' } },
+      { type: 'outputNode', x: 850, y: 300, data: { outputType: 'report', destination: './reports/', format: 'markdown', template: '# Vulnerability Report\n\n{{results}}', status: 'pending' } },
+    ],
+  },
+  {
+    id: 'osint-sweep',
+    name: 'OSINT Sweep',
+    description: 'Email harvest → username search → leak check → report',
+    category: 'OSINT',
+    color: '#06b6d4',
+    nodes: [
+      { type: 'triggerNode', x: 100, y: 200, data: { triggerType: 'manual', enabled: true, status: 'pending' } },
+      { type: 'toolNode', x: 350, y: 200, data: { toolName: 'theHarvester', category: 'OSINT', status: 'pending', timeout: 300, retryCount: 1, continueOnError: false, variables: {} } },
+      { type: 'toolNode', x: 600, y: 200, data: { toolName: 'sherlock', category: 'OSINT', status: 'pending', timeout: 300, retryCount: 0, continueOnError: true, variables: {} } },
+      { type: 'outputNode', x: 850, y: 200, data: { outputType: 'save', destination: './osint/', format: 'json', template: '', status: 'pending' } },
+    ],
+  },
+  {
+    id: 'cron-monitor',
+    name: 'Scheduled Monitor',
+    description: 'Run a scan every 6 hours and notify on new findings',
+    category: 'Automation',
+    color: '#f0c040',
+    nodes: [
+      { type: 'triggerNode', x: 100, y: 200, data: { triggerType: 'cron', cronExpression: '0 */6 * * *', enabled: true, status: 'pending' } },
+      { type: 'agentNode', x: 350, y: 200, data: { codename: 'PATHFINDER', agentType: 'recon', agentId: '', autoChain: true, status: 'pending' } },
+      { type: 'decisionNode', x: 600, y: 200, data: { condition: '{{prev.output}} != {{env.LAST_RESULT}}', trueLabel: 'New findings', falseLabel: 'No change' } },
+      { type: 'notificationNode', x: 850, y: 150, data: { channel: 'telegram', severity: 'info', destination: '', messageTemplate: 'New scan results: {{prev.output | count}} findings', status: 'pending' } },
+    ],
+  },
+];
+
 const WorkflowEditorContent: React.FC = () => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -90,6 +148,22 @@ const WorkflowEditorContent: React.FC = () => {
   useWorkflowKeyboard();
 
   const [propertiesTab, setPropertiesTab] = useState<'config' | 'variables' | 'output'>('config');
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Load a template onto the canvas
+  const loadTemplate = useCallback((template: typeof WORKFLOW_TEMPLATES[0]) => {
+    pushSnapshot();
+    template.nodes.forEach((n, i) => {
+      const newNode: WorkflowNode = {
+        id: getId(),
+        type: n.type,
+        position: { x: n.x, y: n.y },
+        data: n.data as any,
+      };
+      addNode(newNode);
+    });
+    setShowTemplates(false);
+  }, [addNode, pushSnapshot]);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -355,13 +429,38 @@ const WorkflowEditorContent: React.FC = () => {
   const selectedData = selectedNode?.data;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0a0a0f] text-white font-mono">
+    <div className="flex flex-col h-screen w-screen bg-[#0a0a0f] text-white font-mono relative">
       <WorkflowToolbar />
       <div className="flex flex-grow overflow-hidden">
         <NodePalette />
 
         {/* Canvas */}
-        <div className="reactflow-wrapper flex-grow" ref={reactFlowWrapper}>
+        <div className="reactflow-wrapper flex-grow relative" ref={reactFlowWrapper}>
+          {/* Floating templates button */}
+          <button
+            onClick={() => setShowTemplates(true)}
+            className="absolute top-3 right-3 z-10 px-3 py-1.5 rounded border border-[#1a1a2e] bg-[#0d0d15]/90 text-[10px] font-medium text-gray-400 hover:text-[#f0c040] hover:border-[#f0c040]/30 transition-colors backdrop-blur-sm"
+          >
+            Templates
+          </button>
+
+          {/* Empty canvas prompt */}
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none">
+              <div className="text-center pointer-events-auto">
+                <div className="text-lg font-bold text-gray-600 mb-1">Empty Canvas</div>
+                <p className="text-[11px] text-gray-600 mb-4 max-w-xs">
+                  Drag nodes from the palette on the left, or start from a pre-built template.
+                </p>
+                <button
+                  onClick={() => setShowTemplates(true)}
+                  className="px-4 py-2 rounded border border-[#f0c040]/40 bg-[#f0c040]/10 text-[#f0c040] text-xs font-medium hover:bg-[#f0c040]/20 transition-colors"
+                >
+                  Start from Template
+                </button>
+              </div>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={animatedEdges}
@@ -607,15 +706,107 @@ const WorkflowEditorContent: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center p-4">
-              <div className="text-center text-gray-500">
+            <div className="flex-1 flex flex-col p-4 overflow-y-auto">
+              <div className="text-center text-gray-500 mb-4">
                 <p className="text-sm">Select a node</p>
                 <p className="text-[10px] mt-1">Click on any node to edit its properties</p>
+              </div>
+
+              {/* Quick start hints */}
+              <div className="space-y-2 mb-4">
+                <p className="text-[10px] font-bold text-[#f0c040] uppercase tracking-wider">Quick start</p>
+                {[
+                  { key: '1', text: 'Drag nodes from the left palette' },
+                  { key: '2', text: 'Connect handles to create edges' },
+                  { key: '3', text: 'Click a node to configure it' },
+                  { key: '4', text: 'Use {{prev.output}} for chaining' },
+                ].map(hint => (
+                  <div key={hint.key} className="flex items-start gap-2 text-[10px]">
+                    <span className="w-4 h-4 flex items-center justify-center rounded bg-[#f0c040]/10 text-[#f0c040] font-bold flex-shrink-0">{hint.key}</span>
+                    <span className="text-gray-400">{hint.text}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Templates button */}
+              <button
+                onClick={() => setShowTemplates(true)}
+                className="w-full py-2 px-3 rounded border border-[#f0c040]/30 bg-[#f0c040]/5 text-[#f0c040] text-xs font-medium hover:bg-[#f0c040]/10 transition-colors"
+              >
+                Browse Templates
+              </button>
+
+              {/* Keyboard shortcuts */}
+              <div className="mt-4 space-y-1">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Shortcuts</p>
+                {[
+                  { keys: 'Ctrl+Z', action: 'Undo' },
+                  { keys: 'Ctrl+Y', action: 'Redo' },
+                  { keys: 'Del', action: 'Delete node' },
+                  { keys: 'Ctrl+S', action: 'Save workflow' },
+                ].map(s => (
+                  <div key={s.keys} className="flex items-center justify-between text-[10px]">
+                    <kbd className="px-1.5 py-0.5 rounded bg-[#1a1a2e] border border-[#1a1a2e] text-gray-400 font-mono">{s.keys}</kbd>
+                    <span className="text-gray-600">{s.action}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Template gallery overlay */}
+      {showTemplates && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-[640px] max-h-[80vh] bg-[#0d0d15] border border-[#1a1a2e] rounded-lg overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#1a1a2e] flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-[#f0c040]">WORKFLOW TEMPLATES</h2>
+                <p className="text-[10px] text-gray-500 mt-0.5">Pre-built pipelines — click to load onto canvas</p>
+              </div>
+              <button
+                onClick={() => setShowTemplates(false)}
+                className="w-6 h-6 flex items-center justify-center rounded bg-[#1a1a2e] text-gray-400 hover:text-white hover:bg-[#1a1a2e]/80 transition-colors text-sm"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3">
+              {WORKFLOW_TEMPLATES.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => loadTemplate(t)}
+                  className="text-left p-4 rounded-lg border border-[#1a1a2e] bg-[#0a0a0f] hover:border-[#f0c040]/40 hover:bg-[#f0c040]/5 transition-all group"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: t.color }}
+                    />
+                    <span className="text-xs font-bold text-white group-hover:text-[#f0c040] transition-colors">{t.name}</span>
+                    <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-[#1a1a2e] text-gray-500">{t.category}</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mb-3 leading-relaxed">{t.description}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {t.nodes.map((n, i) => (
+                      <span
+                        key={i}
+                        className="text-[9px] px-1.5 py-0.5 rounded border border-[#1a1a2e] text-gray-500 font-mono"
+                      >
+                        {n.type.replace('Node', '')}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-[10px] text-[#f0c040]/60 group-hover:text-[#f0c040] transition-colors">
+                    {t.nodes.length} nodes &middot; Click to load
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Execution Log + Validation */}
       <div className="border-t border-[#1a1a2e] flex flex-col overflow-hidden">

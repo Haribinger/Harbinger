@@ -1,3 +1,15 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  HARBINGER CI
+#  Frontend (React 19 + Vite 6 + TypeScript) and Backend (Go 1.24)
+#
+#  Triggers:  push to main, pull requests, manual dispatch
+#  Features:  concurrency cancel, env-driven versions, build artifact,
+#             pnpm/Go caches, markdown job summary
+#
+#  Docs:      docs/github-actions/README.md
+#  Reference: docs/github-actions/ci.yml (keep in sync)
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: CI
 
 on:
@@ -5,49 +17,80 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  GO_VERSION: '1.24'
+  PNPM_VERSION: '10'
 
 permissions:
   contents: read
 
 jobs:
+  # ─── Frontend ───────────────────────────────────────────────────────────────
   build-frontend:
+    name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup pnpm
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: harbinger-tools/frontend
 
       - name: Type check
-        run: pnpm tsc --noEmit
+        run: pnpm exec tsc --noEmit
+        working-directory: harbinger-tools/frontend
+
+      - name: Lint
+        run: pnpm exec eslint . --max-warnings 0
         working-directory: harbinger-tools/frontend
 
       - name: Build
-        run: pnpm build
-        working-directory: harbinger-tools/frontend
+        run: pnpm build:ui
 
+      - name: Test
+        run: pnpm --filter harbinger-frontend test --run --passWithNoTests
+
+      - name: Upload build artifact
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: harbinger-tools/frontend/dist
+          retention-days: 7
+
+  # ─── Backend ────────────────────────────────────────────────────────────────
   build-backend:
+    name: Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Setup Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
 
       - name: Build
         run: go build -o /tmp/harbinger-backend ./cmd/
@@ -57,15 +100,45 @@ jobs:
         run: go vet ./cmd/...
         working-directory: backend
 
-  build-and-check:
-    needs: [build-frontend, build-backend]
+      - name: Test
+        run: go test ./cmd/... -count=1 -timeout 120s
+        working-directory: backend
+
+  # ─── Summary ────────────────────────────────────────────────────────────────
+  ci-summary:
+    name: CI Summary
     runs-on: ubuntu-latest
-    if: always()
+    needs: [build-frontend, build-backend]
+    if: always() && !cancelled()
     steps:
-      - name: Check results
+      - name: Evaluate results and write summary
+        env:
+          FE_RESULT: ${{ needs.build-frontend.result }}
+          BE_RESULT: ${{ needs.build-backend.result }}
         run: |
-          if [ "${{ needs.build-frontend.result }}" != "success" ] || [ "${{ needs.build-backend.result }}" != "success" ]; then
-            echo "::error::One or more build jobs failed"
+          FE_ICON=$( [ "$FE_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
+          BE_ICON=$( [ "$BE_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
+          ALL_PASS=$( [ "$FE_RESULT" = "success" ] && [ "$BE_RESULT" = "success" ] && echo "true" || echo "false" )
+
+          if [ "$ALL_PASS" = "true" ]; then
+            TITLE="CI passed"
+          else
+            TITLE="CI failed"
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## $TITLE
+
+          | Job | Status | Steps |
+          |-----|--------|-------|
+          | **Frontend** | $FE_ICON | install, typecheck, lint, build, test |
+          | **Backend** | $BE_ICON | build, vet, test |
+
+          **Commit:** \`${GITHUB_SHA::8}\` on \`${GITHUB_REF_NAME}\`
+          **Run:** [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
+          EOF
+
+          if [ "$ALL_PASS" = "false" ]; then
+            echo "::error::One or more CI jobs failed. Fix the failing job(s) and push again."
             exit 1
           fi
-          echo "All builds passed"

@@ -1,223 +1,233 @@
 # Getting Started with Harbinger
 
-## Overview
+This guide gets you from zero to a running **Harbinger command center**: sign in, spawn agents, run a scan or workflow, and optionally connect Discord, Telegram, or OpenClaw.
 
-Harbinger is a bug bounty hunting platform with autonomous AI agents. It uses a **two-layer architecture**:
+**Short on time?** Use **[QUICKSTART.md](../QUICKSTART.md)** for a minimal 5-minute path. This page adds context, two run paths (Docker vs local dev), first steps in the UI, and troubleshooting.  
+**All docs:** [docs/README.md](README.md) (index).
 
-1. **Event Handler** (Next.js) - Web interface, API, cron jobs, Telegram bot
-2. **Docker Agent** - Autonomous Pi coding agent that executes tasks
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  ┌─────────────────┐         ┌─────────────────┐                    │
-│  │  Event Handler  │ ──1──►  │     GitHub      │                    │
-│  │  (creates job)  │         │ (job/* branch)  │                    │
-│  └────────▲────────┘         └────────┬────────┘                    │
-│           │                           │                             │
-│           │                           2 (triggers run-job.yml)      │
-│           │                           │                             │
-│           │                           ▼                             │
-│           │                  ┌─────────────────┐                    │
-│           │                  │  Docker Agent   │                    │
-│           │                  │  (runs Pi, PRs) │                    │
-│           │                  └────────┬────────┘                    │
-│           │                           │                             │
-│           │                           3 (creates PR)              │
-│           │                           │                             │
-│           │                           ▼                             │
-│           │                  ┌─────────────────┐                    │
-│           │                  │     GitHub      │                    │
-│           │                  │   (PR opened)   │                    │
-│           │                  └────────┬────────┘                    │
-│           │                           │                             │
-│           │                           4a (auto-merge.yml)         │
-│           │                           4b (rebuild-event-handler.yml)│
-│           │                           │                             │
-│           5 (notify-pr-complete.yml / │                             │
-│           │  notify-job-failed.yml)  │                             │
-│           └───────────────────────────┘                             │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+## What you'll have when you're done
 
-You interact with Harbinger via the **web chat interface** or **Telegram** (optional).
+- **Command center** at `http://localhost` (or your host)
+- **Signed in** via GitHub (OAuth, Device Flow, or PAT) or API key
+- **First agent** (e.g. PATHFINDER) spawned and visible on the Dashboard
+- **First action** — recon scan, chat, or a visual workflow — run from the UI
+
+---
 
 ## Prerequisites
 
-| Requirement | Install |
-|-------------|---------|
-| Node.js 18+ | [nodejs.org](https://nodejs.org) |
-| npm | Included with Node.js |
-| Git | [git-scm.com](https://git-scm.com) |
-| GitHub CLI | [cli.github.com](https://cli.github.com) |
-| Docker + Docker Compose | [docker.com](https://docker.com) (installer requires admin password) |
-| ngrok* | [ngrok.com](https://ngrok.com) (free account + authtoken required) |
+| Requirement | Version / notes | Install |
+|-------------|------------------|---------|
+| **Docker + Compose** | v2.20+ | [docker.com](https://docs.docker.com/get-docker/) |
+| **Node.js** | 20+ | [nodejs.org](https://nodejs.org/) |
+| **pnpm** | 9+ (project uses pnpm, not npm/yarn) | `npm i -g pnpm` |
+| **Git** | any | [git-scm.com](https://git-scm.com/) |
 
-*ngrok is only required for local installs without port forwarding. VPS/cloud deployments don't need it.
+**Hardware:** 4 CPU cores, 8 GB RAM, 20 GB disk minimum for full stack.
 
-## Three Steps
+**Optional (for auth):**
 
-### Step 1 — Scaffold a new project
+- **GitHub OAuth app** — if you want "Continue with GitHub" (create at [GitHub Developer Settings](https://github.com/settings/developers)).
+- **GitHub PAT** — for Device Flow or Token tab (no OAuth app needed).
 
-```bash
-mkdir my-bugbounty-platform && cd my-bugbounty-platform
-npx harbinger@latest init
-```
+---
 
-This creates a Next.js project with configuration files, GitHub Actions workflows, and agent templates.
+## Path A — Quick start with Docker (recommended)
 
-### Step 2 — Run the setup wizard
+Best for: first run, demos, and production-like setup. All services (PostgreSQL, Redis, Neo4j, Go backend, React frontend, Nginx) run in containers.
+
+### 1. Clone and configure
 
 ```bash
-npm run setup
+git clone https://github.com/Haribinger/Harbinger.git
+cd Harbinger
+cp .env.example .env
 ```
 
-The wizard walks you through:
+Edit `.env` with at least:
 
-- Checks prerequisites (Node.js, Git, GitHub CLI)
-- Creates a GitHub repository and pushes your initial commit
-- Creates a GitHub Personal Access Token (scoped to your repo)
-- Collects API keys (Anthropic required; OpenAI, Brave optional)
-- Sets GitHub repository secrets and variables
-- Generates `.env`
-- Builds the project
+```env
+# Required for JWT signing (generate a random value)
+JWT_SECRET=$(openssl rand -base64 32)
 
-### Step 3 — Start your platform
+# Optional: GitHub OAuth (if you use "Continue with GitHub")
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+```
+
+If you skip OAuth, you can still sign in via **Device Flow** or **Token** (GitHub PAT) on the login page.
+
+### 2. Start the stack
 
 ```bash
-docker compose up -d
+docker compose up --build -d
 ```
 
-**Web Chat**: Visit your `APP_URL` to chat with your agent, create jobs, upload files
-**Telegram** (optional): Run `npm run setup-telegram` to connect a Telegram bot
-**Webhook**: Send a POST to `/api/create-job` with your API key to create jobs programmatically
-**Cron**: Edit `config/CRONS.json` to schedule recurring jobs
+This starts: PostgreSQL, Redis, Neo4j, Go backend, React frontend, Nginx proxy.
 
-## Local Development
-
-Your server needs to be reachable from the internet for GitHub webhooks and Telegram.
-
-- **VPS/Cloud**: Your `APP_URL` is just your domain
-- **Local**: Use ngrok (`ngrok http 80`) or port forwarding
-
-If your ngrok URL changes (it changes every time you restart ngrok on the free plan), update it everywhere:
+**Verify:**
 
 ```bash
-# Update .env and GitHub variable in one command:
-npx harbinger set-var APP_URL https://your-new-url.ngrok.io
-
-# If Telegram is configured, re-register the webhook:
-npm run setup-telegram
+docker compose ps
+curl http://localhost/health
 ```
 
-## Manual Updating
+You should see `{"ok":true}` or similar from `/health`.
 
-### 1. Update the package
+### 3. Open the app and sign in
+
+Open **http://localhost** in your browser.
+
+**Login options:**
+
+| Method | When to use |
+|--------|-------------|
+| **OAuth** | You created a GitHub OAuth app and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. |
+| **Device Flow** | No OAuth app; you scan a QR code on [github.com/login/device](https://github.com/login/device) and authorize. |
+| **Token** | You paste a GitHub PAT; no callback URL needed. |
+| **API Key** | You validate an OpenAI/Anthropic/Groq key (for provider setup; auth can still be GitHub). |
+
+After sign-in you land on the **Dashboard**.
+
+### 4. Spawn your first agent
+
+1. Click **Agents** in the sidebar.
+2. Click **"+ New Agent"** (or pick an existing template).
+3. Select **PATHFINDER** (Recon Scout).
+4. Click **Spawn** to start the agent container.
+5. Check the Dashboard or Agents list for live status.
+
+### 5. Run your first scan
+
+1. Go to **Command Center**.
+2. In Quick Ops, click **RECON SCAN**.
+3. Enter a target domain (e.g. a scope you’re allowed to test).
+4. Watch PATHFINDER (or the assigned agent) run subdomain enum, ports, and services.
+
+---
+
+## Path B — Local development (no Docker)
+
+Best for: frontend/backend development with live reload. You run the Go backend and Vite frontend locally; databases can still run in Docker.
+
+### 1. Clone and install
 
 ```bash
-npm install harbinger@latest
+git clone https://github.com/Haribinger/Harbinger.git
+cd Harbinger
+cp .env.example .env
+pnpm install
 ```
 
-### 2. Scaffold and update templates
+Edit `.env` as in Path A (at least `JWT_SECRET`).
+
+### 2. Start databases (optional but recommended)
 
 ```bash
-npx harbinger init
+docker compose up -d postgres redis neo4j
 ```
 
-For most people, that's it — init handles everything. It updates your project files, runs `npm install`, and updates `HARBINGER_VERSION` in your local `.env`.
+If you skip this, the backend will run in a degraded mode (in-memory only where applicable).
 
-### 3. Rebuild for local dev
+### 3. Run backend and frontend
+
+**Terminal 1 — Backend:**
 
 ```bash
-npm run build
+cd backend && go run ./cmd/
 ```
 
-### 4. Commit and push
+Backend listens on **:8080**.
+
+**Terminal 2 — Frontend:**
 
 ```bash
-git add -A && git commit -m "upgrade harbinger to vX.X.X"
-git push
+pnpm dev
 ```
 
-Pushing to main triggers the `rebuild-event-handler.yml` workflow on your server. It detects the version change, runs `harbinger init`, updates `HARBINGER_VERSION` in the server's `.env`, pulls the new Docker image, restarts the container, rebuilds `.next`, and reloads PM2.
+Frontend runs on **:5173** (Vite) and proxies `/api` and `/health` to the backend. Open **http://localhost:5173** to use the app.
 
-## Understanding init
+### 4. Sign in and use the app
 
-### How your project is structured
+Same as Path A steps 3–5: open the URL, sign in (Device Flow or Token is easiest without OAuth), spawn an agent, run a scan.
 
-When you ran `harbinger init` the first time, it scaffolded a project folder with two kinds of files:
-
-**Your files** — These are yours to customize. `init` will never overwrite them:
-
-| Files | What they do |
-|-------|--------------|
-| `config/SOUL.md`, `EVENT_HANDLER.md`, `AGENT.md`, etc. | Your agent's personality, behavior, and prompts |
-| `config/CRONS.json`, `TRIGGERS.json` | Your scheduled jobs and webhook triggers |
-| `app/` | Next.js pages and UI components |
-| `docker/job/` | The Dockerfile for your agent's job container |
-
-**Managed files** — These are infrastructure files that need to stay in sync with the package version. `init` auto-updates them:
-
-| Files | What they do |
-|-------|--------------|
-| `.github/workflows/` | GitHub Actions that run jobs, auto-merge PRs, rebuild on deploy |
-| `docker-compose.yml` | Defines how your containers run together |
-| `docker/event-handler/` | The Dockerfile for the event handler container |
-| `.dockerignore` | Keeps unnecessary files out of Docker builds |
-
-### What happens when you run init
-
-- **Managed files** are updated automatically to match the new package version
-- **Your files** are left alone — but if the package ships new defaults, init lets you know:
-
-```
-Updated templates available:
-These files differ from the current package templates.
-
-  config/CRONS.json
-
-To view differences:  npx harbinger diff <file>
-To reset to default:  npx harbinger reset <file>
-```
-
-### If you've modified managed files
-
-If you've made custom changes to managed files, use `--no-managed` so init doesn't overwrite them:
+**Production build (frontend):**
 
 ```bash
-npx harbinger init --no-managed
+pnpm build:ui
 ```
 
-## CLI Commands
+---
 
-All commands are run via `npx harbinger <command>` (or the `npm run` shortcuts where noted).
+## First steps in the UI
 
-### Project setup
+Once you’re in, these are the main surfaces:
 
-| Command | Description |
-|---------|-------------|
-| `init` | Scaffold a new project, or update templates |
-| `setup` | Run the full interactive setup wizard (`npm run setup`) |
-| `setup-telegram` | Reconfigure Telegram webhook (`npm run setup-telegram`) |
-| `reset-auth` | Regenerate AUTH_SECRET, invalidating all sessions |
+| Where | What to do |
+|-------|------------|
+| **Dashboard** | Overview, agent roster strip, Quick Ops, service health, Bounty Hub strip. |
+| **Agents** | Create, spawn, stop, clone agents; view logs and status. |
+| **Command Center** | Workspace tabs (chat, terminal, browser, logs); RECON SCAN, SPAWN AGENT, WEB ATTACK, etc. |
+| **Chat** | Pick an agent and send messages (streaming); session list. |
+| **Workflows** | List and open workflows; **Workflow Editor** for drag-and-drop pipelines. |
+| **MCP Tools** | Browse and manage MCP servers (HexStrike, PentAGI, etc.). |
+| **Docker** | Container list, start/stop, logs. |
+| **Settings** | Providers (AI keys), Channels (Discord, Telegram, Slack), Secrets, theme. |
 
-### Templates
+---
 
-| Command | Description |
-|---------|-------------|
-| `diff [file]` | List files that differ from templates, or diff a specific file |
-| `reset [file]` | List all template files, or restore a specific one |
+## Optional: Channels and OpenClaw
 
-### Secrets & variables
+- **Channels** — In **Settings → Channels** you can configure Discord, Telegram, and Slack (tokens, webhooks). Agents can relay findings and you can receive commands from those platforms. See **[CHANNELS.md](CHANNELS.md)**.
+- **OpenClaw** — Voice and text command layer that talks to Harbinger’s API. Install OpenClaw separately and point it at your backend. See **[openclaw/README.md](../openclaw/README.md)** and the **OpenClaw** page in the app.
 
-| Command | Description |
-|---------|-------------|
-| `set-agent-secret KEY [VALUE]` | Set `AGENT_<KEY>` GitHub secret and update `.env` |
-| `set-agent-llm-secret KEY [VALUE]` | Set `AGENT_LLM_<KEY>` GitHub secret |
-| `set-var KEY [VALUE]` | Set a GitHub repository variable |
+---
 
-**Secret prefixes:**
-- `AGENT_*` — Protected secrets passed to Docker container (filtered from LLM)
-- `AGENT_LLM_*` — LLM-accessible secrets (not filtered)
-- No prefix — Workflow-only secrets, never passed to container
+## Troubleshooting
+
+| Issue | What to try |
+|-------|-------------|
+| **Port already in use** | `fuser -k 8080/tcp` (backend) or `fuser -k 5173/tcp` (Vite). On Windows use `netstat` and stop the process. |
+| **Database connection errors** | `docker compose down -v && docker compose up -d postgres redis neo4j` then restart backend. |
+| **Frontend not updating (Docker)** | Rebuild: `pnpm build:ui` then `docker compose restart frontend nginx`. Use `pnpm build:ui`, not `pnpm build`. |
+| **pnpm not found** | `npm i -g pnpm@9` (or pnpm 10; project uses pnpm-lock.yaml). |
+| **Login fails / 401** | Ensure `JWT_SECRET` is set in `.env`. For OAuth, check `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` and callback URL. |
+| **Agent won’t spawn** | Check Docker is running and the agent image exists. See **Agents** page and **Docker** page for errors. |
+| **API 404** | Ensure you’re using the correct base URL (e.g. Vite proxy to `:8080` in dev; Nginx in Docker). |
+
+More debug steps: **[skills/claude-skills/harbinger-bugfix/references/debug-workflow.md](../skills/claude-skills/harbinger-bugfix/references/debug-workflow.md)** and **[common-errors.md](../skills/claude-skills/harbinger-bugfix/references/common-errors.md)**.
+
+---
+
+## What’s next?
+
+| Goal | Doc or place |
+|------|----------------|
+| **Architecture** | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| **Agents** | [AGENT_GUIDE.md](AGENT_GUIDE.md) |
+| **Roadmap** | [ROADMAP.md](ROADMAP.md) |
+| **Channels** | [CHANNELS.md](CHANNELS.md) |
+| **Chat & integrations** | [CHAT_INTEGRATIONS_AND_ENHANCEMENTS.md](CHAT_INTEGRATIONS_AND_ENHANCEMENTS.md) |
+| **Red team** | [RED_TEAM_GUIDE.md](RED_TEAM_GUIDE.md) |
+| **Tools** | [TOOL_INTEGRATIONS.md](TOOL_INTEGRATIONS.md), [TOOLS_GUIDE.md](TOOLS_GUIDE.md) |
+| **Improvement tasks** | [DETAILED_IMPROVEMENT_STEPS.md](DETAILED_IMPROVEMENT_STEPS.md) |
+
+In the app: **Settings → Providers** (AI keys), **Settings → Channels** (Discord/Telegram/Slack), **Skills Hub**, **Scope Manager**, **Remediation Tracker**, **Code Health**.
+
+---
+
+## Alternative: Scaffolded project (npx harbinger init)
+
+If you are using the **Harbinger npm package** to scaffold a **separate** Next.js + Docker Agent project (event handler, job branches, GitHub Actions, Telegram bot), that flow is different from running this repo as the command center:
+
+1. **Scaffold:** `mkdir my-project && cd my-project && npx harbinger@latest init`
+2. **Setup:** `npm run setup` (wizard: GitHub repo, secrets, API keys, `.env`)
+3. **Run:** `docker compose up -d`
+
+That setup uses an **Event Handler** (Next.js) and a **Docker Agent** that runs Pi/jobs and opens PRs. Documentation for that flow lives in the package and in scaffolded projects (e.g. `config/EVENT_HANDLER.md`, `bugs/CLAUDE.md`). This **Getting Started** guide is for the **Harbinger framework repo** (the command center you cloned), not for the scaffolded project.
+
+---
+
+**Last updated:** 2026-02-26

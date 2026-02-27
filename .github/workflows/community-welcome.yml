@@ -1,3 +1,10 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  HARBINGER COMMUNITY WELCOME
+#  Auto-greets first-time PR authors and labels new issues by category.
+#
+#  Docs: docs/github-actions/README.md
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Welcome New Contributors
 
 on:
@@ -12,6 +19,7 @@ permissions:
 
 jobs:
   welcome-pr:
+    name: Welcome PR Author
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
@@ -78,6 +86,7 @@ jobs:
             });
 
   welcome-issue:
+    name: Label New Issue
     if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:

@@ -9,6 +9,7 @@
 
 **Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Intelligence**
 
+[![CI](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml/badge.svg)](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8.svg)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
@@ -25,7 +26,9 @@
 
 Harbinger is a **command center for autonomous offensive security agents**. It is not a scanner, not a chatbot, and not a demo. It is a production framework where specialized AI agents work as a swarm to discover vulnerabilities, map attack surfaces, and write reports.
 
-**[Quickstart Guide](QUICKSTART.md)** | **[Architecture](ARCHITECTURE.md)** | **[Contributing](CONTRIBUTING.md)**
+**[Getting Started](docs/getting-started.md)** | **[Quickstart](QUICKSTART.md)** | **[Architecture](ARCHITECTURE.md)** | **[CI/CD](docs/github-actions/README.md)** | **[Contributing](CONTRIBUTING.md)**
+
+> **First time?** [Getting Started](docs/getting-started.md) is the full guide (Docker + local dev, UI walkthrough, troubleshooting). [Quickstart](QUICKSTART.md) is the 5-minute path.
 
 ---
 
@@ -128,7 +131,7 @@ docker compose up --build -d
 # Open http://localhost
 ```
 
-Full setup guide: **[QUICKSTART.md](QUICKSTART.md)**
+**Guides:** [Getting Started](docs/getting-started.md) (full) · [QUICKSTART](QUICKSTART.md) (5 min)
 
 ---
 

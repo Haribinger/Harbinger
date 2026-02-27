@@ -26,6 +26,7 @@ import { useBrowserStore } from '../../store/browserStore'
 import { useWorkflowStore } from '../../store/workflowStore'
 import { useChannelStore } from '../../store/channelStore'
 import { dashboardApi, type ActivityItem, type ServiceHealth } from '../../api/dashboard'
+import { apiClient } from '../../api/client'
 
 // Design tokens — Obsidian Command aesthetic
 const C = {
@@ -92,6 +93,10 @@ function Dashboard() {
   const [health, setHealth] = useState<ServiceHealth[]>([])
   const [activityErr, setActivityErr] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(formatTime())
+  const [conversations, setConversations] = useState<Array<{
+    id: string; channel: string; agentName?: string; userId: string;
+    message?: string; response?: string; timestamp: number;
+  }>>([])
 
   // Build roster from DB agents, fallback to seed roster
   const agentRoster = agents.length > 0
@@ -128,6 +133,12 @@ function Dashboard() {
         .then(setHealth)
         .catch(() => { /* service health check is non-critical — dashboard degrades gracefully */ }),
       fetchChannels(),
+      apiClient.get<any[]>('/api/channels/conversations')
+        .then((data) => {
+          const items = Array.isArray(data) ? data : []
+          setConversations(items.slice(-8).reverse())
+        })
+        .catch(() => { /* conversations are non-critical */ }),
     ])
     setLastRefresh(formatTime())
   }, [fetchChannels])
@@ -426,6 +437,52 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── CROSS-CHANNEL CONVERSATION FEED ── */}
+      {conversations.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <div
+            style={{ borderBottom: `1px solid ${C.border}`, padding: '8px 12px' }}
+            className="flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <Globe size={11} style={{ color: C.gold }} />
+              <span style={{ color: C.gold, fontSize: '10px', letterSpacing: '0.15em', fontWeight: 700 }}>
+                CROSS-CHANNEL FEED
+              </span>
+            </div>
+            <span style={{ color: C.dim, fontSize: '9px' }}>
+              {conversations.length} recent
+            </span>
+          </div>
+          <div style={{ padding: '6px 12px', fontFamily: FONT, fontSize: '10px', maxHeight: '140px', overflowY: 'auto' }}>
+            {conversations.map((conv) => {
+              const chColor = conv.channel === 'discord' ? '#5865F2'
+                : conv.channel === 'telegram' ? '#229ED9'
+                : conv.channel === 'slack' ? '#4A154B'
+                : C.success
+              return (
+                <div key={conv.id} className="flex items-start gap-2 py-1" style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <span
+                    style={{ fontSize: '7px', padding: '1px 4px', borderRadius: '2px', background: `${chColor}20`, color: chColor, border: `1px solid ${chColor}30`, flexShrink: 0, marginTop: '2px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}
+                  >
+                    {conv.channel.slice(0, 4)}
+                  </span>
+                  {conv.agentName && (
+                    <span style={{ color: C.gold, fontWeight: 700, flexShrink: 0 }}>[{conv.agentName}]</span>
+                  )}
+                  <span style={{ color: C.muted, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {conv.response || conv.message || '...'}
+                  </span>
+                  <span style={{ color: C.dim, flexShrink: 0, fontSize: '8px' }}>
+                    {new Date(conv.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── BOTTOM: Bounty Hub Strip ── */}
       <div

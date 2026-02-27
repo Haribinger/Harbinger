@@ -1,5 +1,7 @@
 # Harbinger Quickstart — Up and Running in 5 Minutes
 
+For the full guide (Docker + local dev paths, first steps in the UI, troubleshooting), see **[Getting Started](docs/getting-started.md)**.
+
 ## Prerequisites
 
 | Tool | Version | Install |
