@@ -1,0 +1,118 @@
+name: Welcome New Contributors
+
+on:
+  pull_request_target:
+    types: [opened]
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome-pr:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if first-time contributor
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const authorPRs = prs.filter(pr => pr.user.login === context.payload.pull_request.user.login);
+            core.setOutput('first_time', authorPRs.length <= 1 ? 'true' : 'false');
+
+      - name: Welcome first-time PR author
+        if: steps.check.outputs.first_time == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `Welcome to Harbinger, @${author}!
+
+            Thanks for your first contribution. Here's what happens next:
+
+            1. **PR Health Check** runs automatically — your code health score will be posted as a comment
+            2. A maintainer will review your changes
+            3. Make sure \`pnpm build:ui\` and \`go build ./cmd/\` pass locally before pushing
+
+            **Quick checklist:**
+            - [ ] Follows the Obsidian Command design system (dark theme, monospace, \`#f0c040\` accent)
+            - [ ] No \`any\` types in new TypeScript code
+            - [ ] No \`console.log\` in production paths
+            - [ ] New pages have: API module + Zustand store + lazy route + Sidebar entry
+
+            See [CLAUDE.md](../blob/main/CLAUDE.md) for full guidelines.`
+            });
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['first-contribution'],
+            }).catch(async () => {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'first-contribution',
+                color: 'f0c040',
+                description: 'First contribution from this author',
+              });
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: ['first-contribution'],
+              });
+            });
+
+  welcome-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label new issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.issue.title.toLowerCase();
+            const labels = ['triage'];
+
+            if (title.includes('bug') || title.includes('error') || title.includes('crash')) {
+              labels.push('bug');
+            } else if (title.includes('feature') || title.includes('add') || title.includes('request')) {
+              labels.push('enhancement');
+            } else if (title.includes('agent')) {
+              labels.push('agents');
+            } else if (title.includes('mcp') || title.includes('tool')) {
+              labels.push('mcp');
+            }
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+              } catch {
+                const colors = { triage: '666666', bug: 'ef4444', enhancement: '22c55e', agents: '00d4ff', mcp: 'a78bfa' };
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  name: label, color: colors[label] || '666666',
+                });
+              }
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              labels,
+            });
