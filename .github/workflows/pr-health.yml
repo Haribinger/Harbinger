@@ -61,8 +61,9 @@ jobs:
           echo "$REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # Extract score for threshold check
-          SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*')
+          # Extract score for threshold check (default to 0 if extraction fails)
+          SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          SCORE=${SCORE:-0}
           echo "score=$SCORE" >> $GITHUB_OUTPUT
 
           # Extract individual metrics

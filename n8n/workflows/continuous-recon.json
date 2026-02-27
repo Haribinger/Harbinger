@@ -1,3 +1,107 @@
 {
-  "description": "n8n workflow: scheduled trigger -> call Harbinger API /bounty/sync -> run recon agents -> collect findings -> notify"
+  "name": "Harbinger — Continuous Recon",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/bounty/sync",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Sync Bounty Targets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/agents/spawn",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "template", "value": "recon-scout" },
+            { "name": "target", "value": "={{$json.targets}}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Spawn Recon Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/agents/{{$json.agentId}}/findings",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Collect Findings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{$json.findings.length}}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "name": "Has New Findings?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/notifications",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "type", "value": "recon_complete" },
+            { "name": "message", "value": "Recon found {{$json.findings.length}} new items" }
+          ]
+        }
+      },
+      "name": "Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 200]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Sync Bounty Targets", "type": "main", "index": 0 }]] },
+    "Sync Bounty Targets": { "main": [[{ "node": "Spawn Recon Agent", "type": "main", "index": 0 }]] },
+    "Spawn Recon Agent": { "main": [[{ "node": "Collect Findings", "type": "main", "index": 0 }]] },
+    "Collect Findings": { "main": [[{ "node": "Has New Findings?", "type": "main", "index": 0 }]] },
+    "Has New Findings?": { "main": [[{ "node": "Notify", "type": "main", "index": 0 }], []] }
+  }
 }

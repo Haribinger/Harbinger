@@ -62,7 +62,8 @@ jobs:
           echo "$REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*')
+          SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          SCORE=${SCORE:-0}
           echo "score=$SCORE" >> $GITHUB_OUTPUT
 
       - name: Apply safe fixes

@@ -204,8 +204,8 @@ function BrowserManager() {
     return 'text-red-400'
   }
 
-  const agentSessions = sessions.filter((s: any) => s.agentId || s.agentName)
-  const manualSessions = sessions.filter((s: any) => !s.agentId && !s.agentName)
+  const agentSessions = sessions.filter((s) => s.agentId || s.agentName)
+  const manualSessions = sessions.filter((s) => !s.agentId && !s.agentName)
 
   return (
     <motion.div
@@ -273,7 +273,7 @@ function BrowserManager() {
                   <div className="text-[10px] uppercase tracking-wider text-text-secondary px-2 py-1 flex items-center gap-1">
                     <Bot className="w-3 h-3" /> Agent Browsers
                   </div>
-                  {agentSessions.map((session: any) => (
+                  {agentSessions.map((session) => (
                     <SessionItem
                       key={session.id}
                       session={session}

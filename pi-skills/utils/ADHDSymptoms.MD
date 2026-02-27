@@ -1,1 +1,0 @@
-Analyze the impact of the COVID-19 pandemic and excessive screen time on the development of ADHD symptoms in children, focusing on whether these factors have contributed to an increase in diagnoses. Provide an evidence-based response considering psychological studies, surveys, and expert opinions.

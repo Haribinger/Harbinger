@@ -67,9 +67,9 @@ TEST_COVERAGE=$(echo "$TEST_COVERAGE" | tr -d '[:space:]'); TEST_COVERAGE=${TEST
 CONVENTIONS=$(echo "$CONVENTIONS" | tr -d '[:space:]'); CONVENTIONS=${CONVENTIONS:-0}
 
 # ── Compute score ─────────────────────────────────────────────────────────
-SCORE=$((100 - ANY_TYPES * 2 - CONSOLE_LOGS - DEPS_OUTDATED * 3 + TEST_COVERAGE))
-[ "$SCORE" -lt 0 ] && SCORE=0
-[ "$SCORE" -gt 100 ] && SCORE=100
+SCORE=$((100 - ${ANY_TYPES:-0} * 2 - ${CONSOLE_LOGS:-0} - ${DEPS_OUTDATED:-0} * 3 + ${TEST_COVERAGE:-0}))
+[ "${SCORE:-0}" -lt 0 ] && SCORE=0
+[ "${SCORE:-0}" -gt 100 ] && SCORE=100
 
 # ── Output JSON ───────────────────────────────────────────────────────────
 DATE=$(date -u +%Y-%m-%d)

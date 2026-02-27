@@ -1,3 +1,110 @@
 {
-  "description": "n8n workflow: new finding webhook -> validate -> generate report -> submit to platform API"
+  "name": "Harbinger — Auto Report",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "harbinger-finding",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook — New Finding",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.body.severity}}", "operation": "isNotEmpty" },
+            { "value1": "={{$json.body.title}}", "operation": "isNotEmpty" }
+          ]
+        }
+      },
+      "name": "Validate Finding",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/agents/spawn",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "template", "value": "report-writer" },
+            { "name": "finding", "value": "={{JSON.stringify($json.body)}}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Spawn Report Writer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/agents/{{$json.agentId}}/output",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Get Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/reports/submit",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "report", "value": "={{$json.report}}" },
+            { "name": "platform", "value": "={{$json.body.platform}}" },
+            { "name": "programId", "value": "={{$json.body.programId}}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Submit to Platform",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": false, \"error\": \"Missing required fields: title, severity\"}"
+      },
+      "name": "Reject Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [640, 400]
+    }
+  ],
+  "connections": {
+    "Webhook — New Finding": { "main": [[{ "node": "Validate Finding", "type": "main", "index": 0 }]] },
+    "Validate Finding": { "main": [[{ "node": "Spawn Report Writer", "type": "main", "index": 0 }], [{ "node": "Reject Invalid", "type": "main", "index": 0 }]] },
+    "Spawn Report Writer": { "main": [[{ "node": "Get Report", "type": "main", "index": 0 }]] },
+    "Get Report": { "main": [[{ "node": "Submit to Platform", "type": "main", "index": 0 }]] }
+  }
 }

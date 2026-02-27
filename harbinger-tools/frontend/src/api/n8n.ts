@@ -1,7 +1,7 @@
-// n8n API client
-const env = (import.meta as unknown as Record<string, unknown>).env as Record<string, string | undefined> || {}
-const N8N_API_BASE_URL = env.VITE_N8N_API_BASE_URL || '/api/n8n'
-const N8N_API_KEY = env.VITE_N8N_API_KEY || ''
+// n8n API client — Vite exposes env vars on import.meta.env
+const viteEnv = (import.meta as { env?: Record<string, string> }).env ?? {}
+const N8N_API_BASE_URL = viteEnv.VITE_N8N_API_BASE_URL || '/api/n8n'
+const N8N_API_KEY = viteEnv.VITE_N8N_API_KEY || ''
 
 function getHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }

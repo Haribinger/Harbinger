@@ -39,6 +39,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useSecretsStore, PROVIDER_MODELS } from '../../store/secretsStore'
 import type { Provider } from '../../store/secretsStore'
 import { useThemeStore, applyTheme } from '../../store/themeStore'
+import type { AppSettings } from '../../types'
 import type { HarbingerTheme, ThemeTokens } from '../../types/theme'
 import { BUILTIN_THEMES } from '../../types/theme'
 import { useBugBountyStore } from '../../store/bugBountyStore'
@@ -1042,7 +1043,7 @@ const AGENT_ROSTER = [
   { id: 'maintainer', name: 'MAINTAINER', color: '#10b981' },
 ]
 
-function ThemeSection({ autoSave, updateSettings }: { autoSave: boolean; updateSettings: (s: any) => void }) {
+function ThemeSection({ autoSave, updateSettings }: { autoSave: boolean; updateSettings: (s: Partial<AppSettings>) => void }) {
   const {
     activeThemeId,
     setActiveTheme,

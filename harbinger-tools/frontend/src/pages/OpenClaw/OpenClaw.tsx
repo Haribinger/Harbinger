@@ -65,7 +65,7 @@ interface OpenClawEvent {
   id: string
   type: string
   source: string
-  data: any
+  data: Record<string, unknown>
   timestamp: string
 }
 
@@ -197,8 +197,8 @@ export default function OpenClaw() {
         channel: 'web',
       })
       setCommandResponse(res)
-    } catch (err: any) {
-      setCommandResponse({ error: err.message || 'Command failed' })
+    } catch (err: unknown) {
+      setCommandResponse({ error: err instanceof Error ? err.message : 'Command failed' })
     } finally {
       setSending(false)
     }

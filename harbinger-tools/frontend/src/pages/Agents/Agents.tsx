@@ -35,7 +35,7 @@ function Agents() {
   const [showLogs, setShowLogs] = useState<string | null>(null)
   const [logContent, setLogContent] = useState('')
   const [loadingAgents, setLoadingAgents] = useState<Set<string>>(new Set())
-  const [statusAgent, setStatusAgent] = useState<{ id: string; data: any } | null>(null)
+  const [statusAgent, setStatusAgent] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
 
   // Fetch agents from DB on mount
   useEffect(() => {
@@ -187,7 +187,8 @@ function Agents() {
     status === 'running' || status === 'working' || status === 'heartbeat' || status === 'spawned'
 
   useEffect(() => {
-    const handleStatusChange = (agent: any) => {
+    const handleStatusChange = (...args: unknown[]) => {
+      const agent = args[0] as { id: string; status: Agent['status']; currentTask?: string }
       useAgentStore.getState().updateAgent(agent.id, { status: agent.status, currentTask: agent.currentTask })
     }
     agentOrchestrator.on('agentStatusChange', handleStatusChange)

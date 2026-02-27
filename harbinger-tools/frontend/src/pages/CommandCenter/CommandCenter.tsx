@@ -774,7 +774,7 @@ function LogsPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
       if (res.ok) {
         const data = await res.json()
         const entries = Array.isArray(data) ? data : (data.logs || [])
-        setLogs(entries.map((l: any) => typeof l === 'string' ? l : l.message || JSON.stringify(l)))
+        setLogs(entries.map((l: string | { message?: string }) => typeof l === 'string' ? l : l.message || JSON.stringify(l)))
       }
     } catch { /* ignore */ } finally { setLoading(false) }
   }

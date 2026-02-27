@@ -8,11 +8,12 @@
 const fs = require('fs');
 const path = require('path');
 
+const WORKSPACE = process.env.HARBINGER_WORKSPACE || path.join(require('os').homedir(), '.harbinger/workspace');
 const CONFIG = {
-  GRAPH_DIR: '/Users/nunu/.openclaw/workspace/knowledge-graph',
-  GRAPH_FILE: '/Users/nunu/.openclaw/workspace/knowledge-graph/graph.json',
-  ENTITIES_FILE: '/Users/nunu/.openclaw/workspace/knowledge-graph/entities.json',
-  RELATIONS_FILE: '/Users/nunu/.openclaw/workspace/knowledge-graph/relations.json'
+  GRAPH_DIR: path.join(WORKSPACE, 'knowledge-graph'),
+  GRAPH_FILE: path.join(WORKSPACE, 'knowledge-graph/graph.json'),
+  ENTITIES_FILE: path.join(WORKSPACE, 'knowledge-graph/entities.json'),
+  RELATIONS_FILE: path.join(WORKSPACE, 'knowledge-graph/relations.json')
 };
 
 // Ensure directory exists

@@ -15,8 +15,8 @@ const CONFIG = {
     'vienna': { domain: 'wien.gv.at', program: 'Bugcrowd' },
     'jora': { domain: 'jora.com', program: 'Bugcrowd' }
   },
-  SHOTSNAP_DIR: '/Users/nunu/.openclaw/workspace/recon-snapshots',
-  DIFF_LOG: '/Users/nunu/.openclaw/workspace/recon/diff-log.json'
+  SHOTSNAP_DIR: path.join(process.env.HARBINGER_WORKSPACE || path.join(require('os').homedir(), '.harbinger/workspace'), 'recon-snapshots'),
+  DIFF_LOG: path.join(process.env.HARBINGER_WORKSPACE || path.join(require('os').homedir(), '.harbinger/workspace'), 'recon/diff-log.json')
 };
 
 // Ensure directories exist

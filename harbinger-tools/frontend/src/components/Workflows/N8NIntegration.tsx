@@ -27,8 +27,8 @@ const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
       try {
         const data = await listWorkflows();
         setWorkflows(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch workflows');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch workflows');
       } finally {
         setLoading(false);
       }
@@ -49,8 +49,8 @@ const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
     try {
       await triggerWorkflow(workflowId);
       alert('Workflow triggered successfully!');
-    } catch (err: any) {
-      alert(`Failed to trigger workflow: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Failed to trigger workflow: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 

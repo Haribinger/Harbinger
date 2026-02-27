@@ -86,7 +86,7 @@ function MCPManager() {
           if (toolsRes.ok) {
             const toolsData = await toolsRes.json()
             const tools = Array.isArray(toolsData) ? toolsData : (Array.isArray(toolsData?.tools) ? toolsData.tools : [])
-            updateMCP(id, { tools: tools.map((t: any, i: number) => ({
+            updateMCP(id, { tools: tools.map((t: { id?: string; name: string; description?: string; category?: string; schema?: Record<string, unknown>; inputSchema?: Record<string, unknown> }, i: number) => ({
               id: t.id || `${id}-tool-${i}`,
               name: t.name,
               description: t.description || '',

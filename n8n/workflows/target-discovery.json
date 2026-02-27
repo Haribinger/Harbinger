@@ -1,3 +1,90 @@
 {
-  "description": "n8n workflow: scheduled -> pull bounty-targets-data -> diff for new programs -> ROI calc -> add to hunt queue"
+  "name": "Harbinger — Target Discovery",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/main/data/domains.txt",
+        "method": "GET"
+      },
+      "name": "Fetch Bounty Targets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/bounty/programs",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Get Known Programs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fresh = items[0].json.data.split('\\n').filter(Boolean);\nconst known = items[1].json.programs?.map(p => p.domain) || [];\nconst newTargets = fresh.filter(d => !known.includes(d));\nreturn [{json: {newTargets, count: newTargets.length}}];"
+      },
+      "name": "Diff New Programs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{$json.count}}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "name": "Has New Programs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HARBINGER_API_URL || 'http://localhost:8080'}}/api/bounty/programs",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "targets", "value": "={{JSON.stringify($json.newTargets.slice(0, 50))}}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.HARBINGER_TOKEN}}" }
+          ]
+        }
+      },
+      "name": "Add to Hunt Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1140, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Fetch Bounty Targets", "type": "main", "index": 0 }, { "node": "Get Known Programs", "type": "main", "index": 0 }]] },
+    "Fetch Bounty Targets": { "main": [[{ "node": "Diff New Programs", "type": "main", "index": 0 }]] },
+    "Get Known Programs": { "main": [[{ "node": "Diff New Programs", "type": "main", "index": 1 }]] },
+    "Diff New Programs": { "main": [[{ "node": "Has New Programs?", "type": "main", "index": 0 }]] },
+    "Has New Programs?": { "main": [[{ "node": "Add to Hunt Queue", "type": "main", "index": 0 }], []] }
+  }
 }

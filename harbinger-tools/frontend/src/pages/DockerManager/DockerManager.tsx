@@ -66,13 +66,12 @@ function DockerManager() {
       const containers = await dockerApi.getContainers()
       setContainers(containers)
       setConnectionStatus('connected')
-    } catch (error: any) {
-      // Error handled via toast below
-      // Check if it's a "not_configured" response from backend
-      if (error.response?.data?.reason === 'not_configured') {
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { reason?: string } }; code?: string; message?: string }
+      if (axiosErr.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured. Please mount the Docker socket.')
-      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      } else if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message?.includes('Network Error')) {
         setConnectionStatus('disconnected')
         toast.error('Cannot connect to backend API.')
       } else {
@@ -120,9 +119,9 @@ function DockerManager() {
       await dockerApi.startContainer(container.id)
       updateContainer(container.id, { status: 'running', startedAt: new Date().toISOString() })
       toast.success('Container is running!')
-    } catch (error: any) {
-      // Error handled via toast below
-      if (error?.response?.data?.reason === 'not_configured') {
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { reason?: string } } }
+      if (axiosErr.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
       } else {
@@ -142,9 +141,9 @@ function DockerManager() {
       await dockerApi.startContainer(container.id)
       updateContainer(container.id, { status: 'running', startedAt: new Date().toISOString() })
       toast.success('Container started!')
-    } catch (error: any) {
-      // Error handled via toast below
-      if (error?.response?.data?.reason === 'not_configured') {
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { reason?: string } } }
+      if (axiosErr.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
       } else {
@@ -162,9 +161,9 @@ function DockerManager() {
       await dockerApi.stopContainer(container.id)
       updateContainer(container.id, { status: 'exited' })
       toast.success('Container stopped!')
-    } catch (error: any) {
-      // Error handled via toast below
-      if (error?.response?.data?.reason === 'not_configured') {
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { reason?: string } } }
+      if (axiosErr.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
       } else {
@@ -183,9 +182,9 @@ function DockerManager() {
       removeContainer(container.id)
       if (selectedContainer?.id === container.id) setSelectedContainer(null)
       toast.success('Container removed!')
-    } catch (error: any) {
-      // Error handled via toast below
-      if (error?.response?.data?.reason === 'not_configured') {
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { reason?: string } } }
+      if (axiosErr.response?.data?.reason === 'not_configured') {
         setConnectionStatus('not_configured')
         toast.error('Docker is not configured.')
       } else {

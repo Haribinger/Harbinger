@@ -210,6 +210,8 @@ export interface BrowserSession {
   consoleLogs: ConsoleLog[]
   networkRequests: NetworkRequest[]
   createdAt: string
+  agentId?: string
+  agentName?: string
 }
 
 export interface ConsoleLog {

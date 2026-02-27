@@ -1,1 +1,0 @@
-Verify if an account has been leaked by checking it against known data breaches and leaks. Provide guidance on how to assess the security of the account based on the information available.

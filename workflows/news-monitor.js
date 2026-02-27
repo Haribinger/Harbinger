@@ -26,7 +26,7 @@ const CONFIG = {
     'privilege escalation',
     'path traversal'
   ],
-  NEWS_FILE: '/Users/nunu/.openclaw/workspace/recon/security-news.json',
+  NEWS_FILE: path.join(process.env.HARBINGER_WORKSPACE || path.join(require('os').homedir(), '.harbinger/workspace'), 'recon/security-news.json'),
   MAX_STORIES: 50
 };
 

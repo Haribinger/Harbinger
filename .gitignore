@@ -1,13 +1,17 @@
-# Secrets and credentials - NEVER commit
+# ── Secrets & Credentials ─────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+*.crt
 **/secrets/
-**/*secret*
+**/credentials/
+credentials.json
+service-account.json
+**/service-account.json
 
-# Build and runtime
+# ── Build & Runtime ───────────────────────────────────────────────────────────
 node_modules/
 .pnpm-store/
 .next/
@@ -16,71 +20,20 @@ out/
 dist/
 *.tsbuildinfo
 
-# Data and logs
+# ── Data & Logs ───────────────────────────────────────────────────────────────
 data/
-logs/
-*.log
-*.sqlite
-
-# IDE and OS
-.idea/
-.vscode/
-.claude/
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-
-# Temp
-tmp/
-temp/
-.tmp/
-
-# Pi / runtime generated
-.pi/SYSTEM.md
-pi-skills/*/node_modules/
-
-# Frontend env (may contain API URLs)
-frontend/.env
-frontend/.env.local
-
-# Test/coverage
-coverage/
-.nyc_output/
-.env
-
-# Secrets and sensitive data
-.env
-.env.*
-!.env.example
-*.key
-*.pem
-*.crt
-secrets/
-credentials.json
-service-account.json
-**/secrets/
-**/credentials/
-**/service-account.json
-
-# Logs and temp files
 logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
-.DS_Store
+*.sqlite
+*.sqlite3
+*.db
 *.pid
 *.seed
 *.pid.lock
 
-# Local databases
-*.db
-*.sqlite
-*.sqlite3
-/data/
-!data/README.md
-
-# Local AI model files
+# ── AI Model Files ────────────────────────────────────────────────────────────
 models/
 **/*.bin
 **/*.gguf
@@ -89,11 +42,45 @@ models/
 **/*.pth
 **/*.safetensors
 
-# Docker volumes (don't commit container data)
+# ── Docker Volumes ────────────────────────────────────────────────────────────
 /docker/volumes/
 /volumes/
 
-# Internal dev/planning docs (not user-facing)
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+.claude/
+.cursor/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Tests & Coverage ─────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Temp ──────────────────────────────────────────────────────────────────────
+tmp/
+temp/
+.tmp/
+
+# ── Legacy / Removed from Repo ────────────────────────────────────────────────
+bugs/
+test/
+pi-skills/
+/frontend/
+harbinger-big/
+Harbinger/
+test_login.py
+git-wizard.sh
+.gitignore.template
+drizzle/
+drizzle.config.js
+harbinger
+.pi/SYSTEM.md
+
+# ── Internal Dev/Planning Docs ────────────────────────────────────────────────
 PRODUCTION_PLAN.md
 PROJECT_COMPLETION.md
 IDENTITY.md
@@ -112,6 +99,3 @@ docs/GITHUB_MANAGEMENT.md
 docs/OPENCLAW_MIGRATION_AND_DOCKER_ARCHITECTURE.md
 docs/SKILLS_INVENTORY.md
 docs/prompts/
-
-# Stale old submodule (not the active codebase)
-harbinger-big/
