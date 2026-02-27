@@ -104,10 +104,18 @@ function agentColor(agent: string): string {
   return map[agent] || C.muted
 }
 
+interface ChannelStatus {
+  name: string
+  icon: React.ElementType
+  status: string
+  color: string
+}
+
 export default function OpenClaw() {
   const [status, setStatus] = useState<OpenClawStatus | null>(null)
   const [skills, setSkills] = useState<OpenClawSkill[]>([])
   const [events, setEvents] = useState<OpenClawEvent[]>([])
+  const [channels, setChannels] = useState<ChannelStatus[]>(DEFAULT_CHANNELS)
   const [loading, setLoading] = useState(true)
   const [commandInput, setCommandInput] = useState('')
   const [commandResponse, setCommandResponse] = useState<any>(null)
@@ -116,10 +124,11 @@ export default function OpenClaw() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [statusRes, skillsRes, eventsRes] = await Promise.allSettled([
+      const [statusRes, skillsRes, eventsRes, channelsRes] = await Promise.allSettled([
         apiClient.get<any>('/api/openclaw/status'),
         apiClient.get<any>('/api/openclaw/skills'),
         apiClient.get<any>('/api/openclaw/events'),
+        apiClient.get<any>('/api/channels'),
       ])
 
       if (statusRes.status === 'fulfilled') setStatus(statusRes.value)
@@ -130,6 +139,40 @@ export default function OpenClaw() {
       if (eventsRes.status === 'fulfilled') {
         const e = eventsRes.value
         setEvents(Array.isArray(e) ? e : Array.isArray(e?.events) ? e.events : [])
+      }
+
+      // Sync channel status from backend
+      if (channelsRes.status === 'fulfilled') {
+        const ch = channelsRes.value
+        const realChannels: ChannelStatus[] = [
+          { name: 'Voice', icon: Mic, status: 'available', color: C.gold },
+          { name: 'WebChat', icon: Terminal, status: 'connected', color: C.green },
+        ]
+        if (ch?.discord) {
+          realChannels.push({
+            name: 'Discord',
+            icon: Globe,
+            status: ch.discord.enabled && ch.discord.hasToken ? 'connected' : ch.discord.enabled ? 'configured' : 'offline',
+            color: '#5865F2',
+          })
+        }
+        if (ch?.telegram) {
+          realChannels.push({
+            name: 'Telegram',
+            icon: Send,
+            status: ch.telegram.enabled && ch.telegram.hasToken ? 'connected' : ch.telegram.enabled ? 'configured' : 'offline',
+            color: C.cyan,
+          })
+        }
+        if (ch?.slack) {
+          realChannels.push({
+            name: 'Slack',
+            icon: Globe,
+            status: ch.slack.enabled && ch.slack.hasToken ? 'connected' : ch.slack.enabled ? 'configured' : 'offline',
+            color: C.purple,
+          })
+        }
+        setChannels(realChannels)
       }
     } catch {
       // Backend not reachable
@@ -240,7 +283,7 @@ export default function OpenClaw() {
         <StatusCard label="AGENTS" value={`${status?.agents_running || 0}/${status?.agents_total || 0}`} icon={Bot} color={C.cyan} />
         <StatusCard label="SKILLS" value={String(status?.skills_count || skills.length || 0)} icon={Zap} color={C.gold} />
         <StatusCard label="EVENTS" value={String(status?.events_received || 0)} icon={Activity} color={C.purple} />
-        <StatusCard label="CHANNELS" value={String(CHANNELS.length)} icon={Globe} color={C.green} />
+        <StatusCard label="CHANNELS" value={String(channels.length)} icon={Globe} color={C.green} />
       </div>
 
       {/* Tab Navigation */}
@@ -311,26 +354,29 @@ export default function OpenClaw() {
           <div style={panelStyle}>
             <PanelHeader icon={Globe} label="CHANNELS" />
             <div style={{ padding: 12 }}>
-              {CHANNELS.map((ch) => (
-                <div
-                  key={ch.name}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                    borderBottom: `1px solid ${C.border}`,
-                  }}
-                >
-                  <ch.icon size={14} style={{ color: ch.color }} />
-                  <span style={{ fontSize: 11, flex: 1 }}>{ch.name}</span>
-                  <span style={{
-                    fontSize: 9, padding: '2px 6px', borderRadius: 2,
-                    background: ch.status === 'available' ? `${C.green}20` : `${C.gold}20`,
-                    color: ch.status === 'available' ? C.green : C.gold,
-                    border: `1px solid ${ch.status === 'available' ? C.green : C.gold}40`,
-                  }}>
-                    {ch.status.toUpperCase()}
-                  </span>
-                </div>
-              ))}
+              {channels.map((ch) => {
+                const statusColor = ch.status === 'connected' ? C.green : ch.status === 'available' ? C.green : ch.status === 'configured' ? C.gold : C.red
+                return (
+                  <div
+                    key={ch.name}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      borderBottom: `1px solid ${C.border}`,
+                    }}
+                  >
+                    <ch.icon size={14} style={{ color: ch.color }} />
+                    <span style={{ fontSize: 11, flex: 1 }}>{ch.name}</span>
+                    <span style={{
+                      fontSize: 9, padding: '2px 6px', borderRadius: 2,
+                      background: `${statusColor}20`,
+                      color: statusColor,
+                      border: `1px solid ${statusColor}40`,
+                    }}>
+                      {ch.status.toUpperCase()}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
