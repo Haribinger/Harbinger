@@ -90,7 +90,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
   llmProvider: 'ollama',
   llmApiKey: '',
   llmModel: '',
-  ollamaUrl: 'http://localhost:11434',
+  ollamaUrl: (typeof window !== 'undefined' ? window.location.protocol + '//' + window.location.hostname : 'http://localhost') + ':11434',
   ollamaStatus: 'untested',
 
   // GitHub Auth
@@ -204,7 +204,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           appName: s.appName,
-          appUrl: s.appUrl || 'http://localhost:3000',
+          appUrl: s.appUrl || (typeof window !== 'undefined' ? window.location.origin : ''),
           githubClientId: s.githubClientId,
           githubClientSecret: s.githubClientSecret,
           adminEmail: s.adminEmail,

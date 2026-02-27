@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -1517,6 +1518,11 @@ func main() {
 	mux.HandleFunc("POST /api/v1/teleport/push", authMiddleware(handleTeleportPush))
 	mux.HandleFunc("GET /api/v1/teleport/pull", authMiddleware(handleTeleportPull))
 
+	// ── WebSocket (real-time agent status / event stream) ────────────────
+	mux.HandleFunc("GET /ws", handleWebSocket)
+	mux.HandleFunc("GET /api/ws", handleWebSocket)
+	mux.HandleFunc("GET /api/v1/ws", handleWebSocket)
+
 	// ── Pentest Dashboard ────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/pentest/dashboard", authMiddleware(handlePentestDashboard))
 	mux.HandleFunc("GET /api/pentest/attack-paths", authMiddleware(handlePentestAttackPaths))
@@ -1580,10 +1586,31 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	checks = append(checks, map[string]string{"id": "database", "name": "PostgreSQL", "status": dbStatus, "fix": dbFix})
 
-	// Check Redis connection (still simulated — full Redis client not wired yet)
-	redisStatus := "warning"
-	redisFix := "Redis client not connected yet"
+	// Check Redis connection via TCP probe
+	redisStatus := "error"
+	redisFix := "Redis not reachable"
+	redisAddr := cfg.RedisHost + ":" + cfg.RedisPort
+	if conn, dialErr := net.DialTimeout("tcp", redisAddr, 3*time.Second); dialErr == nil {
+		conn.Close()
+		redisStatus = "connected"
+		redisFix = ""
+	} else {
+		redisFix = "Redis not reachable at " + redisAddr + ": " + dialErr.Error()
+	}
 	checks = append(checks, map[string]string{"id": "redis", "name": "Redis", "status": redisStatus, "fix": redisFix})
+
+	// Check Neo4j connection via TCP probe
+	neo4jStatus := "error"
+	neo4jFix := "Neo4j not reachable"
+	neo4jAddr := cfg.Neo4jHost + ":" + cfg.Neo4jPort
+	if conn, dialErr := net.DialTimeout("tcp", neo4jAddr, 3*time.Second); dialErr == nil {
+		conn.Close()
+		neo4jStatus = "connected"
+		neo4jFix = ""
+	} else {
+		neo4jFix = "Neo4j not reachable at " + neo4jAddr + ": " + dialErr.Error()
+	}
+	checks = append(checks, map[string]string{"id": "neo4j", "name": "Neo4j", "status": neo4jStatus, "fix": neo4jFix})
 
 	// Check Docker socket
 	dockerStatus := "error"
@@ -1822,15 +1849,25 @@ func handleHostingerConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate API key validation with Hostinger
-	if reqBody.APIKey == "test_hostinger_key" {
-		hostingerConfigs[userID] = HostingerConfig{UserID: userID, APIKey: reqBody.APIKey, Connected: true}
-		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Hostinger Connected", Details: "", Timestamp: time.Now().Unix()})
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Hostinger connected successfully"})
+	// Validate API key by calling Hostinger's account endpoint
+	if reqBody.APIKey == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "API key is required"})
 		return
 	}
 
-	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Hostinger API key"})
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, _ := http.NewRequestWithContext(r.Context(), "GET", "https://api.hostinger.com/api/client/v1/billing/accounts", nil)
+	req.Header.Set("Authorization", "Bearer "+reqBody.APIKey)
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Hostinger API key — verification failed"})
+		return
+	}
+	resp.Body.Close()
+
+	hostingerConfigs[userID] = HostingerConfig{UserID: userID, APIKey: reqBody.APIKey, Connected: true}
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Hostinger Connected", Details: "", Timestamp: time.Now().Unix()})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Hostinger connected successfully"})
 }
 
 // handleListHostingerVps lists Hostinger VPS instances for a user
@@ -1915,15 +1952,25 @@ func handleCloudflareConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate API token validation with Cloudflare
-	if reqBody.APIToken == "test_cloudflare_token" {
-		cloudflareConfigs[userID] = CloudflareConfig{UserID: userID, APIToken: reqBody.APIToken, Connected: true}
-		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Connected", Details: "", Timestamp: time.Now().Unix()})
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Cloudflare connected successfully"})
+	// Validate API token by calling Cloudflare's verify endpoint
+	if reqBody.APIToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "API token is required"})
 		return
 	}
 
-	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Cloudflare API token"})
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, _ := http.NewRequestWithContext(r.Context(), "GET", "https://api.cloudflare.com/client/v4/user/tokens/verify", nil)
+	req.Header.Set("Authorization", "Bearer "+reqBody.APIToken)
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid Cloudflare API token — verification failed"})
+		return
+	}
+	resp.Body.Close()
+
+	cloudflareConfigs[userID] = CloudflareConfig{UserID: userID, APIToken: reqBody.APIToken, Connected: true}
+	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Connected", Details: "", Timestamp: time.Now().Unix()})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Cloudflare connected successfully"})
 }
 
 // handleListCloudflareZones lists Cloudflare DNS zones for a user
@@ -2186,7 +2233,7 @@ func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[Dashboard] DB stats error: %v, falling back", err)
 	}
-	// Fallback for no-DB mode — include real browser counts
+	// Fallback for no-DB mode — derive counts from in-memory state
 	browserSessionsMu.RLock()
 	totalBrowsers := len(browserSessions)
 	activeBrowsers := 0
@@ -2197,9 +2244,37 @@ func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 	browserSessionsMu.RUnlock()
 
+	// Count in-memory agent containers
+	agentContainers.RLock()
+	totalAgents := len(agentContainers.m)
+	agentContainers.RUnlock()
+
+	// Count running Docker containers via socket probe
+	containerTotal, containerRunning, containerStopped := 0, 0, 0
+	if dockerAvailable() {
+		if resp, err := dockerAPIRequest("GET", "/v1.41/containers/json?all=true", nil); err == nil {
+			defer resp.Body.Close()
+			var containers []struct {
+				State string `json:"State"`
+			}
+			if respBody, readErr := io.ReadAll(resp.Body); readErr == nil {
+				if json.Unmarshal(respBody, &containers) == nil {
+					containerTotal = len(containers)
+					for _, c := range containers {
+						if c.State == "running" {
+							containerRunning++
+						} else {
+							containerStopped++
+						}
+					}
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"agents":     map[string]int{"total": 0, "online": 0, "offline": 0, "busy": 0},
-		"containers": map[string]int{"total": 0, "running": 0, "stopped": 0},
+		"agents":     map[string]int{"total": totalAgents, "online": totalAgents, "offline": 0, "busy": 0},
+		"containers": map[string]int{"total": containerTotal, "running": containerRunning, "stopped": containerStopped},
 		"browsers":   map[string]int{"total": totalBrowsers, "active": activeBrowsers},
 		"workflows":  map[string]int{"total": 0, "running": 0, "completed": 0, "failed": 0},
 	})
@@ -2660,6 +2735,132 @@ func handleGetPlaybook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Playbook not found"})
+}
+
+// ---- WebSocket (RFC 6455 minimal upgrade — no external deps) ----
+
+var wsClients = struct {
+	sync.RWMutex
+	conns map[string]net.Conn
+}{conns: make(map[string]net.Conn)}
+
+// handleWebSocket upgrades the HTTP connection to a WebSocket using raw net.Conn.
+// This avoids adding gorilla/websocket as a dependency while providing a functional
+// event stream that nginx can proxy at /ws.
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(strings.ToLower(r.Header.Get("Upgrade")), "websocket") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "WebSocket upgrade required"})
+		return
+	}
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "WebSocket not supported"})
+		return
+	}
+
+	conn, buf, err := hj.Hijack()
+	if err != nil {
+		log.Printf("[WS] Hijack error: %v", err)
+		return
+	}
+
+	// Compute Sec-WebSocket-Accept per RFC 6455 §4.2.2
+	key := r.Header.Get("Sec-WebSocket-Key")
+	accept := computeWebSocketAccept(key)
+
+	// Write upgrade response
+	resp := "HTTP/1.1 101 Switching Protocols\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Accept: " + accept + "\r\n\r\n"
+	buf.WriteString(resp)
+	buf.Flush()
+
+	clientID := generateRandomString(12)
+
+	wsClients.Lock()
+	wsClients.conns[clientID] = conn
+	wsClients.Unlock()
+
+	log.Printf("[WS] Client connected: %s", clientID)
+
+	// Send welcome frame
+	wsWriteText(conn, `{"type":"connected","client_id":"`+clientID+`"}`)
+
+	// Read loop — keeps connection alive, handles ping/close
+	go func() {
+		defer func() {
+			wsClients.Lock()
+			delete(wsClients.conns, clientID)
+			wsClients.Unlock()
+			conn.Close()
+			log.Printf("[WS] Client disconnected: %s", clientID)
+		}()
+		readBuf := make([]byte, 4096)
+		for {
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			n, readErr := conn.Read(readBuf)
+			if readErr != nil {
+				return
+			}
+			if n > 0 && readBuf[0]&0x0F == 0x8 {
+				// Close frame
+				return
+			}
+			if n > 0 && readBuf[0]&0x0F == 0x9 {
+				// Ping → send Pong
+				wsWriteFrame(conn, 0xA, nil)
+			}
+		}
+	}()
+}
+
+// computeWebSocketAccept derives the Sec-WebSocket-Accept header value per RFC 6455 §4.2.2.
+func computeWebSocketAccept(key string) string {
+	h := sha1.New()
+	h.Write([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+// wsWriteText sends a text frame over a raw WebSocket connection.
+func wsWriteText(conn net.Conn, msg string) {
+	wsWriteFrame(conn, 0x1, []byte(msg))
+}
+
+// wsWriteFrame writes a WebSocket frame (server→client frames are never masked).
+func wsWriteFrame(conn net.Conn, opcode byte, payload []byte) {
+	frame := []byte{0x80 | opcode}
+	pLen := len(payload)
+	if pLen < 126 {
+		frame = append(frame, byte(pLen))
+	} else if pLen < 65536 {
+		frame = append(frame, 126, byte(pLen>>8), byte(pLen))
+	} else {
+		frame = append(frame, 127,
+			byte(pLen>>56), byte(pLen>>48), byte(pLen>>40), byte(pLen>>32),
+			byte(pLen>>24), byte(pLen>>16), byte(pLen>>8), byte(pLen))
+	}
+	frame = append(frame, payload...)
+	conn.Write(frame)
+}
+
+// BroadcastWSEvent sends a JSON event to all connected WebSocket clients.
+func BroadcastWSEvent(eventType string, payload interface{}) {
+	data, err := json.Marshal(map[string]interface{}{
+		"type":      eventType,
+		"payload":   payload,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return
+	}
+
+	wsClients.RLock()
+	defer wsClients.RUnlock()
+	for _, conn := range wsClients.conns {
+		wsWriteFrame(conn, 0x1, data)
+	}
 }
 
 // ── Teleport handlers (CLI ↔ UI context transfer) ─────────────────────────

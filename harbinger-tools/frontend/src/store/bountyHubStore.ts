@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { bugBountyDataApi } from '../api/bugbounty'
 
-// BountyHub store: high-level bug bounty programs and hunt queue used by the BountyHub UI.
-// This focuses on program metadata and syncing targets from Harbinger backend / bounty-targets-data.
-// Detailed target inventory and analytics live in `bugBountyStore`, which is used in Settings.
+// BountyHub store: hunt queue and UI state for the BountyHub page.
+// Program data syncing is delegated to `bugBountyStore` (the source of truth).
+// This store adds hunt-queue management and BountyHub-specific filters on top.
 
 interface BountyProgram {
   id: string
