@@ -32,6 +32,11 @@ export interface AgentPersonality {
   temperature?: number
   maxTokens?: number
   topP?: number
+  model?: string
+  agentType?: string
+  icon?: string
+  tools?: string[]
+  capabilities?: string[]
 }
 
 export interface AgentConfig {
