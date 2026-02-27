@@ -152,8 +152,8 @@ health_check() {
         exit 1
     fi
     
-    if ! command -v harbinger &> /dev/null; then
-        echo "❌ ERROR: harbinger binary not found"
+    if ! command -v harbinger-api &> /dev/null; then
+        echo "❌ ERROR: harbinger-api binary not found"
         exit 1
     fi
     
@@ -164,8 +164,8 @@ health_check() {
 start_application() {
     echo "🚀 Starting Harbinger application..."
     
-    chmod +x /app/harbinger
-    exec /app/harbinger server --config=/app/config/runtime.env
+    chmod +x /app/harbinger-api
+    exec /app/harbinger-api server --config=/app/config/runtime.env
 }
 
 # Function to display startup banner

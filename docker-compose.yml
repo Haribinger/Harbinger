@@ -205,7 +205,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - ./mcp-plugins/hexstrike:/app/plugins
+      - ./mcp-plugins/hexstrike-ai:/app/plugins
       - ./data/reports:/app/reports
     networks:
       - harbinger-network
@@ -227,7 +227,7 @@ services:
     ports:
       - "3003:3003"
     volumes:
-      - ./mcp-plugins/visualizers:/app/plugins
+      - ./mcp-plugins/mcp-ui:/app/plugins
     networks:
       - harbinger-network
     depends_on:

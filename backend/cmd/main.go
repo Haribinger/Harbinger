@@ -933,15 +933,11 @@ func handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate TOTP verification (replace with actual TOTP library)
-	// For demonstration, we'll just check if the code is 
-    // For demonstration, we'll just check if the code is '123456'
-	if reqBody.Code == "123456" { // Replace with actual TOTP verification
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "MFA verified successfully"})
-		return
-	}
+	// TODO: Implement TOTP verification using github.com/pquerna/otp/totp
+	// For now, all MFA codes are rejected until proper TOTP is implemented
+	_ = reqBody.Code
 
-	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "Invalid MFA code"})
+	writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "error": "MFA verification not yet implemented — requires TOTP library integration"})
 }
 
 // handleListSessions lists active sessions for a user
