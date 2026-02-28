@@ -41,8 +41,14 @@ import {
 } from 'lucide-react'
 import { useC2Store } from '../../store/c2Store'
 import { useLOLStore } from '../../store/lolStore'
+import { useRealtimeStore } from '../../store/realtimeStore'
+import { useLearningStore } from '../../store/learningStore'
+import { useSafetyStore } from '../../store/safetyStore'
 import type { C2Framework, C2Implant, C2AttackChain } from '../../api/c2'
 import type { LOLEntry, LOLProject } from '../../api/lol'
+import type { AgentLiveStatus, CommandStream } from '../../api/realtime'
+import type { TechniqueScore, CampaignRecord, Recommendation } from '../../api/learning'
+import type { ApprovalRequest, AuditEntry } from '../../api/safety'
 
 // ---- Types ----
 
@@ -51,7 +57,7 @@ type SessionStatus = 'active' | 'dead' | 'sleeping'
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
 type PlaybookStatus = 'draft' | 'running' | 'completed' | 'paused'
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-type TabId = 'c2' | 'c2-infra' | 'lol-browser' | 'lol-chains' | 'socks' | 'playbooks' | 'neo4j' | 'parsers' | 'search' | 'analysis'
+type TabId = 'c2' | 'c2-infra' | 'lol-browser' | 'lol-chains' | 'live-dashboard' | 'campaigns' | 'learning' | 'safety' | 'socks' | 'playbooks' | 'neo4j' | 'parsers' | 'search' | 'analysis'
 
 interface C2Server {
   id: string
@@ -1972,11 +1978,794 @@ function LOLChainsTab() {
   )
 }
 
+// ---- Live Dashboard Tab ----
+
+function LiveDashboardTab() {
+  const { agentStatuses, streams, operators, killSwitch, events, fetchAgentStatuses, fetchStreams, fetchOperators, fetchEvents, toggleKillSwitch } = useRealtimeStore()
+  const { pendingCount } = useSafetyStore()
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([
+    '[00:00.0] SYSTEM  Harbinger Red Team C2 — Live Dashboard initialized',
+    '[00:00.1] SYSTEM  Waiting for agent activity...',
+  ])
+
+  useEffect(() => {
+    fetchAgentStatuses()
+    fetchStreams()
+    fetchOperators()
+    fetchEvents({ limit: 50 })
+    const interval = setInterval(() => {
+      fetchAgentStatuses()
+      fetchStreams({ status: 'executing' })
+      fetchEvents({ limit: 50 })
+    }, 5000)
+    return () => clearInterval(interval)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const statusColors: Record<string, string> = {
+    idle: 'text-gray-400',
+    executing: 'text-green-400',
+    waiting: 'text-yellow-400',
+    error: 'text-red-400',
+  }
+
+  const activeAgents = agentStatuses.filter(a => a.status === 'executing').length
+  const activeStreams = streams.filter(s => s.status === 'executing').length
+
+  return (
+    <div className="space-y-4">
+      {/* Kill Switch Banner */}
+      {killSwitch?.active && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+            <div>
+              <span className="text-red-400 font-bold">KILL SWITCH ACTIVE</span>
+              <span className="text-red-400/60 text-sm ml-2">All operations halted</span>
+            </div>
+          </div>
+          <button onClick={() => toggleKillSwitch(false)} className="px-4 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-400 hover:bg-red-500/30">
+            Deactivate
+          </button>
+        </div>
+      )}
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'Active Agents', value: activeAgents, total: agentStatuses.length, color: 'text-green-400' },
+          { label: 'Live Streams', value: activeStreams, total: streams.length, color: 'text-[#00d4ff]' },
+          { label: 'Operators Online', value: operators.length, total: null, color: 'text-[#f0c040]' },
+          { label: 'Pending Approvals', value: pendingCount, total: null, color: pendingCount > 0 ? 'text-red-400' : 'text-gray-400' },
+          { label: 'Recent Events', value: events.length, total: null, color: 'text-[#a78bfa]' },
+        ].map(s => (
+          <div key={s.label} className="bg-surface rounded-xl border border-border p-3">
+            <div className="text-xs text-text-secondary mb-1">{s.label}</div>
+            <div className={`text-xl font-bold font-mono ${s.color}`}>
+              {s.value}{s.total !== null && <span className="text-text-secondary text-sm">/{s.total}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Agent Status Grid */}
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm">Agent Status</h3>
+            <button onClick={() => fetchAgentStatuses()} className="text-text-secondary hover:text-white">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {agentStatuses.length === 0 ? (
+            <div className="text-center py-6 text-text-secondary text-sm">No agents reporting. Agents will appear when they start heartbeating.</div>
+          ) : (
+            <div className="space-y-2">
+              {agentStatuses.map(agent => (
+                <div key={agent.agentId} className="flex items-center justify-between p-2 bg-surface-light rounded-lg border border-border">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${agent.status === 'executing' ? 'bg-green-400 animate-pulse' : agent.status === 'error' ? 'bg-red-400' : 'bg-gray-500'}`} />
+                    <span className="font-mono text-sm">{agent.agentName || agent.agentId}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {agent.currentTask && <span className="text-xs text-text-secondary truncate max-w-[150px]">{agent.currentTask}</span>}
+                    <span className={`text-xs font-mono ${statusColors[agent.status] || 'text-gray-400'}`}>{agent.status.toUpperCase()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Command Streams */}
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm">Active Command Streams</h3>
+            <button onClick={() => fetchStreams()} className="text-text-secondary hover:text-white">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {streams.length === 0 ? (
+            <div className="text-center py-6 text-text-secondary text-sm">No active streams. Commands will appear when executed.</div>
+          ) : (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {streams.slice(0, 20).map(stream => (
+                <div key={stream.id} className="p-2 bg-surface-light rounded-lg border border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono text-xs text-[#00d4ff]">{stream.implantId}</span>
+                    <span className={`text-xs font-mono ${stream.status === 'executing' ? 'text-green-400' : stream.status === 'completed' ? 'text-[#f0c040]' : stream.status === 'failed' ? 'text-red-400' : 'text-gray-400'}`}>
+                      {stream.status}
+                    </span>
+                  </div>
+                  <div className="font-mono text-xs text-text-secondary truncate">{stream.command}</div>
+                  {stream.output && (
+                    <pre className="mt-1 text-[10px] text-green-400/70 font-mono bg-black/30 rounded p-1 max-h-[60px] overflow-y-auto whitespace-pre-wrap">{stream.output.slice(-200)}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Operators & Real-time Console */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Operators */}
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <h3 className="font-semibold text-sm mb-3">Active Operators</h3>
+          {operators.length === 0 ? (
+            <div className="text-center py-4 text-text-secondary text-sm">No operators connected</div>
+          ) : (
+            <div className="space-y-2">
+              {operators.map(op => (
+                <div key={op.id} className="flex items-center justify-between p-2 bg-surface-light rounded-lg border border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[#f0c040]/20 border border-[#f0c040]/30 flex items-center justify-center text-[10px] font-bold text-[#f0c040]">
+                      {op.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-mono">{op.username}</div>
+                      <div className="text-[10px] text-text-secondary">{op.role}</div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-text-secondary">{op.currentView || 'idle'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Real-time Console */}
+        <div className="lg:col-span-2 bg-surface rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-surface-light border-b border-border">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+            <span className="ml-2 text-[11px] font-mono text-text-secondary">harbinger — real-time event feed</span>
+          </div>
+          <div className="p-3 font-mono text-[11px] leading-[1.7] h-[200px] overflow-y-auto bg-black/20">
+            {events.length === 0 ? (
+              <div className="text-text-secondary">Waiting for events...</div>
+            ) : (
+              events.slice(0, 30).map((ev, i) => (
+                <div key={ev.id || i}>
+                  <span className="text-[#333]">{ev.timestamp?.slice(11, 19) || '00:00:00'}</span>{' '}
+                  <span className={ev.type === 'system_alert' ? 'text-red-400' : ev.type === 'command_output' ? 'text-green-400' : ev.type === 'agent_status' ? 'text-[#00d4ff]' : 'text-[#f0c040]'}>
+                    {ev.type?.toUpperCase().replace('_', ' ')}
+                  </span>{' '}
+                  <span className="text-[#888]">{ev.source} → {ev.target || '*'}</span>
+                </div>
+              ))
+            )}
+            {consoleOutput.map((line, i) => (
+              <div key={`console-${i}`} className="text-[#555]">{line}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Kill Switch + Quick Actions */}
+      <div className="flex items-center gap-3 justify-end">
+        <button
+          onClick={() => toggleKillSwitch(!killSwitch?.active)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            killSwitch?.active
+              ? 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
+              : 'bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30'
+          }`}
+        >
+          {killSwitch?.active ? <Play className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+          {killSwitch?.active ? 'Resume All Operations' : 'KILL SWITCH — Halt All'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---- Campaigns Tab ----
+
+function CampaignsTab() {
+  const { campaigns, fetchCampaigns, createCampaign, updateCampaign } = useLearningStore()
+  const [showCreate, setShowCreate] = useState(false)
+  const [newCampaign, setNewCampaign] = useState({ name: '', notes: '' })
+
+  useEffect(() => {
+    fetchCampaigns()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const statusColors: Record<string, string> = {
+    planning: 'text-gray-400 border-gray-500/30 bg-gray-500/10',
+    active: 'text-green-400 border-green-500/30 bg-green-500/10',
+    paused: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10',
+    completed: 'text-[#00d4ff] border-[#00d4ff]/30 bg-[#00d4ff]/10',
+    failed: 'text-red-400 border-red-500/30 bg-red-500/10',
+  }
+
+  const handleCreate = async () => {
+    if (!newCampaign.name) return
+    await createCampaign({ name: newCampaign.name, notes: newCampaign.notes, status: 'planning' })
+    setNewCampaign({ name: '', notes: '' })
+    setShowCreate(false)
+  }
+
+  const activeCampaigns = campaigns.filter(c => c.status === 'active')
+  const completedCampaigns = campaigns.filter(c => c.status === 'completed')
+
+  return (
+    <div className="space-y-4">
+      {/* Campaign Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Campaigns', value: campaigns.length, color: 'text-white' },
+          { label: 'Active', value: activeCampaigns.length, color: 'text-green-400' },
+          { label: 'Completed', value: completedCampaigns.length, color: 'text-[#00d4ff]' },
+          { label: 'Avg Success', value: campaigns.length > 0 ? Math.round(campaigns.reduce((sum, c) => sum + (c.successfulSteps / Math.max(c.totalSteps, 1)), 0) / campaigns.length * 100) + '%' : 'N/A', color: 'text-[#f0c040]' },
+        ].map(s => (
+          <div key={s.label} className="bg-surface rounded-xl border border-border p-3">
+            <div className="text-xs text-text-secondary mb-1">{s.label}</div>
+            <div className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create + List */}
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Campaigns</h3>
+        <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-3 py-1.5 bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-sm hover:bg-[#f0c040]/30">
+          <Plus className="w-3.5 h-3.5" /> New Campaign
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+          <input value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} placeholder="Campaign name..."
+            className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" />
+          <textarea value={newCampaign.notes} onChange={e => setNewCampaign({ ...newCampaign, notes: e.target.value })} placeholder="Notes and objectives..."
+            className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm h-20 resize-none" />
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-sm text-text-secondary">Cancel</button>
+            <button onClick={handleCreate} disabled={!newCampaign.name} className="px-4 py-1.5 text-sm bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg disabled:opacity-50">
+              Launch Campaign
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Campaign List */}
+      {campaigns.length === 0 ? (
+        <div className="text-center py-12 text-text-secondary">
+          <Crosshair className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No campaigns yet. Create one to start tracking adversary operations.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {campaigns.map(campaign => (
+            <div key={campaign.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold">{campaign.name}</span>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${statusColors[campaign.status] || 'text-gray-400'}`}>
+                    {campaign.status.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {campaign.status === 'planning' && (
+                    <button onClick={() => updateCampaign(campaign.id, { status: 'active' })} className="text-xs text-green-400 hover:text-green-300">
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {campaign.status === 'active' && (
+                    <button onClick={() => updateCampaign(campaign.id, { status: 'paused' })} className="text-xs text-yellow-400 hover:text-yellow-300">
+                      <Square className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-surface-light rounded-full h-2 mb-2">
+                <div className="bg-[#f0c040] h-2 rounded-full transition-all" style={{ width: `${campaign.progressPercent || 0}%` }} />
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-text-secondary">
+                <span className="text-green-400">{campaign.successfulSteps} passed</span>
+                <span className="text-red-400">{campaign.failedSteps} failed</span>
+                <span className="text-yellow-400">{campaign.detectedSteps} detected</span>
+                <span>{campaign.totalSteps} total steps</span>
+                {campaign.techniquesUsed?.length > 0 && <span className="text-[#00d4ff]">{campaign.techniquesUsed.length} techniques</span>}
+              </div>
+
+              {/* Timeline preview */}
+              {campaign.timeline && campaign.timeline.length > 0 && (
+                <div className="mt-3 space-y-1 max-h-[100px] overflow-y-auto">
+                  {campaign.timeline.slice(-5).map((ev, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
+                      <span className="text-[#333]">{ev.timestamp?.slice(11, 19) || '—'}</span>
+                      <span className={ev.eventType === 'step_completed' ? 'text-green-400' : ev.eventType === 'step_failed' ? 'text-red-400' : ev.eventType === 'detection_alert' ? 'text-yellow-400' : 'text-[#888]'}>
+                        {ev.eventType?.replace('_', ' ').toUpperCase()}
+                      </span>
+                      <span className="text-text-secondary">{ev.details}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- Learning Tab ----
+
+function LearningTab() {
+  const { dashboard, techniqueScores, recommendations, agentPerformance, discoveries, fetchDashboard, fetchTechniqueScores, fetchRecommendations, fetchAgentPerformance, fetchDiscoveries, generateRecommendations, dismissRecommendation } = useLearningStore()
+  const [subTab, setSubTab] = useState<'overview' | 'techniques' | 'agents' | 'recommendations' | 'discoveries'>('overview')
+
+  useEffect(() => {
+    fetchDashboard()
+    fetchTechniqueScores()
+    fetchRecommendations()
+    fetchAgentPerformance()
+    fetchDiscoveries()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 bg-surface-light border border-border rounded-lg p-1">
+        {(['overview', 'techniques', 'agents', 'recommendations', 'discoveries'] as const).map(t => (
+          <button key={t} onClick={() => setSubTab(t)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize ${subTab === t ? 'bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30' : 'text-text-secondary hover:text-white'}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {subTab === 'overview' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Techniques Tracked', value: dashboard?.totalTechniquesTracked ?? techniqueScores.length, color: 'text-[#00d4ff]' },
+              { label: 'Avg Success Rate', value: dashboard?.avgSuccessRate ? Math.round(dashboard.avgSuccessRate * 100) + '%' : 'N/A', color: 'text-green-400' },
+              { label: 'Avg Detection Rate', value: dashboard?.avgDetectionRate ? Math.round(dashboard.avgDetectionRate * 100) + '%' : 'N/A', color: 'text-red-400' },
+              { label: 'Active Agents', value: dashboard?.totalAgentsTracked ?? agentPerformance.length, color: 'text-[#f0c040]' },
+            ].map(s => (
+              <div key={s.label} className="bg-surface rounded-xl border border-border p-3">
+                <div className="text-xs text-text-secondary mb-1">{s.label}</div>
+                <div className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top techniques + Worst detection */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-surface rounded-xl border border-border p-4">
+              <h3 className="font-semibold text-sm mb-3">Top Techniques (Success Rate)</h3>
+              {(dashboard?.topTechniques || techniqueScores.slice(0, 5)).map(t => (
+                <div key={t.techniqueId} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-[#00d4ff]">{t.techniqueId}</span>
+                    <span className="text-sm">{t.techniqueName}</span>
+                  </div>
+                  <span className="font-mono text-sm text-green-400">{Math.round(t.successRate * 100)}%</span>
+                </div>
+              ))}
+              {techniqueScores.length === 0 && <div className="text-center py-4 text-text-secondary text-sm">No technique data yet</div>}
+            </div>
+            <div className="bg-surface rounded-xl border border-border p-4">
+              <h3 className="font-semibold text-sm mb-3">Highest Detection Rates</h3>
+              {(dashboard?.worstDetectionRates || []).map(t => (
+                <div key={t.techniqueId} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-[#00d4ff]">{t.techniqueId}</span>
+                    <span className="text-sm">{t.techniqueName}</span>
+                  </div>
+                  <span className="font-mono text-sm text-red-400">{Math.round(t.detectionRate * 100)}%</span>
+                </div>
+              ))}
+              {(!dashboard?.worstDetectionRates || dashboard.worstDetectionRates.length === 0) && <div className="text-center py-4 text-text-secondary text-sm">No detection data yet</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Techniques */}
+      {subTab === 'techniques' && (
+        <div className="space-y-3">
+          {techniqueScores.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary">
+              <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No technique scores yet. Execute techniques to start tracking.</p>
+            </div>
+          ) : techniqueScores.map(t => (
+            <div key={t.techniqueId} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-[#00d4ff]">{t.techniqueId}</span>
+                  <span className="font-semibold text-sm">{t.techniqueName}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-border text-text-secondary">{t.platform}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-5 gap-4 text-xs">
+                <div><span className="text-text-secondary">Success:</span> <span className="text-green-400 font-mono">{Math.round(t.successRate * 100)}%</span> <span className="text-[#333]">({t.successCount}/{t.successCount + t.failureCount})</span></div>
+                <div><span className="text-text-secondary">Detection:</span> <span className="text-red-400 font-mono">{Math.round(t.detectionRate * 100)}%</span> <span className="text-[#333]">({t.detectionCount})</span></div>
+                <div><span className="text-text-secondary">Avg Time:</span> <span className="font-mono">{t.avgExecutionTime.toFixed(1)}s</span></div>
+                <div><span className="text-text-secondary">Uses:</span> <span className="font-mono">{t.successCount + t.failureCount}</span></div>
+                <div><span className="text-text-secondary">Last:</span> <span className="font-mono text-[#555]">{t.lastUsed?.slice(0, 10) || 'never'}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Agents */}
+      {subTab === 'agents' && (
+        <div className="space-y-3">
+          {agentPerformance.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary">
+              <Cpu className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No agent performance data yet.</p>
+            </div>
+          ) : agentPerformance.map(a => (
+            <div key={a.agentId} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold">{a.agentName || a.agentId}</span>
+                <span className="font-mono text-sm text-green-400">{Math.round(a.successRate * 100)}% success</span>
+              </div>
+              <div className="grid grid-cols-4 gap-3 text-xs">
+                <div><span className="text-text-secondary">Tasks:</span> <span className="font-mono">{a.totalTasks}</span></div>
+                <div><span className="text-text-secondary">Success:</span> <span className="font-mono text-green-400">{a.successfulTasks}</span></div>
+                <div><span className="text-text-secondary">Failed:</span> <span className="font-mono text-red-400">{a.failedTasks}</span></div>
+                <div><span className="text-text-secondary">Avg Duration:</span> <span className="font-mono">{a.avgTaskDuration.toFixed(1)}s</span></div>
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-xs text-text-secondary">
+                {a.mostUsedTechnique && <span>Most used: <span className="text-[#00d4ff]">{a.mostUsedTechnique}</span></span>}
+                {a.bestPerformingTechnique && <span>Best: <span className="text-green-400">{a.bestPerformingTechnique}</span></span>}
+                <span>Techniques: <span className="text-[#f0c040]">{a.techniquesKnown}</span></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {subTab === 'recommendations' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">AI Recommendations</h3>
+            <button onClick={() => generateRecommendations()} className="flex items-center gap-2 px-3 py-1.5 bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-xs hover:bg-[#f0c040]/30">
+              <Zap className="w-3 h-3" /> Generate
+            </button>
+          </div>
+          {recommendations.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary">
+              <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No recommendations yet. Generate them based on your technique history.</p>
+            </div>
+          ) : recommendations.map(r => (
+            <div key={r.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                    r.type === 'technique' ? 'border-[#00d4ff]/30 bg-[#00d4ff]/10 text-[#00d4ff]' :
+                    r.type === 'evasion' ? 'border-red-500/30 bg-red-500/10 text-red-400' :
+                    r.type === 'chain' ? 'border-[#f0c040]/30 bg-[#f0c040]/10 text-[#f0c040]' :
+                    'border-[#a78bfa]/30 bg-[#a78bfa]/10 text-[#a78bfa]'
+                  }`}>{r.type}</span>
+                  <span className="font-semibold text-sm">{r.title}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-[#f0c040]">{Math.round(r.score)}/100</span>
+                  <button onClick={() => dismissRecommendation(r.id)} className="text-text-secondary hover:text-red-400">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-text-secondary">{r.description}</p>
+              {r.techniqueIds?.length > 0 && (
+                <div className="flex items-center gap-1 mt-2">
+                  {r.techniqueIds.map(id => (
+                    <span key={id} className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#00d4ff]/20 text-[#00d4ff]/60">{id}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Discoveries */}
+      {subTab === 'discoveries' && (
+        <div className="space-y-3">
+          {discoveries.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary">
+              <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No LOL technique discoveries yet.</p>
+            </div>
+          ) : discoveries.map(d => (
+            <div key={d.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold">{d.binaryName}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-border text-text-secondary">{d.platform}</span>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                    d.status === 'approved' ? 'border-green-500/30 bg-green-500/10 text-green-400' :
+                    d.status === 'rejected' ? 'border-red-500/30 bg-red-500/10 text-red-400' :
+                    'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
+                  }`}>{d.status}</span>
+                </div>
+                <span className="text-xs text-text-secondary">{d.source}</span>
+              </div>
+              <p className="text-xs text-text-secondary">{d.description}</p>
+              {d.mitreIds?.length > 0 && (
+                <div className="flex items-center gap-1 mt-2">
+                  {d.mitreIds.map(id => (
+                    <span key={id} className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#00d4ff]/20 text-[#00d4ff]/60">{id}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- Safety Tab ----
+
+function SafetyTab() {
+  const { dashboard, validationRules, scopeRules, rateLimits, auditEntries, approvals, pendingCount, lastValidation, fetchDashboard, fetchValidationRules, fetchScopeRules, fetchRateLimits, fetchAuditEntries, fetchApprovals, validateTarget, reviewApproval, createScopeRule, deleteScopeRule } = useSafetyStore()
+  const { killSwitch, toggleKillSwitch } = useRealtimeStore()
+  const [subTab, setSubTab] = useState<'overview' | 'scope' | 'audit' | 'approvals' | 'rate-limits'>('overview')
+  const [targetInput, setTargetInput] = useState('')
+
+  useEffect(() => {
+    fetchDashboard()
+    fetchValidationRules()
+    fetchScopeRules()
+    fetchRateLimits()
+    fetchAuditEntries({ limit: 50 })
+    fetchApprovals()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleValidateTarget = async () => {
+    if (!targetInput.trim()) return
+    await validateTarget(targetInput.trim())
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 bg-surface-light border border-border rounded-lg p-1">
+        {(['overview', 'scope', 'audit', 'approvals', 'rate-limits'] as const).map(t => (
+          <button key={t} onClick={() => setSubTab(t)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize ${subTab === t ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-text-secondary hover:text-white'}`}>
+            {t === 'rate-limits' ? 'Rate Limits' : t}
+            {t === 'approvals' && pendingCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[9px]">{pendingCount}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {subTab === 'overview' && (
+        <div className="space-y-4">
+          {/* Kill Switch Status */}
+          <div className={`rounded-xl border p-4 flex items-center justify-between ${killSwitch?.active ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
+            <div className="flex items-center gap-3">
+              <Shield className={`w-5 h-5 ${killSwitch?.active ? 'text-red-400' : 'text-green-400'}`} />
+              <div>
+                <span className={`font-bold ${killSwitch?.active ? 'text-red-400' : 'text-green-400'}`}>
+                  Kill Switch: {killSwitch?.active ? 'ENGAGED' : 'DISENGAGED'}
+                </span>
+                <div className="text-xs text-text-secondary mt-0.5">
+                  {killSwitch?.active ? 'All operations are halted' : 'Operations running normally'}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => toggleKillSwitch(!killSwitch?.active)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${killSwitch?.active ? 'bg-green-500/20 border border-green-500/30 text-green-400' : 'bg-red-500/20 border border-red-500/30 text-red-400'}`}>
+              {killSwitch?.active ? 'Disengage' : 'Engage Kill Switch'}
+            </button>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Scope Rules', value: scopeRules.length, color: 'text-[#00d4ff]' },
+              { label: 'Validation Rules', value: validationRules.length, color: 'text-[#f0c040]' },
+              { label: 'Pending Approvals', value: pendingCount, color: pendingCount > 0 ? 'text-red-400' : 'text-green-400' },
+              { label: 'Audit Entries', value: auditEntries.length, color: 'text-[#a78bfa]' },
+            ].map(s => (
+              <div key={s.label} className="bg-surface rounded-xl border border-border p-3">
+                <div className="text-xs text-text-secondary mb-1">{s.label}</div>
+                <div className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Target Validator */}
+          <div className="bg-surface rounded-xl border border-border p-4">
+            <h3 className="font-semibold text-sm mb-3">Target Validator</h3>
+            <div className="flex gap-2">
+              <input value={targetInput} onChange={e => setTargetInput(e.target.value)} placeholder="Enter IP, hostname, or CIDR..."
+                className="flex-1 bg-surface-light border border-border rounded-lg px-3 py-2 text-sm font-mono"
+                onKeyDown={e => e.key === 'Enter' && handleValidateTarget()} />
+              <button onClick={handleValidateTarget} className="px-4 py-2 bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-sm hover:bg-[#f0c040]/30">
+                Validate
+              </button>
+            </div>
+            {lastValidation && (
+              <div className={`mt-3 p-3 rounded-lg border ${
+                lastValidation.status === 'allowed' ? 'bg-green-500/10 border-green-500/30' :
+                lastValidation.status === 'blocked' ? 'bg-red-500/10 border-red-500/30' :
+                'bg-yellow-500/10 border-yellow-500/30'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {lastValidation.status === 'allowed' ? <CheckCircle2 className="w-4 h-4 text-green-400" /> :
+                   lastValidation.status === 'blocked' ? <X className="w-4 h-4 text-red-400" /> :
+                   <AlertTriangle className="w-4 h-4 text-yellow-400" />}
+                  <span className={`font-mono text-sm font-bold ${
+                    lastValidation.status === 'allowed' ? 'text-green-400' : lastValidation.status === 'blocked' ? 'text-red-400' : 'text-yellow-400'
+                  }`}>{lastValidation.status.toUpperCase()}</span>
+                  <span className="text-sm text-text-secondary ml-2">{lastValidation.target}</span>
+                </div>
+                <p className="text-xs text-text-secondary mt-1">{lastValidation.reason}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Scope Rules */}
+      {subTab === 'scope' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">Scope Rules</h3>
+          </div>
+          {scopeRules.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary">
+              <Globe className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No scope rules defined. Add rules to enforce target boundaries.</p>
+            </div>
+          ) : scopeRules.map(rule => (
+            <div key={rule.id} className="bg-surface rounded-xl border border-border p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                  rule.type === 'include' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'
+                }`}>{rule.type}</span>
+                <span className="font-mono text-sm">{rule.target}</span>
+                <span className="text-xs text-text-secondary">{rule.description}</span>
+              </div>
+              <button onClick={() => deleteScopeRule(rule.id)} className="text-text-secondary hover:text-red-400">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Audit Trail */}
+      {subTab === 'audit' && (
+        <div className="space-y-2">
+          <h3 className="font-semibold text-sm">Audit Trail</h3>
+          {auditEntries.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary text-sm">No audit entries yet.</div>
+          ) : (
+            <div className="bg-surface rounded-xl border border-border overflow-hidden">
+              <div className="max-h-[500px] overflow-y-auto">
+                {auditEntries.map(entry => (
+                  <div key={entry.id} className="flex items-center gap-3 px-4 py-2 border-b border-border last:border-0 text-xs">
+                    <span className="text-[#333] font-mono w-16 shrink-0">{entry.timestamp?.slice(11, 19) || '—'}</span>
+                    <span className={`w-12 shrink-0 text-center ${
+                      entry.severity === 'critical' ? 'text-red-400' : entry.severity === 'warning' ? 'text-yellow-400' : 'text-gray-400'
+                    }`}>{entry.severity}</span>
+                    <span className="text-[#00d4ff] font-mono w-24 shrink-0 truncate">{entry.username}</span>
+                    <span className="text-text-secondary truncate">{entry.action} — {entry.resource}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Approvals */}
+      {subTab === 'approvals' && (
+        <div className="space-y-3">
+          <h3 className="font-semibold text-sm">Approval Requests</h3>
+          {approvals.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary text-sm">No approval requests.</div>
+          ) : approvals.map(req => (
+            <div key={req.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                    req.status === 'pending' ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400' :
+                    req.status === 'approved' ? 'border-green-500/30 bg-green-500/10 text-green-400' :
+                    req.status === 'rejected' ? 'border-red-500/30 bg-red-500/10 text-red-400' :
+                    'border-gray-500/30 bg-gray-500/10 text-gray-400'
+                  }`}>{req.status}</span>
+                  <span className="font-semibold text-sm">{req.title}</span>
+                </div>
+                {req.status === 'pending' && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => reviewApproval(req.id, { status: 'approved', reviewedBy: 'operator' })}
+                      className="px-3 py-1 text-xs bg-green-500/20 border border-green-500/30 text-green-400 rounded-lg hover:bg-green-500/30">Approve</button>
+                    <button onClick={() => reviewApproval(req.id, { status: 'rejected', reviewedBy: 'operator' })}
+                      className="px-3 py-1 text-xs bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/30">Reject</button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-text-secondary">{req.description}</p>
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-text-secondary">
+                <span>Type: {req.type}</span>
+                <span>By: {req.requestedBy}</span>
+                <span>At: {req.requestedAt?.slice(0, 16)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Rate Limits */}
+      {subTab === 'rate-limits' && (
+        <div className="space-y-3">
+          <h3 className="font-semibold text-sm">Operation Rate Limits</h3>
+          {rateLimits.length === 0 ? (
+            <div className="text-center py-12 text-text-secondary text-sm">No rate limits configured.</div>
+          ) : rateLimits.map(rl => (
+            <div key={rl.id} className="bg-surface rounded-xl border border-border p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-sm">{rl.operationType}</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${rl.isLimited ? 'border-red-500/30 bg-red-500/10 text-red-400' : 'border-green-500/30 bg-green-500/10 text-green-400'}`}>
+                  {rl.isLimited ? 'LIMITED' : 'OK'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <div><span className="text-text-secondary">Per Min:</span> <span className="font-mono">{rl.currentMinute}/{rl.maxPerMinute}</span></div>
+                <div><span className="text-text-secondary">Per Hour:</span> <span className="font-mono">{rl.currentHour}/{rl.maxPerHour}</span></div>
+                <div><span className="text-text-secondary">Concurrent:</span> <span className="font-mono">{rl.currentConcurrent}/{rl.maxConcurrent}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---- Main component ----
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: 'c2', label: 'C2 Sessions', icon: Radio },
   { id: 'c2-infra', label: 'C2 Infrastructure', icon: Server },
+  { id: 'live-dashboard', label: 'Live Dashboard', icon: Activity },
+  { id: 'campaigns', label: 'Campaigns', icon: Crosshair },
+  { id: 'learning', label: 'Learning', icon: BarChart3 },
+  { id: 'safety', label: 'Safety', icon: Shield },
   { id: 'lol-browser', label: 'LOL Browser', icon: Skull },
   { id: 'lol-chains', label: 'Attack Chains', icon: Link2 },
   { id: 'socks', label: 'SOCKS Tasks', icon: Network },
@@ -1999,6 +2788,9 @@ export default function RedTeam() {
   // C2 Infrastructure & LOL stores
   const c2 = useC2Store()
   const lol = useLOLStore()
+  const realtime = useRealtimeStore()
+  const learning = useLearningStore()
+  const safety = useSafetyStore()
 
   useEffect(() => {
     c2.fetchDashboard()
@@ -2006,6 +2798,12 @@ export default function RedTeam() {
     lol.fetchStats()
     lol.fetchProjects()
     lol.fetchEntries()
+    realtime.fetchAgentStatuses()
+    realtime.fetchKillSwitch()
+    learning.fetchDashboard()
+    learning.fetchCampaigns()
+    safety.fetchDashboard()
+    safety.fetchPendingCount()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Actions
@@ -2109,6 +2907,10 @@ export default function RedTeam() {
         >
           {activeTab === 'c2' && <C2Tab servers={c2Servers} sessions={sessions} setServers={setC2Servers} setSessions={setSessions} />}
           {activeTab === 'c2-infra' && <C2InfraTab />}
+          {activeTab === 'live-dashboard' && <LiveDashboardTab />}
+          {activeTab === 'campaigns' && <CampaignsTab />}
+          {activeTab === 'learning' && <LearningTab />}
+          {activeTab === 'safety' && <SafetyTab />}
           {activeTab === 'lol-browser' && <LOLBrowserTab />}
           {activeTab === 'lol-chains' && <LOLChainsTab />}
           {activeTab === 'socks' && <SocksTasksTab sessions={sessions} tasks={tasks} setTasks={setTasks} />}

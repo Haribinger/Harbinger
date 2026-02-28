@@ -12,6 +12,9 @@ export { autonomousApi } from './autonomous'
 export { skillsApi } from './skills'
 export { c2Api } from './c2'
 export { lolApi } from './lol'
+export { realtimeApi } from './realtime'
+export { learningApi } from './learning'
+export { safetyApi } from './safety'
 
 // Re-export types
 export type { ModelInfo, ProviderInfo, ProviderTestResult } from './providers'
@@ -26,3 +29,6 @@ export type { AgentThought, SwarmState, AutonomousStats, EfficiencyScore } from 
 export type { SkillCategory, Skill, SkillParameter, SkillExecutionResult } from './skills'
 export type { C2Framework, C2Listener, C2Payload, C2Implant, C2Task, C2Operation, C2AttackChain, C2AttackStep, C2Dashboard, C2SearchResult } from './c2'
 export type { LOLProject, LOLEntry, LOLCommand, LOLDetection, LOLChain, LOLChainStep, LOLStats } from './lol'
+export type { RealtimeEvent, AgentLiveStatus, CommandStream, OperatorSession, KillSwitchState } from './realtime'
+export type { TechniqueScore, CampaignRecord, CampaignEvent, LOLDiscovery, AgentPerformance, Recommendation, LearningDashboard } from './learning'
+export type { TargetValidation, ValidationRule, ScopeRule, ScopeCheckResult, RateLimitConfig, RateLimitStatus, AuditEntry, ApprovalRequest, SafetyDashboard } from './safety'
