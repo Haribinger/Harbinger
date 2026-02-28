@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-  Key,
   Check,
   AlertCircle,
   RefreshCw,
-  ExternalLink,
   Copy,
   Download,
   Shield,
@@ -139,7 +137,7 @@ export function SecretsManager() {
       } else {
         toast.error('Could not connect to Ollama')
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to connect to Ollama')
     } finally {
       setIsTestingOllama(false)
@@ -173,6 +171,7 @@ export function SecretsManager() {
     if (activeProvider === 'ollama' && ollamaUrl) {
       fetchOllamaModels()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider, ollamaUrl])
 
   return (

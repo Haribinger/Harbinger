@@ -118,17 +118,17 @@ export default function OpenClaw() {
   const [channels, setChannels] = useState<ChannelStatus[]>(DEFAULT_CHANNELS)
   const [loading, setLoading] = useState(true)
   const [commandInput, setCommandInput] = useState('')
-  const [commandResponse, setCommandResponse] = useState<any>(null)
+  const [commandResponse, setCommandResponse] = useState<unknown>(null)
   const [sending, setSending] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'events' | 'commands'>('overview')
 
   const fetchAll = useCallback(async () => {
     try {
       const [statusRes, skillsRes, eventsRes, channelsRes] = await Promise.allSettled([
-        apiClient.get<any>('/api/openclaw/status'),
-        apiClient.get<any>('/api/openclaw/skills'),
-        apiClient.get<any>('/api/openclaw/events'),
-        apiClient.get<any>('/api/channels'),
+        apiClient.get<unknown>('/api/openclaw/status'),
+        apiClient.get<unknown>('/api/openclaw/skills'),
+        apiClient.get<unknown>('/api/openclaw/events'),
+        apiClient.get<unknown>('/api/channels'),
       ])
 
       if (statusRes.status === 'fulfilled') setStatus(statusRes.value)
@@ -192,7 +192,7 @@ export default function OpenClaw() {
     setSending(true)
     setCommandResponse(null)
     try {
-      const res = await apiClient.post<any>('/api/openclaw/command', {
+      const res = await apiClient.post<unknown>('/api/openclaw/command', {
         command: commandInput,
         channel: 'web',
       })

@@ -117,7 +117,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           return { success: true, data: { authUrl, state, provider: 'github' } }
-        } catch (e) {
+        } catch (_e) {
           set({ error: 'Network error' })
           return null
         } finally {

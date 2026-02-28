@@ -9,7 +9,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Shield,
   ShieldCheck,
   Swords,
   BookOpen,

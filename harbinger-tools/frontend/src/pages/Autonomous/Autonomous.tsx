@@ -7,14 +7,12 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertTriangle,
   Bot,
   Cpu,
   Lightbulb,
   TrendingUp,
   Eye,
   Wrench,
-  GitBranch,
   Code,
   Workflow,
   FileCode,
@@ -73,6 +71,7 @@ function Autonomous() {
     setFilter, refresh, approveThought, rejectThought, implementThought, deleteThought,
   } = useAutonomousStore()
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [])
 
   // Group thoughts by time for chart
@@ -92,7 +91,7 @@ function Autonomous() {
   }))
 
   // Separate thoughts into categories
-  const pendingThoughts = thoughts.filter(t => t.status === 'pending')
+  const _pendingThoughts = thoughts.filter(t => t.status === 'pending')
   const proposals = thoughts.filter(t => t.type === 'proposal')
 
   // Unique agent names for filter

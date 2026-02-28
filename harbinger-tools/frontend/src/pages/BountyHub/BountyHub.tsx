@@ -5,7 +5,6 @@ import {
   Search,
   Filter,
   Plus,
-  TrendingUp,
   Target,
   Globe,
   DollarSign,
@@ -141,13 +140,13 @@ function BountyHub() {
             <button
               key={platform}
               onClick={() => {
-                const newPlatforms = filters.platform?.includes(platform as any)
+                const newPlatforms = filters.platform?.includes(platform as string)
                   ? filters.platform.filter(p => p !== platform)
-                  : [...(filters.platform || []), platform as any];
+                  : [...(filters.platform || []), platform as string];
                 setFilters({ ...filters, platform: newPlatforms });
               }}
               className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                filters.platform?.includes(platform as any)
+                filters.platform?.includes(platform as string)
                   ? 'bg-[#f0c040] text-[#0a0a0f]'
                   : 'bg-surface border border-border text-text-secondary hover:bg-surface-light'
               }`}

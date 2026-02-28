@@ -1,7 +1,7 @@
 interface MCPTool {
   name: string
   description: string
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
 }
 
 interface MCPServer {
@@ -106,7 +106,7 @@ class MCPClient {
     return server.tools
   }
 
-  async executeTool(serverId: string, toolName: string, parameters: Record<string, any>): Promise<any> {
+  async executeTool(serverId: string, toolName: string, parameters: Record<string, unknown>): Promise<unknown> {
     const server = this.servers.get(serverId)
     if (!server) throw new Error(`MCP server not found: ${serverId}`)
     if (!server.connected) throw new Error(`MCP server not connected: ${serverId}`)

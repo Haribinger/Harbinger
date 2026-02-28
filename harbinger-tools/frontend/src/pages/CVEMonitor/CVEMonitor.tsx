@@ -11,7 +11,6 @@ import {
   Zap,
   Bot,
   Play,
-  CheckCircle,
 } from 'lucide-react'
 import { useCVEMonitorStore } from '../../store/cveMonitorStore'
 import type { CVEEntry } from '../../api/cve'

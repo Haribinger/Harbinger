@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { listWorkflows, triggerWorkflow, getExecutionStatus } from '../../api/n8n';
+import { listWorkflows, triggerWorkflow } from '../../api/n8n';
 
 interface N8NIntegrationProps {
   n8nInstanceUrl: string;
@@ -7,7 +7,7 @@ interface N8NIntegrationProps {
 
 const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
   const [isN8NRunning, setIsN8NRunning] = useState(false);
-  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [workflows, setWorkflows] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +17,7 @@ const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
         // A simple check to see if n8n is reachable
         const response = await fetch(`${n8nInstanceUrl}/healthz`);
         setIsN8NRunning(response.ok);
-      } catch (err) {
+      } catch (_err) {
         setIsN8NRunning(false);
       }
     };

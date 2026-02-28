@@ -41,10 +41,8 @@ import type { Provider } from '../../store/secretsStore'
 import { useThemeStore, applyTheme } from '../../store/themeStore'
 import type { AppSettings } from '../../types'
 import type { HarbingerTheme, ThemeTokens } from '../../types/theme'
-import { BUILTIN_THEMES } from '../../types/theme'
 import { useBugBountyStore } from '../../store/bugBountyStore'
 import { useModelRouterStore } from '../../store/modelRouterStore'
-import type { ModelRoute } from '../../store/modelRouterStore'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -132,6 +130,7 @@ function Settings() {
     if (activeProvider === 'ollama' || providers.ollama?.enabled) {
       fetchOllamaModels()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchHealthStatus = async () => {
@@ -180,8 +179,8 @@ function Settings() {
   }
 
   const handleProviderChange = (provider: string) => {
-    setActiveProvider(provider as any)
-    updateProvider(provider as any, { enabled: true })
+    setActiveProvider(provider as Provider)
+    updateProvider(provider as Provider, { enabled: true })
     toast.success(`Switched to ${PROVIDER_INFO[provider]?.name || provider}`)
   }
 
@@ -365,7 +364,7 @@ function Settings() {
                         <input
                           type={showKey[activeProvider] ? 'text' : 'password'}
                           value={activeConfig?.apiKey || ''}
-                          onChange={(e) => updateProvider(activeProvider as any, { apiKey: e.target.value })}
+                          onChange={(e) => updateProvider(activeProvider as Provider, { apiKey: e.target.value })}
                           placeholder={getApiKeyPlaceholder(activeProvider)}
                           className="w-full bg-background border border-border rounded-lg px-4 py-3 pr-20 font-mono text-sm focus:outline-none focus:border-primary"
                         />
@@ -389,7 +388,7 @@ function Settings() {
                           type="text"
                           value={activeConfig?.baseUrl || ''}
                           onChange={(e) => {
-                            updateProvider(activeProvider as any, { baseUrl: e.target.value })
+                            updateProvider(activeProvider as Provider, { baseUrl: e.target.value })
                             if (activeProvider === 'ollama') setOllamaUrl(e.target.value)
                           }}
                           placeholder={activeProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com/v1'}
@@ -1739,7 +1738,7 @@ function ThemePreview({ tokens }: { tokens: ThemeTokens }) {
 
 // Channels configuration section (Discord, Telegram, Slack)
 function ChannelsSection() {
-  const [channels, setChannels] = useState<Record<string, any>>({})
+  const [channels, setChannels] = useState<Record<string, unknown>>({})
   const [discordToken, setDiscordToken] = useState('')
   const [discordGuild, setDiscordGuild] = useState('')
   const [discordChannel, setDiscordChannel] = useState('')
@@ -1967,7 +1966,7 @@ function ChannelsSection() {
 
 // ─── Model Router Section ─────────────────────────────────────────────────
 
-const COMPLEXITY_TIERS = ['trivial', 'simple', 'moderate', 'complex', 'massive'] as const
+const _COMPLEXITY_TIERS = ['trivial', 'simple', 'moderate', 'complex', 'massive'] as const
 const TIER_DESCRIPTIONS: Record<string, string> = {
   trivial: 'Greetings, simple lookups (500 tokens)',
   simple: 'Single-step tasks, short answers (2K tokens)',
@@ -1992,6 +1991,7 @@ function ModelRouterSection() {
 
   useEffect(() => {
     fetchRoutes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSaveRoutes = async () => {

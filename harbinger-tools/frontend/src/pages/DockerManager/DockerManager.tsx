@@ -58,6 +58,7 @@ function DockerManager() {
   // Load containers on mount
   useEffect(() => {
     loadContainers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadContainers = async () => {

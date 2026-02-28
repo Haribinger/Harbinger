@@ -4,7 +4,6 @@ import {
   Send,
   Copy,
   Check,
-  Terminal,
   Maximize2,
   Minimize2,
   AlertCircle,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, Search, Plus, X, LogOut, User, Github, ChevronDown } from 'lucide-react'
+import { Bell, Search, Plus, X, LogOut, Github, ChevronDown } from 'lucide-react'
 import { useAgentStore } from '../../store/agentStore'
 import { useAuthStore } from '../../store/authStore'
 

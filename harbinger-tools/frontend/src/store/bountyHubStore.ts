@@ -56,7 +56,7 @@ interface BountyHubState {
 
 export const useBountyHubStore = create<BountyHubState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       programs: [],
       syncStatus: null,
       filters: {},

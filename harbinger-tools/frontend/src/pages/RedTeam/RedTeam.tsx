@@ -30,25 +30,19 @@ import {
   Link2,
   Crosshair,
   Copy,
-  ExternalLink,
   ChevronDown,
   ChevronRight,
   Skull,
   Bug,
   Server,
   Activity,
-  Hash,
 } from 'lucide-react'
 import { useC2Store } from '../../store/c2Store'
 import { useLOLStore } from '../../store/lolStore'
 import { useRealtimeStore } from '../../store/realtimeStore'
 import { useLearningStore } from '../../store/learningStore'
 import { useSafetyStore } from '../../store/safetyStore'
-import type { C2Framework, C2Implant, C2AttackChain } from '../../api/c2'
-import type { LOLEntry, LOLProject } from '../../api/lol'
-import type { AgentLiveStatus, CommandStream } from '../../api/realtime'
-import type { TechniqueScore, CampaignRecord, Recommendation } from '../../api/learning'
-import type { ApprovalRequest, AuditEntry } from '../../api/safety'
+import type { C2Framework } from '../../api/c2'
 
 // ---- Types ----
 
@@ -153,13 +147,6 @@ interface LogParser {
 }
 
 // ---- Initial empty state ----
-
-const EMPTY_C2_SERVERS: C2Server[] = []
-const EMPTY_SESSIONS: Session[] = []
-const EMPTY_TASKS: SocksTask[] = []
-const EMPTY_PLAYBOOKS: Playbook[] = []
-const EMPTY_FINDINGS: Finding[] = []
-const EMPTY_PARSERS: LogParser[] = []
 
 const BUILTIN_QUERIES: Neo4jQuery[] = [
   {
@@ -988,7 +975,7 @@ function Neo4jTab() {
   )
 }
 
-function ParsersTab({ parsers, setParsers }: { parsers: LogParser[]; setParsers: (p: LogParser[]) => void }) {
+function ParsersTab({ parsers: _parsers, setParsers: _setParsers }: { parsers: LogParser[]; setParsers: (p: LogParser[]) => void }) {
   const [files, setFiles] = useState<ParsedFile[]>([])
   const [dragOver, setDragOver] = useState(false)
 
@@ -1297,9 +1284,9 @@ Based on the gathered intelligence, here are the key attack paths:
 function C2InfraTab() {
   const {
     dashboard, frameworks, listeners, payloads, implants, operations, chains,
-    fetchDashboard, fetchFrameworks, fetchListeners, fetchPayloads, fetchImplants, fetchOperations, fetchChains,
-    createFramework, deleteFramework, connectFramework, createListener, createPayload, createOperation, createChain, executeChain,
-    killImplant, createTask,
+    fetchDashboard, fetchFrameworks, fetchListeners, fetchPayloads, fetchImplants, fetchOperations, fetchChains: _chains,
+    createFramework, deleteFramework, connectFramework, createListener, createPayload, createOperation, createChain: _createChain, executeChain: _executeChain,
+    killImplant, createTask: _createTask,
   } = useC2Store()
 
   const [showAdd, setShowAdd] = useState(false)

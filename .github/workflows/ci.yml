@@ -114,6 +114,16 @@ jobs:
         run: go vet ./cmd/...
         working-directory: backend
 
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Vulnerability check
+        working-directory: backend
+        run: |
+          govulncheck ./... 2>&1 || {
+            echo "::warning::govulncheck found known vulnerabilities"
+          }
+
       - name: Test
         run: go test ./cmd/... -count=1 -timeout 120s
         working-directory: backend
@@ -131,17 +141,44 @@ jobs:
         run: |
           ISSUES=0
 
-          # Check for hardcoded API keys / tokens / passwords
+          # AWS access keys
           if grep -rn 'AKIA[0-9A-Z]\{16\}' --include='*.ts' --include='*.tsx' --include='*.go' --include='*.js' --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null; then
             echo "::error::Possible AWS access key found in source"
             ISSUES=$((ISSUES + 1))
           fi
 
+          # OpenAI / Anthropic API keys
           if grep -rn 'sk-[a-zA-Z0-9]\{20,\}' --include='*.ts' --include='*.tsx' --include='*.go' --include='*.js' --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null; then
             echo "::error::Possible API secret key found in source"
             ISSUES=$((ISSUES + 1))
           fi
 
+          # GitHub tokens
+          if grep -rn 'ghp_[a-zA-Z0-9]\{36\}\|gho_[a-zA-Z0-9]\{36\}\|github_pat_[a-zA-Z0-9]\{22\}_[a-zA-Z0-9]\{59\}' \
+            --include='*.ts' --include='*.tsx' --include='*.go' --include='*.js' \
+            --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null; then
+            echo "::error::GitHub token found in source"
+            ISSUES=$((ISSUES + 1))
+          fi
+
+          # Generic high-entropy secrets (base64 strings > 40 chars in assignments)
+          if grep -rn 'SECRET\|TOKEN\|APIKEY\|API_KEY' --include='*.ts' --include='*.tsx' --include='*.go' --include='*.js' \
+            --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null | \
+            grep -E '["'"'"'][A-Za-z0-9+/=]{40,}["'"'"']' | \
+            grep -v 'process\.env\|os\.Getenv\|import\|placeholder\|example\|test\|mock\|TODO' 2>/dev/null; then
+            echo "::warning::Possible high-entropy secret in source"
+            ISSUES=$((ISSUES + 1))
+          fi
+
+          # Private keys
+          if grep -rn 'BEGIN RSA PRIVATE KEY\|BEGIN EC PRIVATE KEY\|BEGIN PRIVATE KEY' \
+            --include='*.ts' --include='*.tsx' --include='*.go' --include='*.js' \
+            --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null; then
+            echo "::error::Private key found in source code"
+            ISSUES=$((ISSUES + 1))
+          fi
+
+          # Hardcoded passwords
           if grep -rn 'password\s*[:=]\s*["'"'"'][^"'"'"']\{8,\}["'"'"']' --include='*.ts' --include='*.tsx' --include='*.go' --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null | grep -v 'placeholder\|example\|test\|TODO\|FIXME\|mock' ; then
             echo "::warning::Possible hardcoded password found"
             ISSUES=$((ISSUES + 1))
@@ -156,11 +193,32 @@ jobs:
 
       - name: Check for .env files in commit
         run: |
-          if git ls-files --cached | grep -E '\.env$|\.env\.local$|\.env\.production$'; then
+          if git ls-files --cached | grep -E '\.env$|\.env\.local$|\.env\.production$|\.env\.development$'; then
             echo "::error::.env file committed to repository"
             exit 1
           fi
           echo "No .env files in tracked files"
+
+      - name: Check for dangerous patterns
+        run: |
+          WARNS=0
+
+          # eval() usage in frontend
+          if grep -rn '\beval(' --include='*.ts' --include='*.tsx' --include='*.js' \
+            --exclude-dir=node_modules --exclude-dir=dist . 2>/dev/null; then
+            echo "::warning::eval() usage detected — potential code injection risk"
+            WARNS=$((WARNS + 1))
+          fi
+
+          # Disabled TLS verification
+          if grep -rn 'InsecureSkipVerify:\s*true' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then
+            echo "::warning::InsecureSkipVerify=true — TLS verification disabled"
+            WARNS=$((WARNS + 1))
+          fi
+
+          if [ "$WARNS" -gt 0 ]; then
+            echo "::warning::Found $WARNS security warnings (non-blocking)"
+          fi
 
   # ─── Summary ────────────────────────────────────────────────────────────────
   ci-summary:

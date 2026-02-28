@@ -28,7 +28,7 @@ export interface BrowserElement {
 export const browserApi = {
   // Get all sessions
   getSessions: async (): Promise<BrowserSession[]> => {
-    const result = await apiClient.get<any>('/api/browsers/sessions')
+    const result = await apiClient.get<unknown>('/api/browsers/sessions')
     return Array.isArray(result) ? result : []
   },
 

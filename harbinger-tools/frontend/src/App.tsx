@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { Toaster } from 'react-hot-toast'
-import { useEffect, useState, lazy, Suspense, useCallback } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useThemeStore, applyTheme } from './store/themeStore'
 import { API_BASE } from './config'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -193,7 +193,7 @@ function useTeleportHandler() {
       .then(res => res.json())
       .then(data => {
         if (!data.ok || !data.context) return
-        const ctx = data.context as Record<string, any>
+        const ctx = data.context as Record<string, unknown>
         // Route based on context type
         if (ctx.page) {
           navigate(String(ctx.page))
@@ -207,6 +207,7 @@ function useTeleportHandler() {
       .catch(() => {
         // Silent — teleport is best-effort
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only on mount
 }
 

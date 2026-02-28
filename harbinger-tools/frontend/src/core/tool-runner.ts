@@ -20,7 +20,7 @@ class ToolRunner extends EventEmitter {
   async executeTool(
     serverName: string,
     toolName: string,
-    parameters: Record<string, any>
+    parameters: Record<string, unknown>
   ): Promise<ToolExecutionRecord> {
     const executionId = `exec-${Date.now()}`;
     const startTime = Date.now();

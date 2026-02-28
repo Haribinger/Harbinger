@@ -53,13 +53,13 @@ export const dashboardApi = {
 
   // Get recent activity
   getActivity: async (limit?: number): Promise<ActivityItem[]> => {
-    const result = await apiClient.get<any>('/api/dashboard/activity', { limit })
+    const result = await apiClient.get<unknown>('/api/dashboard/activity', { limit })
     return Array.isArray(result) ? result : []
   },
 
   // Get service health
   getServiceHealth: async (): Promise<ServiceHealth[]> => {
-    const result = await apiClient.get<any>('/api/dashboard/health')
+    const result = await apiClient.get<unknown>('/api/dashboard/health')
     return Array.isArray(result) ? result : []
   },
 

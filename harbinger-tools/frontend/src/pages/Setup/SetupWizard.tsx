@@ -26,7 +26,6 @@ import {
   MonitorCheck,
   Cpu,
   HardDrive,
-  Wifi,
   WifiOff,
   ChevronDown,
   KeyRound,
@@ -400,7 +399,7 @@ function SetupWizard() {
                   <button
                     key={p.id}
                     onClick={() => {
-                      setLlmProvider(p.id as any)
+                      setLlmProvider(p.id as string)
                       setKeyTestResult(null)
                       // Auto-fill default model
                       if (DEFAULT_MODELS[p.id] && !llmModel) {

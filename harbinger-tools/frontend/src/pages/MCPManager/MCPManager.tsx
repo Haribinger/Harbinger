@@ -4,8 +4,8 @@ import {
   Plus, Plug, Unplug, Search, ExternalLink, Trash2,
   Terminal, FolderOpen, Globe, Cpu, Shield, Cloud, Bug, BarChart2,
   Zap, Radio, Database, Lock, FlaskConical, Layers, BrainCircuit,
-  Target, FileText, ChevronDown, Settings, RefreshCw, Activity,
-  Edit3, Save, X, Copy, Check, AlertCircle, Play, Power,
+  Target, FileText, ChevronDown, Settings, RefreshCw,
+  Save, X, Copy, Check,
 } from 'lucide-react'
 import { useMCPStore } from '../../store/mcpStore'
 import { apiClient } from '../../api/client'
@@ -45,13 +45,14 @@ function getCategoryMeta(cat?: string) {
 type Tab = 'tools' | 'servers'
 
 function MCPManager() {
-  const { mcps, builtinTools, addMCP, removeMCP, updateMCP, toggleTool, addBuiltinTool, removeBuiltinTool } = useMCPStore()
+  const { mcps, builtinTools, addMCP, removeMCP, updateMCP, toggleTool } = useMCPStore()
   const [tab, setTab] = useState<Tab>('tools')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Load real server status from backend on mount
   useEffect(() => {
     refreshServerStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const refreshServerStatus = async () => {
@@ -73,7 +74,7 @@ function MCPManager() {
     const mcp = mcps.find(m => m.id === id)
     if (!mcp) return
 
-    updateMCP(id, { status: 'connected' as any })
+    updateMCP(id, { status: 'connected' })
     try {
       // Try health check on the MCP URL
       const res = await fetch(`${mcp.url}/health`)
@@ -371,10 +372,10 @@ interface ToolCardProps {
   onCancelEdit: () => void
 }
 
-function ToolCard({ tool, isExpanded, isEditing, onToggle, onEnableToggle, onEdit, onCancelEdit }: ToolCardProps) {
+function ToolCard({ tool, isExpanded, isEditing, onToggle, onEnableToggle, onEdit: _onEdit, onCancelEdit: _onCancelEdit }: ToolCardProps) {
   const meta = getCategoryMeta(tool.category)
-  const { updateMCP } = useMCPStore()
-  const [editConfig, setEditConfig] = useState<Record<string, string>>({})
+  const { updateMCP: _updateMCP } = useMCPStore()
+  const [_editConfig, setEditConfig] = useState<Record<string, string>>({})
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -383,6 +384,7 @@ function ToolCard({ tool, isExpanded, isEditing, onToggle, onEnableToggle, onEdi
       Object.entries(tool.config).forEach(([k, v]) => { cfg[k] = String(v) })
       setEditConfig(cfg)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing])
 
   const copySchema = () => {

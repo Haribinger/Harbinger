@@ -31,7 +31,7 @@ export interface AgentResponse extends Agent {
 export const agentsApi = {
   // Get all agents
   getAll: async (): Promise<AgentResponse[]> => {
-    const result = await apiClient.get<any>('/api/agents')
+    const result = await apiClient.get<unknown>('/api/agents')
     return Array.isArray(result) ? result : (Array.isArray(result?.agents) ? result.agents : [])
   },
 

@@ -26,7 +26,7 @@ import toast from 'react-hot-toast'
 
 function Agents() {
   const {
-    agents, personalities, addAgent, removeAgent, updateAgent,
+    agents, personalities, addAgent, updateAgent,
     setActiveAgent, spawnAgentById, stopAgent, fetchAgents, deleteAgentFromDB, cloneAgent,
   } = useAgentStore()
   const { builtinTools } = useMCPStore()
@@ -42,6 +42,7 @@ function Agents() {
     fetchAgents()
     const interval = setInterval(fetchAgents, 30000) // Refresh every 30s
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleCreateAgent = async (agentData: Partial<Agent>) => {

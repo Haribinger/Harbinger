@@ -18,8 +18,6 @@ import {
   Server,
   ChevronDown,
   ChevronRight,
-  Filter,
-  Maximize2,
   Plus,
   Copy,
 } from 'lucide-react'
@@ -27,7 +25,7 @@ import { useAgentStore } from '../../store/agentStore'
 import { useDockerStore } from '../../store/dockerStore'
 import { useCommandCenterStore, type TabType, type WorkspaceTab } from '../../store/commandCenterStore'
 import { browserApi } from '../../api/browser'
-import type { Agent, Message } from '../../types'
+import type { Agent } from '../../types'
 
 // ---- Status helpers ----
 
@@ -65,7 +63,7 @@ const tabIcons: Record<TabType, typeof MessageSquare> = {
 
 function CommandCenter() {
   const agents = useAgentStore((s) => s.agents)
-  const activeAgent = useAgentStore((s) => s.activeAgent)
+  const _activeAgent = useAgentStore((s) => s.activeAgent)
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent)
   const spawnAgentById = useAgentStore((s) => s.spawnAgentById)
   const stopAgent = useAgentStore((s) => s.stopAgent)
@@ -586,7 +584,7 @@ function ChatPanel({ tab, agent, agents }: { tab: WorkspaceTab; agent: Agent | n
 
 // ---- Terminal Panel ----
 
-function TerminalPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
+function TerminalPanel({ tab: _tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
   const [command, setCommand] = useState('')
   const [output, setOutput] = useState<string[]>([])
   const [executing, setExecuting] = useState(false)
@@ -668,12 +666,12 @@ function TerminalPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null 
 
 // ---- Browser Panel ----
 
-function BrowserPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
+function BrowserPanel({ tab: _tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
   const [url, setUrl] = useState('')
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const sessionIdByAgentRef = useRef<Record<string, string>>({})
-  const [sessionIdByAgent, setSessionIdByAgent] = useState<Record<string, string>>({})
+  const [_sessionIdByAgent, setSessionIdByAgent] = useState<Record<string, string>>({})
   const [sessionError, setSessionError] = useState<string | null>(null)
 
   const agentId = agent?.id ?? ''
@@ -759,7 +757,7 @@ function BrowserPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }
 
 // ---- Logs Panel ----
 
-function LogsPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
+function LogsPanel({ tab, agent: _agent }: { tab: WorkspaceTab; agent: Agent | null }) {
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -779,6 +777,7 @@ function LogsPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
     } catch { /* ignore */ } finally { setLoading(false) }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchLogs() }, [tab.agentId])
 
   useEffect(() => {
@@ -819,7 +818,7 @@ function LogsPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
 
 // ---- Files Panel ----
 
-function FilesPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
+function FilesPanel({ tab: _tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
   return (
     <div className="h-full flex items-center justify-center text-text-secondary">
       <div className="text-center">
@@ -837,7 +836,7 @@ function FilesPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) 
 
 // ---- Agent Settings Panel ----
 
-function AgentSettingsPanel({ tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
+function AgentSettingsPanel({ tab: _tab, agent }: { tab: WorkspaceTab; agent: Agent | null }) {
   if (!agent) {
     return (
       <div className="h-full flex items-center justify-center text-text-secondary">

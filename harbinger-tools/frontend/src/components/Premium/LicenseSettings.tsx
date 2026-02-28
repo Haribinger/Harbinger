@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { licenseManager, LicenseTier, TIER_CONFIG } from '../../core/license';
+import { licenseManager, LicenseTier } from '../../core/license';
 
 const LicenseSettings: React.FC = () => {
   const [licenseKey, setLicenseKey] = useState('');

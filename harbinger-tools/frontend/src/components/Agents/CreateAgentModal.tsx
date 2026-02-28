@@ -7,7 +7,7 @@ import type { Provider } from '../../store/secretsStore'
 import type { Agent, AgentPersonality } from '../../types'
 import { apiClient } from '../../api/client'
 import {
-  X, ChevronRight, Zap, Plus, Tag,
+  X, ChevronRight, Zap, Plus,
 } from 'lucide-react'
 
 interface CreateAgentModalProps {
@@ -22,7 +22,7 @@ interface AgentTemplate {
   type: string
   description: string
   capabilities: string[]
-  config: Record<string, any>
+  config: Record<string, unknown>
   color: string
 }
 
@@ -81,7 +81,7 @@ export default function CreateAgentModal({ onClose, onCreate, personalities: pro
 
   // Fetch templates on mount
   useEffect(() => {
-    apiClient.get<any>('/api/agents/templates')
+    apiClient.get<unknown>('/api/agents/templates')
       .then((res) => {
         const t = Array.isArray(res?.templates) ? res.templates : []
         setTemplates(t)

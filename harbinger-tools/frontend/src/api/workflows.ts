@@ -27,7 +27,7 @@ export interface WorkflowExecution {
 export const workflowsApi = {
   // Get all workflows
   getAll: async (): Promise<Workflow[]> => {
-    const result = await apiClient.get<any>('/api/workflows')
+    const result = await apiClient.get<unknown>('/api/workflows')
     return Array.isArray(result) ? result : (Array.isArray(result?.workflows) ? result.workflows : [])
   },
 

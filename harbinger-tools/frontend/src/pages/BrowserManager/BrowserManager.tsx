@@ -55,13 +55,14 @@ function BrowserManager() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'console' | 'network' | 'screenshot' | 'actions'>('console')
   const [urlInput, setUrlInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [_isLoading, _setIsLoading] = useState(false)
   const [jsInput, setJsInput] = useState('')
   const [browserStats, setBrowserStats] = useState<{ totalSessions: number; activeSessions: number; agentSessions: number } | null>(null)
 
   useEffect(() => {
     loadSessions()
     loadStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadSessions = async () => {
@@ -343,10 +344,10 @@ function BrowserManager() {
               </button>
 
               {/* Agent badge */}
-              {(selectedSession as any).agentName && (
+              {(selectedSession as unknown as Record<string, string>).agentName && (
                 <span className="px-2 py-0.5 bg-[#f0c040]/10 border border-[#f0c040]/30 text-[#f0c040] rounded text-xs font-medium flex items-center gap-1">
                   <Bot className="w-3 h-3" />
-                  {(selectedSession as any).agentName}
+                  {(selectedSession as unknown as Record<string, string>).agentName}
                 </span>
               )}
 
@@ -582,7 +583,7 @@ function BrowserManager() {
                           />
                           <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
                             <Camera className="w-3 h-3" />
-                            <span>Visual feed from {(selectedSession as any).agentName || selectedSession.name}</span>
+                            <span>Visual feed from {(selectedSession as unknown as Record<string, string>).agentName || selectedSession.name}</span>
                             <button
                               onClick={handleTakeScreenshot}
                               className="ml-auto text-[#f0c040] hover:text-[#f0c040]/80"
@@ -741,7 +742,7 @@ function SessionItem({ session, selected, onSelect, onClose }: {
     >
       <div className="flex items-center justify-between mb-1">
         <span className="font-medium text-sm truncate flex items-center gap-1.5">
-          {(session as any).agentName && (
+          {(session as unknown as Record<string, string>).agentName && (
             <Bot className="w-3 h-3 text-[#f0c040] flex-shrink-0" />
           )}
           {session.name}
@@ -768,9 +769,9 @@ function SessionItem({ session, selected, onSelect, onClose }: {
         <span className="text-xs text-text-secondary">
           {session.viewport.width}\u00d7{session.viewport.height}
         </span>
-        {(session as any).agentName && (
+        {(session as unknown as Record<string, string>).agentName && (
           <span className="text-[10px] text-[#f0c040]/60 ml-auto">
-            {(session as any).agentName}
+            {(session as unknown as Record<string, string>).agentName}
           </span>
         )}
       </div>

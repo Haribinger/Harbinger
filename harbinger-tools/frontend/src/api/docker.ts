@@ -25,13 +25,13 @@ export interface ContainerStats {
 export const dockerApi = {
   // Get all containers
   getContainers: async (): Promise<DockerContainer[]> => {
-    const result = await apiClient.get<any>('/api/docker/containers')
+    const result = await apiClient.get<unknown>('/api/docker/containers')
     return Array.isArray(result) ? result : []
   },
 
   // Get all images
   getImages: async (): Promise<DockerImage[]> => {
-    const result = await apiClient.get<any>('/api/docker/images')
+    const result = await apiClient.get<unknown>('/api/docker/images')
     return Array.isArray(result) ? result : []
   },
 

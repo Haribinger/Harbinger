@@ -25,7 +25,7 @@ vi.mock('../../api/autonomous', () => ({
 describe('autonomousStore', () => {
   beforeEach(() => {
     // Reset store state between tests
-    const store = useAutonomousStore.getState()
+    const _store = useAutonomousStore.getState()
     useAutonomousStore.setState({
       thoughts: [],
       swarm: null,

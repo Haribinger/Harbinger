@@ -153,12 +153,12 @@ const WorkflowEditorContent: React.FC = () => {
   // Load a template onto the canvas
   const loadTemplate = useCallback((template: typeof WORKFLOW_TEMPLATES[0]) => {
     pushSnapshot();
-    template.nodes.forEach((n, i) => {
+    template.nodes.forEach((n, _i) => {
       const newNode: WorkflowNode = {
         id: getId(),
         type: n.type,
         position: { x: n.x, y: n.y },
-        data: n.data as any,
+        data: n.data as unknown as Record<string, unknown>,
       };
       addNode(newNode);
     });

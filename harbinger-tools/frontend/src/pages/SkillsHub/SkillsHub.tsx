@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSkillsStore, type Skill, type SkillCategory } from '../../store/skillsStore'
+import { useSkillsStore, type Skill } from '../../store/skillsStore'
 
 // Agent accent colors — matches the design system
 const AGENT_COLOR: Record<string, string> = {
