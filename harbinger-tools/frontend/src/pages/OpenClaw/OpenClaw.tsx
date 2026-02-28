@@ -111,6 +111,12 @@ interface ChannelStatus {
   color: string
 }
 
+interface ChannelsApiResponse {
+  discord?: { enabled: boolean; hasToken?: boolean }
+  telegram?: { enabled: boolean; hasToken?: boolean }
+  slack?: { enabled: boolean; hasToken?: boolean }
+}
+
 export default function OpenClaw() {
   const [status, setStatus] = useState<OpenClawStatus | null>(null)
   const [skills, setSkills] = useState<OpenClawSkill[]>([])
@@ -125,25 +131,27 @@ export default function OpenClaw() {
   const fetchAll = useCallback(async () => {
     try {
       const [statusRes, skillsRes, eventsRes, channelsRes] = await Promise.allSettled([
-        apiClient.get<unknown>('/api/openclaw/status'),
-        apiClient.get<unknown>('/api/openclaw/skills'),
-        apiClient.get<unknown>('/api/openclaw/events'),
-        apiClient.get<unknown>('/api/channels'),
+        apiClient.get<OpenClawStatus>('/api/openclaw/status'),
+        apiClient.get<OpenClawSkill[] | { skills: OpenClawSkill[] }>('/api/openclaw/skills'),
+        apiClient.get<OpenClawEvent[] | { events: OpenClawEvent[] }>('/api/openclaw/events'),
+        apiClient.get<ChannelsApiResponse>('/api/channels'),
       ])
 
-      if (statusRes.status === 'fulfilled') setStatus(statusRes.value)
+      if (statusRes.status === 'fulfilled') setStatus(statusRes.value as OpenClawStatus)
       if (skillsRes.status === 'fulfilled') {
         const s = skillsRes.value
-        setSkills(Array.isArray(s) ? s : Array.isArray(s?.skills) ? s.skills : [])
+        const list = Array.isArray(s) ? s : (s && typeof s === 'object' && 'skills' in s && Array.isArray(s.skills) ? s.skills : [])
+        setSkills(list)
       }
       if (eventsRes.status === 'fulfilled') {
         const e = eventsRes.value
-        setEvents(Array.isArray(e) ? e : Array.isArray(e?.events) ? e.events : [])
+        const list = Array.isArray(e) ? e : (e && typeof e === 'object' && 'events' in e && Array.isArray(e.events) ? e.events : [])
+        setEvents(list)
       }
 
       // Sync channel status from backend
       if (channelsRes.status === 'fulfilled') {
-        const ch = channelsRes.value
+        const ch = channelsRes.value as ChannelsApiResponse | null | undefined
         const realChannels: ChannelStatus[] = [
           { name: 'Voice', icon: Mic, status: 'available', color: C.gold },
           { name: 'WebChat', icon: Terminal, status: 'connected', color: C.green },
@@ -340,13 +348,13 @@ export default function OpenClaw() {
                   <Send size={12} /> SEND
                 </button>
               </div>
-              {commandResponse && (
+              {commandResponse != null && (
                 <div style={{
                   marginTop: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 2,
                   padding: 12, fontSize: 11, lineHeight: 1.6,
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: C.green, fontFamily: C.font }}>
-                    {JSON.stringify(commandResponse, null, 2)}
+                    {typeof commandResponse === 'object' ? JSON.stringify(commandResponse, null, 2) : String(commandResponse)}
                   </pre>
                 </div>
               )}

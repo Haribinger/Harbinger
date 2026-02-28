@@ -30,6 +30,7 @@ import {
   DelayNodeData,
   CodeNodeData,
   NotificationNodeData,
+  AnyNodeData,
 } from '../types/workflow';
 import {
   isToolNodeData,
@@ -158,7 +159,7 @@ const WorkflowEditorContent: React.FC = () => {
         id: getId(),
         type: n.type,
         position: { x: n.x, y: n.y },
-        data: n.data as unknown as Record<string, unknown>,
+        data: n.data as AnyNodeData,
       };
       addNode(newNode);
     });

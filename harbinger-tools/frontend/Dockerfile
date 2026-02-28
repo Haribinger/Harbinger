@@ -11,18 +11,20 @@ ARG VITE_MCP_URL=
 
 WORKDIR /build
 
-RUN npm install -g pnpm@10.4.1
+RUN npm install -g pnpm@10.30.2
 
-# Copy root lockfile and frontend package.json for dependency caching
-COPY pnpm-lock.yaml ./
+# Copy full pnpm workspace so lockfile matches (root + harbinger-tools/frontend)
+# The lockfile was generated from the workspace; we must replicate it.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/preinstall.cjs ./scripts/
 COPY harbinger-tools/frontend/package.json ./harbinger-tools/frontend/
 
-# Install frontend dependencies using the root lockfile
-WORKDIR /build/harbinger-tools/frontend
-RUN pnpm install --frozen-lockfile --ignore-workspace
+RUN pnpm install --frozen-lockfile
 
-# Copy frontend source
-COPY harbinger-tools/frontend/ ./
+# Copy frontend source (overwrites package.json copy; keeps node_modules from install)
+COPY harbinger-tools/frontend/ ./harbinger-tools/frontend/
+
+WORKDIR /build/harbinger-tools/frontend
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL

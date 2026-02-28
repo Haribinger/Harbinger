@@ -133,7 +133,10 @@ function Dashboard() {
         .then(setHealth)
         .catch(() => { /* service health check is non-critical — dashboard degrades gracefully */ }),
       fetchChannels(),
-      apiClient.get<unknown[]>('/api/channels/conversations')
+      apiClient.get<Array<{
+        id: string; channel: string; agentName?: string; userId: string;
+        message?: string; response?: string; timestamp: number;
+      }>>('/api/channels/conversations')
         .then((data) => {
           const items = Array.isArray(data) ? data : []
           setConversations(items.slice(-8).reverse())

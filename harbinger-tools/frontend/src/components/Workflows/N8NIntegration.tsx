@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { listWorkflows, triggerWorkflow } from '../../api/n8n';
+import { listWorkflows, triggerWorkflow, type N8NWorkflow } from '../../api/n8n';
 
 interface N8NIntegrationProps {
   n8nInstanceUrl: string;
@@ -7,7 +7,7 @@ interface N8NIntegrationProps {
 
 const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
   const [isN8NRunning, setIsN8NRunning] = useState(false);
-  const [workflows, setWorkflows] = useState<unknown[]>([]);
+  const [workflows, setWorkflows] = useState<N8NWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

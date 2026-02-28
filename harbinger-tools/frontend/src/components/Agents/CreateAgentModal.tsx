@@ -22,7 +22,12 @@ interface AgentTemplate {
   type: string
   description: string
   capabilities: string[]
-  config: Record<string, unknown>
+  config?: {
+    docker_image?: string
+    memory_mb?: number
+    cpu_count?: number
+    [key: string]: unknown
+  }
   color: string
 }
 
@@ -81,10 +86,12 @@ export default function CreateAgentModal({ onClose, onCreate, personalities: pro
 
   // Fetch templates on mount
   useEffect(() => {
-    apiClient.get<unknown>('/api/agents/templates')
+    apiClient.get<AgentTemplate[] | { templates: AgentTemplate[] }>('/api/agents/templates')
       .then((res) => {
-        const t = Array.isArray(res?.templates) ? res.templates : []
-        setTemplates(t)
+        const nextTemplates = Array.isArray(res)
+          ? res
+          : ('templates' in res && Array.isArray(res.templates) ? res.templates : [])
+        setTemplates(nextTemplates)
       })
       .catch(() => {
         // Fallback templates
@@ -109,8 +116,8 @@ export default function CreateAgentModal({ onClose, onCreate, personalities: pro
       setColor(t.color)
       setCapabilities([...t.capabilities])
       setDockerImage(t.config?.docker_image || '')
-      setMemoryMb(t.config?.memory_mb || 512)
-      setCpuCount(t.config?.cpu_count || 1)
+      setMemoryMb(t.config?.memory_mb ?? 512)
+      setCpuCount(t.config?.cpu_count ?? 1)
     } else {
       setName('')
       setDescription('')

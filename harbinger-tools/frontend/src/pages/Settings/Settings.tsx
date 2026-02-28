@@ -1736,9 +1736,15 @@ function ThemePreview({ tokens }: { tokens: ThemeTokens }) {
   )
 }
 
+interface ChannelApiState {
+  enabled?: boolean
+  status?: string
+  hasToken?: boolean
+}
+
 // Channels configuration section (Discord, Telegram, Slack)
 function ChannelsSection() {
-  const [channels, setChannels] = useState<Record<string, unknown>>({})
+  const [channels, setChannels] = useState<Record<string, ChannelApiState>>({})
   const [discordToken, setDiscordToken] = useState('')
   const [discordGuild, setDiscordGuild] = useState('')
   const [discordChannel, setDiscordChannel] = useState('')
@@ -1771,7 +1777,7 @@ function ChannelsSection() {
       const data = await res.json()
       if (data.ok) {
         toast.success(`${channel} configured!`)
-        setChannels(prev => ({ ...prev, [channel]: { ...prev[channel], enabled: data.enabled, status: data.status, hasToken: true } }))
+        setChannels(prev => ({ ...prev, [channel]: { ...(prev[channel] ?? {}), enabled: data.enabled, status: data.status, hasToken: true } }))
       } else {
         toast.error(data.error || 'Failed to configure')
       }

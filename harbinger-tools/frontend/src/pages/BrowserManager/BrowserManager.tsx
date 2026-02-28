@@ -55,7 +55,7 @@ function BrowserManager() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'console' | 'network' | 'screenshot' | 'actions'>('console')
   const [urlInput, setUrlInput] = useState('')
-  const [_isLoading, _setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [jsInput, setJsInput] = useState('')
   const [browserStats, setBrowserStats] = useState<{ totalSessions: number; activeSessions: number; agentSessions: number } | null>(null)
 

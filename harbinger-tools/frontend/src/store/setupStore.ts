@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { API_BASE } from '../config'
 
-type LLMProvider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'gemini' | 'mistral' | 'google' | 'custom' | 'lmstudio' | 'gpt4all'
+export type LLMProvider = 'anthropic' | 'openai' | 'groq' | 'ollama' | 'gemini' | 'mistral' | 'google' | 'custom' | 'lmstudio' | 'gpt4all'
 
 interface ServiceStatus {
   backend: 'unknown' | 'online' | 'offline'

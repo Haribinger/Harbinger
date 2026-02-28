@@ -12,7 +12,14 @@ function getHeaders(): Record<string, string> {
   return h
 }
 
-export const listWorkflows = async () => {
+export interface N8NWorkflow {
+  id: string
+  name: string
+  active?: boolean
+  [key: string]: unknown
+}
+
+export const listWorkflows = async (): Promise<N8NWorkflow[]> => {
   const response = await fetch(`${N8N_API_BASE_URL}/workflows`, {
     headers: getHeaders(),
   })
@@ -20,7 +27,8 @@ export const listWorkflows = async () => {
     throw new Error(`n8n: HTTP ${response.status}`)
   }
   const data = await response.json()
-  return Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []
+  const items = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []
+  return items as N8NWorkflow[]
 }
 
 export const triggerWorkflow = async (workflowId: string, data?: unknown) => {

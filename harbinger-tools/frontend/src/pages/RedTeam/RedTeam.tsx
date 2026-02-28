@@ -1284,7 +1284,7 @@ Based on the gathered intelligence, here are the key attack paths:
 function C2InfraTab() {
   const {
     dashboard, frameworks, listeners, payloads, implants, operations, chains,
-    fetchDashboard, fetchFrameworks, fetchListeners, fetchPayloads, fetchImplants, fetchOperations, fetchChains: _chains,
+    fetchDashboard, fetchFrameworks, fetchListeners, fetchPayloads, fetchImplants, fetchOperations, fetchChains,
     createFramework, deleteFramework, connectFramework, createListener, createPayload, createOperation, createChain: _createChain, executeChain: _executeChain,
     killImplant, createTask: _createTask,
   } = useC2Store()

@@ -30,7 +30,7 @@ import {
   ChevronDown,
   KeyRound,
 } from 'lucide-react'
-import { useSetupStore } from '../../store/setupStore'
+import { useSetupStore, type LLMProvider } from '../../store/setupStore'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
@@ -399,7 +399,7 @@ function SetupWizard() {
                   <button
                     key={p.id}
                     onClick={() => {
-                      setLlmProvider(p.id as string)
+                      setLlmProvider(p.id as LLMProvider)
                       setKeyTestResult(null)
                       // Auto-fill default model
                       if (DEFAULT_MODELS[p.id] && !llmModel) {
