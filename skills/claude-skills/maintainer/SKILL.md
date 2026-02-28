@@ -17,7 +17,7 @@ at 02:00 UTC or on-demand via workflow dispatch.
 
 ## Scripts
 
-- `run-maintenance.sh` — Full scan cycle: any types, console.logs, deps, coverage → JSON metrics → POST to API
+- `run-maintenance.sh` — Full scan cycle producing JSON metrics
 - `safe-fix.sh` — Creates branch, applies safe fixes, verifies build, opens PR
 
 ## Triggers

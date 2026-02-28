@@ -1,8 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  HARBINGER COMMUNITY WELCOME
-#  Auto-greets first-time PR authors and labels new issues by category.
-#
-#  Docs: docs/github-actions/README.md
+#  Auto-greets first-time PR authors, labels new issues by category,
+#  and provides onboarding guidance.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Welcome New Contributors
@@ -22,20 +21,24 @@ jobs:
     name: Welcome PR Author
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check if first-time contributor
         id: check
         uses: actions/github-script@v7
         with:
           script: |
+            const author = context.payload.pull_request.user.login;
             const { data: prs } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'all',
               per_page: 100,
             });
-            const authorPRs = prs.filter(pr => pr.user.login === context.payload.pull_request.user.login);
-            core.setOutput('first_time', authorPRs.length <= 1 ? 'true' : 'false');
+            const authorPRs = prs.filter(pr => pr.user.login === author);
+            const isFirst = authorPRs.length <= 1;
+            core.setOutput('first_time', isFirst ? 'true' : 'false');
+            core.info(`Author ${author} has ${authorPRs.length} PRs, first_time=${isFirst}`);
 
       - name: Welcome first-time PR author
         if: steps.check.outputs.first_time == 'true'
@@ -43,78 +46,124 @@ jobs:
         with:
           script: |
             const author = context.payload.pull_request.user.login;
+            const prNumber = context.payload.pull_request.number;
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
+              issue_number: prNumber,
               body: `Welcome to Harbinger, @${author}!
 
             Thanks for your first contribution. Here's what happens next:
 
             1. **PR Health Check** runs automatically — your code health score will be posted as a comment
-            2. A maintainer will review your changes
-            3. Make sure \`pnpm build:ui\` and \`cd backend && go build -o /tmp/harbinger-backend ./cmd/\` pass locally before pushing
+            2. **CI** will build and test your changes
+            3. A maintainer will review your changes
+
+            **Before pushing, verify locally:**
+            \`\`\`bash
+            pnpm build:ui                                # Frontend
+            cd backend && go build -o /tmp/harbinger-backend ./cmd/  # Backend
+            \`\`\`
 
             **Quick checklist:**
             - [ ] Follows the Obsidian Command design system (dark theme, monospace, \`#f0c040\` accent)
             - [ ] No \`any\` types in new TypeScript code
             - [ ] No \`console.log\` in production paths
             - [ ] New pages have: API module + Zustand store + lazy route + Sidebar entry
+            - [ ] Routes registered at both \`/api/\` and \`/api/v1/\` prefixes
 
             See [CLAUDE.md](https://github.com/Haribinger/Harbinger/blob/main/CLAUDE.md) for full guidelines.`
             });
 
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: ['first-contribution'],
-            }).catch(async () => {
+            // Ensure label exists, then apply
+            const labelName = 'first-contribution';
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: labelName,
+              });
+            } catch {
               await github.rest.issues.createLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                name: 'first-contribution',
+                name: labelName,
                 color: 'f0c040',
                 description: 'First contribution from this author',
               });
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                labels: ['first-contribution'],
-              });
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: [labelName],
             });
 
   welcome-issue:
     name: Label New Issue
     if: github.event_name == 'issues'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Label new issues
+      - name: Auto-label and triage new issues
         uses: actions/github-script@v7
         with:
           script: |
             const title = context.payload.issue.title.toLowerCase();
+            const body = (context.payload.issue.body || '').toLowerCase();
+            const combined = `${title} ${body}`;
             const labels = ['triage'];
 
-            if (title.includes('bug') || title.includes('error') || title.includes('crash')) {
-              labels.push('bug');
-            } else if (title.includes('feature') || title.includes('add') || title.includes('request')) {
-              labels.push('enhancement');
-            } else if (title.includes('agent')) {
-              labels.push('agents');
-            } else if (title.includes('mcp') || title.includes('tool')) {
-              labels.push('mcp');
+            // Category detection from title + body
+            const rules = [
+              { keywords: ['bug', 'error', 'crash', 'broken', 'fail', 'exception'], label: 'bug' },
+              { keywords: ['feature', 'add', 'request', 'implement', 'support'], label: 'enhancement' },
+              { keywords: ['agent', 'pathfinder', 'breach', 'phantom', 'specter', 'cipher', 'scribe'], label: 'agents' },
+              { keywords: ['mcp', 'plugin', 'hexstrike', 'pentagi', 'redteam'], label: 'mcp' },
+              { keywords: ['docker', 'container', 'compose'], label: 'docker' },
+              { keywords: ['workflow', 'n8n', 'stitch', 'automation'], label: 'workflows' },
+              { keywords: ['ui', 'frontend', 'page', 'component', 'design'], label: 'frontend' },
+              { keywords: ['api', 'backend', 'endpoint', 'handler', 'route'], label: 'backend' },
+              { keywords: ['security', 'vuln', 'cve', 'exploit', 'pentest'], label: 'security' },
+              { keywords: ['docs', 'documentation', 'readme', 'guide'], label: 'documentation' },
+            ];
+
+            for (const rule of rules) {
+              if (rule.keywords.some(kw => combined.includes(kw))) {
+                labels.push(rule.label);
+              }
             }
+
+            // Ensure all labels exist
+            const colors = {
+              triage: '666666',
+              bug: 'ef4444',
+              enhancement: '22c55e',
+              agents: '00d4ff',
+              mcp: 'a78bfa',
+              docker: '2563eb',
+              workflows: 'f97316',
+              frontend: 'ec4899',
+              backend: '8b5cf6',
+              security: 'dc2626',
+              documentation: '6b7280',
+            };
 
             for (const label of labels) {
               try {
-                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                });
               } catch {
-                const colors = { triage: '666666', bug: 'ef4444', enhancement: '22c55e', agents: '00d4ff', mcp: 'a78bfa' };
                 await github.rest.issues.createLabel({
-                  owner: context.repo.owner, repo: context.repo.repo,
-                  name: label, color: colors[label] || '666666',
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                  color: colors[label] || '666666',
                 });
               }
             }
@@ -125,3 +174,5 @@ jobs:
               issue_number: context.payload.issue.number,
               labels,
             });
+
+            core.info(`Applied labels: ${labels.join(', ')}`);

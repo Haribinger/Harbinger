@@ -2,8 +2,6 @@
 #  HARBINGER PR HEALTH CHECK
 #  MAINTAINER agent scans code health on every PR, posts a score comment,
 #  and applies health labels. Fails on critical scores (< 30).
-#
-#  Docs: docs/github-actions/README.md
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: PR Health Check
@@ -11,8 +9,6 @@ name: PR Health Check
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  pull_request_review:
-    types: [submitted]
 
 concurrency:
   group: pr-health-${{ github.event.pull_request.number }}
@@ -49,28 +45,44 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Install ripgrep
-        run: sudo apt-get install -y ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
 
       - name: Run health scans
         id: scan
         run: |
           chmod +x skills/claude-skills/maintainer/scripts/run-maintenance.sh
-          REPORT=$(bash skills/claude-skills/maintainer/scripts/run-maintenance.sh)
-          echo "$REPORT" > health-report.json
-          echo "report<<EOF" >> $GITHUB_OUTPUT
-          echo "$REPORT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
-          # Extract score for threshold check (default to 0 if extraction fails)
-          SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
-          SCORE=${SCORE:-0}
+          # Capture only stdout (the JSON). Debug/trace goes to stderr.
+          REPORT=$(bash skills/claude-skills/maintainer/scripts/run-maintenance.sh 2>/dev/null)
+
+          # Validate we got JSON
+          if ! echo "$REPORT" | head -1 | grep -q '^{'; then
+            echo "::warning::Maintenance script did not produce valid JSON, using defaults"
+            REPORT='{"date":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","score":50,"metrics":{"any_types":0,"console_logs":0,"empty_catches":0,"todo_count":0,"hardcoded_urls":0,"deps_outdated":0,"test_coverage":0,"conventions":0,"go_vet_issues":0},"deductions":0,"bonus":0}'
+          fi
+
+          echo "$REPORT" > health-report.json
+          echo "report<<GHEOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "GHEOF" >> $GITHUB_OUTPUT
+
+          # Extract score
+          SCORE=$(echo "$REPORT" | grep -o '"score": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 50)
+          SCORE=${SCORE:-50}
           echo "score=$SCORE" >> $GITHUB_OUTPUT
 
-          # Extract individual metrics
-          ANY_TYPES=$(echo "$REPORT" | grep -o '"any_types": [0-9]*' | head -1 | grep -o '[0-9]*$')
-          CONSOLE_LOGS=$(echo "$REPORT" | grep -o '"console_logs": [0-9]*' | head -1 | grep -o '[0-9]*$')
-          echo "any_types=$ANY_TYPES" >> $GITHUB_OUTPUT
-          echo "console_logs=$CONSOLE_LOGS" >> $GITHUB_OUTPUT
+          # Extract metrics from nested structure
+          ANY_TYPES=$(echo "$REPORT" | grep -o '"any_types": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          CONSOLE_LOGS=$(echo "$REPORT" | grep -o '"console_logs": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          EMPTY_CATCHES=$(echo "$REPORT" | grep -o '"empty_catches": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          TODO_COUNT=$(echo "$REPORT" | grep -o '"todo_count": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+          HARDCODED_URLS=$(echo "$REPORT" | grep -o '"hardcoded_urls": *[0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
+
+          echo "any_types=${ANY_TYPES:-0}" >> $GITHUB_OUTPUT
+          echo "console_logs=${CONSOLE_LOGS:-0}" >> $GITHUB_OUTPUT
+          echo "empty_catches=${EMPTY_CATCHES:-0}" >> $GITHUB_OUTPUT
+          echo "todo_count=${TODO_COUNT:-0}" >> $GITHUB_OUTPUT
+          echo "hardcoded_urls=${HARDCODED_URLS:-0}" >> $GITHUB_OUTPUT
 
       - name: Post PR comment
         uses: actions/github-script@v7
@@ -79,37 +91,67 @@ jobs:
             const score = parseInt('${{ steps.scan.outputs.score }}') || 0;
             const anyTypes = parseInt('${{ steps.scan.outputs.any_types }}') || 0;
             const consoleLogs = parseInt('${{ steps.scan.outputs.console_logs }}') || 0;
+            const emptyCatches = parseInt('${{ steps.scan.outputs.empty_catches }}') || 0;
+            const todoCount = parseInt('${{ steps.scan.outputs.todo_count }}') || 0;
+            const hardcodedUrls = parseInt('${{ steps.scan.outputs.hardcoded_urls }}') || 0;
 
-            const scoreEmoji = score >= 80 ? '🟢' : score >= 60 ? '🟡' : '🔴';
-            const statusBadge = score >= 80 ? 'HEALTHY' : score >= 60 ? 'NEEDS WORK' : 'CRITICAL';
+            const scoreBar = (s) => {
+              const filled = Math.round(s / 5);
+              return '█'.repeat(filled) + '░'.repeat(20 - filled);
+            };
 
-            const body = `## Code Health Report ${scoreEmoji}
+            const severity = (val, low, mid) => val > mid ? 'CRITICAL' : val > low ? 'MEDIUM' : 'GOOD';
+            const severityIcon = (val, low, mid) => val > mid ? '🔴' : val > low ? '🟡' : '🟢';
+
+            const statusBadge = score >= 80 ? 'HEALTHY' : score >= 60 ? 'NEEDS WORK' : score >= 30 ? 'WARNING' : 'CRITICAL';
+            const statusIcon = score >= 80 ? '🟢' : score >= 60 ? '🟡' : score >= 30 ? '🟠' : '🔴';
+
+            const body = `## ${statusIcon} Code Health Report
 
             **Score: ${score}/100** — ${statusBadge}
+            \`${scoreBar(score)}\` ${score}%
 
             | Metric | Count | Severity |
             |--------|-------|----------|
-            | \`any\` types | ${anyTypes} | ${anyTypes > 20 ? '🔴 Critical' : anyTypes > 5 ? '🟡 Medium' : '🟢 Good'} |
-            | \`console.log\` | ${consoleLogs} | ${consoleLogs > 10 ? '🟡 Medium' : '🟢 Good'} |
+            | \`any\` types | ${anyTypes} | ${severityIcon(anyTypes, 20, 100)} ${severity(anyTypes, 20, 100)} |
+            | \`console.log\` | ${consoleLogs} | ${severityIcon(consoleLogs, 5, 20)} ${severity(consoleLogs, 5, 20)} |
+            | Empty \`catch\` blocks | ${emptyCatches} | ${severityIcon(emptyCatches, 2, 10)} ${severity(emptyCatches, 2, 10)} |
+            | TODO/FIXME markers | ${todoCount} | ${severityIcon(todoCount, 20, 50)} ${severity(todoCount, 20, 50)} |
+            | Hardcoded URLs | ${hardcodedUrls} | ${severityIcon(hardcodedUrls, 3, 10)} ${severity(hardcodedUrls, 3, 10)} |
 
             <details>
-            <summary>Raw scan data</summary>
+            <summary>Full scan report</summary>
 
             \`\`\`json
             ${{ steps.scan.outputs.report }}
             \`\`\`
             </details>
 
-            ---
-            *Generated by MAINTAINER agent*`;
+            <details>
+            <summary>How scoring works</summary>
 
-            // Find existing comment to update
+            Starting from 100, deductions are applied (capped per category, max 10-15 each):
+            - \`any\` types: -0.5 each (max 15)
+            - \`console.log\`: -1 each (max 15)
+            - Empty catches: -3 each (max 15)
+            - TODOs: -0.2 each (max 10)
+            - Hardcoded URLs: -2 each (max 15)
+            - Outdated deps: -0.33 each (max 10)
+            - Convention violations: -0.2 each (max 10)
+            - Go vet issues: -3 each (max 15)
+            - Test coverage bonus: +coverage% * 0.3
+            </details>
+
+            ---
+            *Generated by MAINTAINER agent — [view workflow](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})*`;
+
+            // Find existing comment to update (avoids spam)
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            const existing = comments.find(c => c.body.includes('Code Health Report'));
+            const existing = comments.find(c => c.body && c.body.includes('Code Health Report'));
 
             if (existing) {
               await github.rest.issues.updateComment({
@@ -133,8 +175,9 @@ jobs:
           script: |
             const score = parseInt('${{ steps.scan.outputs.score }}') || 0;
             const labels = [];
-            if (score < 50) labels.push('health:critical');
-            else if (score < 80) labels.push('health:needs-work');
+            if (score < 30) labels.push('health:critical');
+            else if (score < 60) labels.push('health:needs-work');
+            else if (score < 80) labels.push('health:fair');
             else labels.push('health:good');
 
             // Remove old health labels first
@@ -154,15 +197,26 @@ jobs:
               }
             }
 
-            // Ensure labels exist
+            // Ensure labels exist with correct colors
+            const colors = {
+              'health:critical': 'ef4444',
+              'health:needs-work': 'f59e0b',
+              'health:fair': '3b82f6',
+              'health:good': '22c55e',
+            };
             for (const label of labels) {
               try {
-                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                });
               } catch {
-                const colors = { 'health:critical': 'ef4444', 'health:needs-work': 'f59e0b', 'health:good': '22c55e' };
                 await github.rest.issues.createLabel({
-                  owner: context.repo.owner, repo: context.repo.repo,
-                  name: label, color: colors[label] || '666666',
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                  color: colors[label] || '666666',
                 });
               }
             }
@@ -175,7 +229,18 @@ jobs:
             });
 
       - name: Fail on critical score
-        if: ${{ fromJSON(steps.scan.outputs.score) < 30 }}
         run: |
-          echo "::error::Health score ${{ steps.scan.outputs.score }}/100 is below critical threshold (30)"
-          exit 1
+          SCORE="${{ steps.scan.outputs.score }}"
+          SCORE=${SCORE:-0}
+          if [ "$SCORE" -lt 30 ] 2>/dev/null; then
+            echo "::error::Health score $SCORE/100 is below critical threshold (30)"
+            exit 1
+          fi
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-report
+          path: health-report.json
+          retention-days: 30

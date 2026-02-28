@@ -60,6 +60,11 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# ── CI/CD Reports ───────────────────────────────────────────────────────────
+maintenance-report.json
+health-report.json
+script-output.log
+
 # ── Temp ──────────────────────────────────────────────────────────────────────
 tmp/
 temp/
