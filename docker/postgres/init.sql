@@ -376,14 +376,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id)
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 
 -- ============================================================================
--- DEFAULT ADMIN USER (password: change-me-immediately)
+-- ADMIN USER SETUP
 -- ============================================================================
-INSERT INTO users (username, email, password_hash, role) VALUES (
-    'admin',
-    'admin@harbinger.local',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lfmcFrjxNgMhiFzxC',
-    'admin'
-) ON CONFLICT DO NOTHING;
+-- No hardcoded admin credentials. The first admin account is created via:
+--   1. The setup wizard (POST /api/setup/admin) on first launch
+--   2. Or by running: docker compose exec backend /app/harbinger-api --create-admin
+-- This prevents known password hashes from being committed to source control.
 
 -- Done
-SELECT 'Harbinger database initialized successfully' AS status;
+SELECT 'Harbinger database initialized — run setup wizard to create admin account' AS status;

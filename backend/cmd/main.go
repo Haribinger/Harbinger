@@ -239,6 +239,8 @@ type Config struct {
 	MCPUIURL          string
 	BrowserURL        string
 	DockerSocket      string
+	DockerHost        string
+	DockerNetwork     string
 	GitHubClientID string
 	GitHubSecret    string
 	AppURL          string
@@ -271,6 +273,8 @@ func loadConfig() Config {
 		MCPUIURL:           getEnv("MCP_UI_URL", ""),
 		BrowserURL:         getEnv("BROWSER_SERVICE_URL", ""),
 		DockerSocket:       getEnv("DOCKER_SOCKET", "/var/run/docker.sock"),
+		DockerHost:         getEnv("DOCKER_HOST", ""),
+		DockerNetwork:      getEnv("DOCKER_NETWORK", "harbinger_harbinger-network"),
 		GitHubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		AppURL:             appURL,
@@ -1633,11 +1637,11 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Check Docker socket
 	dockerStatus := "error"
-	dockerFix := "Docker socket not found or inaccessible"
+	dockerFix := "Docker not reachable"
 	if dockerAvailable() {
 		dockerStatus = "connected"
 	} else {
-		dockerFix = "Mount /var/run/docker.sock or set DOCKER_SOCKET env var"
+		dockerFix = "Set DOCKER_HOST (e.g. tcp://docker-proxy:2375) or mount Docker socket"
 	}
 	checks = append(checks, map[string]string{"id": "docker", "name": "Docker", "status": dockerStatus, "fix": dockerFix})
 
@@ -2350,7 +2354,7 @@ func handleDockerContainers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"ok":     false,
 			"reason": "not_configured",
-			"fix":    "Mount /var/run/docker.sock into the backend container",
+			"fix":    "Set DOCKER_HOST or mount Docker socket into the backend container",
 		})
 		return
 	}
@@ -2669,13 +2673,23 @@ func probeService(serviceURL string) (string, int64) {
 }
 
 func dockerAPIRequest(method, path string, body io.Reader) (*http.Response, error) {
-	host := "http://docker.sock"
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return net.Dial("unix", cfg.DockerSocket)
+	var host string
+	var client *http.Client
+
+	if cfg.DockerHost != "" {
+		// TCP mode — connect to docker-socket-proxy or remote Docker host
+		host = cfg.DockerHost
+		client = &http.Client{Timeout: 30 * time.Second}
+	} else {
+		// Unix socket mode — direct Docker socket access
+		host = "http://docker.sock"
+		client = &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return net.Dial("unix", cfg.DockerSocket)
+				},
 			},
-		},
+		}
 	}
 
 	req, err := http.NewRequest(method, host+path, body)
@@ -2689,12 +2703,14 @@ func dockerAPIRequest(method, path string, body io.Reader) (*http.Response, erro
 }
 
 func dockerAvailable() bool {
-	// Check if the docker socket exists
-	if _, err := os.Stat(cfg.DockerSocket); os.IsNotExist(err) {
-		return false
+	if cfg.DockerHost == "" {
+		// Socket mode — check if the socket file exists
+		if _, err := os.Stat(cfg.DockerSocket); os.IsNotExist(err) {
+			return false
+		}
 	}
 
-	// Try to make a simple request to the Docker API
+	// Probe the Docker API (works for both TCP and socket modes)
 	resp, err := dockerAPIRequest("GET", "/v1.41/version", nil)
 	if err != nil {
 		return false

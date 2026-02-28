@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Check,
@@ -23,6 +23,13 @@ import {
   ExternalLink,
   Hash,
   Send,
+  MonitorCheck,
+  Cpu,
+  HardDrive,
+  Wifi,
+  WifiOff,
+  ChevronDown,
+  KeyRound,
 } from 'lucide-react'
 import { useSetupStore } from '../../store/setupStore'
 import { useNavigate } from 'react-router-dom'
@@ -35,6 +42,7 @@ const C = {
   accent: '#f0c040',
   danger: '#ef4444',
   success: '#22c55e',
+  info: '#3b82f6',
   text: '#ffffff',
   textMuted: '#9ca3af',
 }
@@ -57,24 +65,39 @@ const PROVIDERS = [
   { id: 'gemini', name: 'Google Gemini', icon: Database, color: '#3b82f6', desc: 'Gemini 2.0 Flash, Pro' },
   { id: 'mistral', name: 'Mistral AI', icon: Shield, color: '#ef4444', desc: 'Mistral Large, Codestral' },
   { id: 'google', name: 'Google AI Studio', icon: Globe, color: '#06b6d4', desc: 'Gemini via AI Studio API' },
+  { id: 'lmstudio', name: 'LM Studio', icon: MonitorCheck, color: '#8b5cf6', desc: 'Local model server — OpenAI-compatible' },
+  { id: 'gpt4all', name: 'GPT4All', icon: Cpu, color: '#10b981', desc: 'Offline desktop AI — no internet needed' },
   { id: 'custom', name: 'Custom Endpoint', icon: Globe, color: '#6b7280', desc: 'Any OpenAI-compatible API' },
 ] as const
+
+const DEFAULT_MODELS: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  groq: 'llama-3.3-70b-versatile',
+  gemini: 'gemini-2.0-flash',
+  mistral: 'mistral-large-latest',
+  google: 'gemini-2.0-flash',
+}
 
 function SetupWizard() {
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isTestingOllama, setIsTestingOllama] = useState(false)
+  const [isTestingKey, setIsTestingKey] = useState(false)
+  const [keyTestResult, setKeyTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [countdown, setCountdown] = useState(5)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const {
     currentStep, totalSteps, isComplete,
-    nextStep, prevStep, submitSetup, isStepValid, getStepError, testOllama,
+    nextStep, prevStep, submitSetup, isStepValid, getStepError, testOllama, testApiKey,
+    detectServices, serviceStatus, detecting,
     // App config
     appName, appUrl, setAppName, setAppUrl,
     // AI
-    llmProvider, llmApiKey, llmModel, ollamaUrl, ollamaStatus,
+    llmProvider, llmApiKey, llmModel, ollamaUrl, ollamaStatus, ollamaModels,
     setLlmProvider, setLlmApiKey, setLlmModel, setOllamaUrl,
     // GitHub
     githubClientId, githubClientSecret, githubPat, githubOwner, githubRepo,
@@ -87,7 +110,25 @@ function SetupWizard() {
     // Admin
     adminEmail, adminPassword, adminPasswordConfirm,
     setAdminEmail, setAdminPassword, setAdminPasswordConfirm,
+    isEmailValid,
   } = useSetupStore()
+
+  // Auto-detect services on welcome step mount
+  useEffect(() => {
+    if (currentStep === 0) {
+      detectServices()
+    }
+  }, [currentStep, detectServices])
+
+  // Auto-fill app URL from current location
+  useEffect(() => {
+    if (!appUrl && typeof window !== 'undefined') {
+      const origin = window.location.origin
+      if (origin && origin !== 'http://localhost:3000') {
+        setAppUrl(origin)
+      }
+    }
+  }, [appUrl, setAppUrl])
 
   // Auto-redirect after setup completion
   useEffect(() => {
@@ -97,14 +138,40 @@ function SetupWizard() {
     return () => clearTimeout(timer)
   }, [isComplete, countdown, navigate])
 
-  const handleNext = () => {
+  // Keyboard: Enter to advance, Escape to go back
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't hijack Enter when typing in inputs
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          handleNext()
+        }
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (currentStep === totalSteps - 1) {
+          handleSubmit()
+        } else {
+          handleNext()
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
+
+  const handleNext = useCallback(() => {
     if (!isStepValid()) {
       setSubmitError(getStepError())
       return
     }
     setSubmitError(null)
+    setKeyTestResult(null)
     nextStep()
-  }
+  }, [isStepValid, getStepError, nextStep])
 
   const handleSubmit = async () => {
     setSubmitError(null)
@@ -122,12 +189,35 @@ function SetupWizard() {
     setIsTestingOllama(false)
   }
 
+  const handleTestApiKey = async () => {
+    setIsTestingKey(true)
+    const result = await testApiKey(llmProvider, llmApiKey)
+    setKeyTestResult(result)
+    setIsTestingKey(false)
+  }
+
   const copyRedirectUrl = () => {
-    const url = appUrl || 'http://localhost:3000'
+    const url = appUrl || window.location.origin
     navigator.clipboard.writeText(`${url}/api/auth/github/callback`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  // Service status indicator component
+  const ServiceDot = ({ status }: { status: 'unknown' | 'online' | 'offline' }) => (
+    <div className="flex items-center gap-1.5">
+      <div
+        className="w-2 h-2 rounded-full"
+        style={{
+          background: status === 'online' ? C.success : status === 'offline' ? C.danger : C.textMuted,
+          boxShadow: status === 'online' ? `0 0 6px ${C.success}40` : undefined,
+        }}
+      />
+      <span className="text-[10px] font-mono uppercase" style={{ color: status === 'online' ? C.success : status === 'offline' ? '#ef444490' : C.textMuted }}>
+        {status}
+      </span>
+    </div>
+  )
 
   if (isComplete) {
     return (
@@ -168,16 +258,20 @@ function SetupWizard() {
           <div className="flex items-center justify-between mb-4">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center flex-1">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-mono flex-shrink-0"
+                <button
+                  onClick={() => index < currentStep && useSetupStore.getState().setStep(index)}
+                  disabled={index > currentStep}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-mono flex-shrink-0 transition-all"
                   style={{
                     background: index < currentStep ? C.success : index === currentStep ? C.accent : C.surfaceLight,
                     color: index <= currentStep ? C.bg : C.textMuted,
                     border: index === currentStep ? `2px solid ${C.accent}` : '1px solid transparent',
+                    cursor: index < currentStep ? 'pointer' : index === currentStep ? 'default' : 'not-allowed',
+                    opacity: index > currentStep ? 0.5 : 1,
                   }}
                 >
                   {index < currentStep ? <Check className="w-4 h-4" /> : <step.icon className="w-4 h-4" />}
-                </div>
+                </button>
                 {index < steps.length - 1 && (
                   <div className="flex-1 h-0.5 mx-1.5" style={{ background: index < currentStep ? C.success : C.border }} />
                 )}
@@ -192,6 +286,7 @@ function SetupWizard() {
 
         {/* Content */}
         <motion.div
+          ref={contentRef}
           key={currentStep}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -220,9 +315,48 @@ function SetupWizard() {
               <p className="mb-6 max-w-lg mx-auto text-sm" style={{ color: C.textMuted }}>
                 Deploy your own AI-powered security team. Runs locally, connects anywhere.
               </p>
+
+              {/* System status panel */}
+              <div className="mb-6 p-4 rounded-xl text-left" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-mono font-medium" style={{ color: C.text }}>SYSTEM STATUS</span>
+                  <button
+                    onClick={() => detectServices()}
+                    disabled={detecting}
+                    className="text-xs flex items-center gap-1 px-2 py-1 rounded"
+                    style={{ color: C.textMuted, background: C.bg }}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${detecting ? 'animate-spin' : ''}`} />
+                    {detecting ? 'Scanning...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { label: 'Backend API', status: serviceStatus.backend, icon: HardDrive },
+                    { label: 'Docker', status: serviceStatus.docker, icon: Container },
+                    { label: 'Ollama', status: serviceStatus.ollama, icon: Cpu },
+                    { label: 'PostgreSQL', status: serviceStatus.postgres, icon: Database },
+                    { label: 'Redis', status: serviceStatus.redis, icon: Zap },
+                  ].map((svc) => (
+                    <div key={svc.label} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: C.bg }}>
+                      <svc.icon className="w-3.5 h-3.5" style={{ color: svc.status === 'online' ? C.success : C.textMuted }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-mono truncate" style={{ color: C.textMuted }}>{svc.label}</p>
+                      </div>
+                      <ServiceDot status={svc.status} />
+                    </div>
+                  ))}
+                </div>
+                {serviceStatus.backend === 'offline' && (
+                  <p className="text-[10px] mt-2 font-mono" style={{ color: C.textMuted }}>
+                    Backend offline — setup will submit when it comes online. Start with: <code className="px-1 rounded" style={{ background: C.bg, color: C.accent }}>docker compose up -d</code>
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3 max-w-md mx-auto text-left text-sm">
                 {[
-                  { icon: Bot, label: 'Any AI — Ollama, Claude, GPT, Groq, Gemini' },
+                  { icon: Bot, label: 'Any AI — Ollama, Claude, GPT, Groq, Gemini, Mistral' },
                   { icon: Github, label: 'GitHub OAuth, Device Flow, or PAT' },
                   { icon: MessageSquare, label: 'Discord + Telegram integration' },
                   { icon: Container, label: 'Docker agents with per-agent containers' },
@@ -233,14 +367,25 @@ function SetupWizard() {
                   </div>
                 ))}
               </div>
+
+              <p className="text-[10px] mt-4 font-mono" style={{ color: `${C.textMuted}80` }}>
+                Press Enter or click Continue to begin setup. Your progress is auto-saved.
+              </p>
             </div>
           )}
 
           {/* Step 1: App Configuration */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <InputField label="Instance Name" value={appName} onChange={setAppName} placeholder="Harbinger" description="Displayed in the UI header" />
-              <InputField label="App URL" value={appUrl} onChange={setAppUrl} placeholder="http://localhost:3000" description="Leave blank for local-only access" optional />
+              <InputField label="Instance Name" value={appName} onChange={setAppName} placeholder="Harbinger" description="Displayed in the UI header and browser tab" />
+              <InputField
+                label="App URL"
+                value={appUrl}
+                onChange={setAppUrl}
+                placeholder={typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}
+                description="Used for OAuth callbacks and external links. Leave blank for local-only access."
+                optional
+              />
             </div>
           )}
 
@@ -250,11 +395,18 @@ function SetupWizard() {
               <p className="text-sm mb-2" style={{ color: C.textMuted }}>
                 Choose which AI powers your agents. Ollama runs locally — no API key needed.
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 {PROVIDERS.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => setLlmProvider(p.id as any)}
+                    onClick={() => {
+                      setLlmProvider(p.id as any)
+                      setKeyTestResult(null)
+                      // Auto-fill default model
+                      if (DEFAULT_MODELS[p.id] && !llmModel) {
+                        setLlmModel(DEFAULT_MODELS[p.id])
+                      }
+                    }}
                     className="relative p-3 rounded-xl text-left transition-all"
                     style={{
                       background: llmProvider === p.id ? `${p.color}15` : C.surfaceLight,
@@ -265,9 +417,26 @@ function SetupWizard() {
                       <span className="absolute -top-2 -right-2 text-[9px] px-1.5 py-0.5 rounded-full font-mono" style={{ background: C.accent, color: C.bg }}>LOCAL</span>
                     )}
                     <p.icon className="w-4 h-4 mb-1" style={{ color: p.color }} />
-                    <p className="text-xs font-medium" style={{ color: C.text }}>{p.name}</p>
+                    <p className="text-[11px] font-medium leading-tight" style={{ color: C.text }}>{p.name}</p>
                   </button>
                 ))}
+              </div>
+
+              {/* Provider description */}
+              <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
+                {(() => {
+                  const p = PROVIDERS.find(p => p.id === llmProvider)
+                  if (!p) return null
+                  return (
+                    <>
+                      <p.icon className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: p.color }} />
+                      <div>
+                        <p className="text-xs font-medium" style={{ color: C.text }}>{p.name}</p>
+                        <p className="text-xs" style={{ color: C.textMuted }}>{p.desc}</p>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
 
               {/* Ollama config */}
@@ -289,8 +458,10 @@ function SetupWizard() {
                     <button
                       onClick={handleTestOllama}
                       disabled={isTestingOllama}
-                      className="px-4 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50 transition-colors"
                       style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = C.accent)}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = C.border)}
                     >
                       <RefreshCw className={`w-4 h-4 ${isTestingOllama ? 'animate-spin' : ''}`} />
                       Test
@@ -298,10 +469,31 @@ function SetupWizard() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ background: ollamaStatus === 'connected' ? C.success : ollamaStatus === 'error' ? C.danger : C.textMuted }} />
-                    <span className="text-xs" style={{ color: ollamaStatus === 'connected' ? C.success : C.textMuted }}>
-                      {ollamaStatus === 'connected' ? 'Connected to Ollama' : ollamaStatus === 'error' ? 'Cannot reach Ollama — is it running?' : 'Click Test to verify connection'}
+                    <span className="text-xs" style={{ color: ollamaStatus === 'connected' ? C.success : ollamaStatus === 'error' ? C.danger : C.textMuted }}>
+                      {ollamaStatus === 'connected' ? `Connected — ${ollamaModels.length} model${ollamaModels.length !== 1 ? 's' : ''} available` : ollamaStatus === 'error' ? 'Cannot reach Ollama — is it running?' : 'Click Test to verify connection'}
                     </span>
                   </div>
+
+                  {/* Model dropdown when connected */}
+                  {ollamaStatus === 'connected' && ollamaModels.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: C.text }}>Model</label>
+                      <div className="relative">
+                        <select
+                          value={llmModel}
+                          onChange={(e) => setLlmModel(e.target.value)}
+                          className="w-full rounded-lg px-4 py-2.5 text-sm font-mono appearance-none focus:outline-none"
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                        >
+                          {ollamaModels.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: C.textMuted }} />
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-xs" style={{ color: C.textMuted }}>
                     Install Ollama: <code className="px-1 py-0.5 rounded" style={{ background: C.bg }}>curl -fsSL https://ollama.com/install.sh | sh</code>
                     <br />Then pull a model: <code className="px-1 py-0.5 rounded" style={{ background: C.bg }}>ollama pull llama3.2</code>
@@ -309,27 +501,73 @@ function SetupWizard() {
                 </div>
               )}
 
-              {/* API key for cloud providers */}
-              {llmProvider !== 'ollama' && (
-                <div className="space-y-4">
+              {/* LM Studio / GPT4All config */}
+              {(llmProvider === 'lmstudio' || llmProvider === 'gpt4all') && (
+                <div className="space-y-4 p-4 rounded-xl" style={{ background: C.surfaceLight, border: `1px solid ${C.border}` }}>
                   <InputField
-                    label="API Key"
-                    value={llmApiKey}
-                    onChange={setLlmApiKey}
-                    placeholder={
-                      llmProvider === 'anthropic' ? 'sk-ant-api03-...' :
-                      llmProvider === 'openai' ? 'sk-...' :
-                      llmProvider === 'groq' ? 'gsk_...' :
-                      'Enter API key...'
-                    }
-                    type="password"
-                    optional
+                    label="Server URL"
+                    value={ollamaUrl}
+                    onChange={setOllamaUrl}
+                    placeholder={llmProvider === 'lmstudio' ? 'http://localhost:1234/v1' : 'http://localhost:4891/v1'}
+                    description={`${llmProvider === 'lmstudio' ? 'LM Studio' : 'GPT4All'} exposes an OpenAI-compatible API. Start the local server first.`}
                   />
                   <InputField
                     label="Model"
                     value={llmModel}
                     onChange={setLlmModel}
-                    placeholder="Leave blank for default"
+                    placeholder="Enter model name"
+                    optional
+                  />
+                </div>
+              )}
+
+              {/* API key for cloud providers */}
+              {!['ollama', 'lmstudio', 'gpt4all'].includes(llmProvider) && (
+                <div className="space-y-4">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <InputField
+                        label="API Key"
+                        value={llmApiKey}
+                        onChange={(v) => { setLlmApiKey(v); setKeyTestResult(null) }}
+                        placeholder={
+                          llmProvider === 'anthropic' ? 'sk-ant-api03-...' :
+                          llmProvider === 'openai' ? 'sk-...' :
+                          llmProvider === 'groq' ? 'gsk_...' :
+                          'Enter API key...'
+                        }
+                        type="password"
+                        optional
+                      />
+                    </div>
+                    {['anthropic', 'openai', 'groq'].includes(llmProvider) && llmApiKey && (
+                      <button
+                        onClick={handleTestApiKey}
+                        disabled={isTestingKey}
+                        className="px-4 py-2.5 rounded-lg text-xs flex items-center gap-2 disabled:opacity-50 font-mono mb-0.5 transition-colors"
+                        style={{
+                          background: C.bg,
+                          border: `1px solid ${keyTestResult?.ok ? C.success : C.border}`,
+                          color: keyTestResult?.ok ? C.success : C.text,
+                        }}
+                      >
+                        {isTestingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                        {isTestingKey ? 'Testing...' : keyTestResult?.ok ? 'Valid' : 'Test Key'}
+                      </button>
+                    )}
+                  </div>
+                  {keyTestResult && !keyTestResult.ok && (
+                    <div className="flex items-center gap-2 text-xs" style={{ color: C.danger }}>
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {keyTestResult.error}
+                    </div>
+                  )}
+                  <InputField
+                    label="Model"
+                    value={llmModel}
+                    onChange={setLlmModel}
+                    placeholder={DEFAULT_MODELS[llmProvider] || 'Leave blank for default'}
+                    description={DEFAULT_MODELS[llmProvider] ? `Default: ${DEFAULT_MODELS[llmProvider]}` : undefined}
                     optional
                   />
                 </div>
@@ -366,11 +604,11 @@ function SetupWizard() {
                   <div className="flex gap-2">
                     <input
                       readOnly
-                      value={appUrl ? `${appUrl}/api/auth/github/callback` : 'http://localhost:3000/api/auth/github/callback'}
+                      value={appUrl ? `${appUrl}/api/auth/github/callback` : `${window.location.origin}/api/auth/github/callback`}
                       className="flex-1 rounded-lg px-3 py-2 text-xs font-mono cursor-not-allowed"
                       style={{ background: C.bg, border: `1px solid ${C.border}`, color: `${C.text}80` }}
                     />
-                    <button onClick={copyRedirectUrl} className="px-3 py-2 rounded-lg" style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+                    <button onClick={copyRedirectUrl} className="px-3 py-2 rounded-lg transition-colors" style={{ background: C.bg, border: `1px solid ${C.border}` }}>
                       {copied ? <Check className="w-4 h-4" style={{ color: C.success }} /> : <Copy className="w-4 h-4" style={{ color: C.textMuted }} />}
                     </button>
                   </div>
@@ -449,9 +687,27 @@ function SetupWizard() {
           {/* Step 5: Admin Account */}
           {currentStep === 5 && (
             <div className="space-y-6">
-              <InputField label="Admin Email" value={adminEmail} onChange={setAdminEmail} placeholder="admin@example.com" type="email" />
+              <div>
+                <InputField label="Admin Email" value={adminEmail} onChange={setAdminEmail} placeholder="admin@example.com" type="email" />
+                {adminEmail && !isEmailValid(adminEmail) && (
+                  <p className="text-[10px] mt-1 font-mono" style={{ color: C.danger }}>Enter a valid email address</p>
+                )}
+              </div>
               <InputField label="Password" value={adminPassword} onChange={setAdminPassword} placeholder="••••••••" type="password" description="Minimum 8 characters" />
+              {adminPassword && adminPassword.length < 8 && (
+                <div className="flex items-center gap-1.5" style={{ marginTop: '-12px' }}>
+                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: C.border }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (adminPassword.length / 8) * 100)}%`, background: adminPassword.length < 4 ? C.danger : C.accent }} />
+                  </div>
+                  <span className="text-[10px] font-mono" style={{ color: adminPassword.length < 4 ? C.danger : C.accent }}>
+                    {8 - adminPassword.length} more
+                  </span>
+                </div>
+              )}
               <InputField label="Confirm Password" value={adminPasswordConfirm} onChange={setAdminPasswordConfirm} placeholder="••••••••" type="password" />
+              {adminPasswordConfirm && adminPassword !== adminPasswordConfirm && (
+                <p className="text-[10px] font-mono" style={{ color: C.danger, marginTop: '-12px' }}>Passwords do not match</p>
+              )}
             </div>
           )}
 
@@ -469,15 +725,26 @@ function SetupWizard() {
               )}
               <div className="space-y-2 text-sm">
                 <ReviewRow label="Instance" value={appName} />
-                <ReviewRow label="URL" value={appUrl || 'http://localhost:3000'} />
+                <ReviewRow label="URL" value={appUrl || window.location.origin} />
                 <ReviewRow label="AI Provider" value={PROVIDERS.find(p => p.id === llmProvider)?.name || llmProvider} status="configured" />
+                {llmModel && <ReviewRow label="Model" value={llmModel} />}
                 {llmProvider === 'ollama' && <ReviewRow label="Ollama" value={ollamaUrl} status={ollamaStatus === 'connected' ? 'configured' : 'pending'} />}
+                {(llmProvider === 'lmstudio' || llmProvider === 'gpt4all') && <ReviewRow label="Server" value={ollamaUrl} />}
                 <ReviewRow label="GitHub OAuth" value={githubClientId ? 'Configured' : 'Skipped'} status={githubClientId ? 'configured' : 'skipped'} />
                 <ReviewRow label="GitHub PAT" value={githubPat ? 'Set' : 'Not set'} status={githubPat ? 'configured' : 'skipped'} />
                 <ReviewRow label="Discord" value={discordBotToken ? 'Connected' : 'Not configured'} status={discordBotToken ? 'configured' : 'skipped'} />
                 <ReviewRow label="Telegram" value={telegramBotToken ? 'Connected' : 'Not configured'} status={telegramBotToken ? 'configured' : 'skipped'} />
                 <ReviewRow label="Admin" value={adminEmail} status="configured" />
               </div>
+
+              {serviceStatus.backend === 'offline' && (
+                <div className="p-3 rounded-xl flex items-start gap-2 text-xs" style={{ background: '#ef444415', border: `1px solid ${C.danger}30`, color: C.danger }}>
+                  <WifiOff className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Backend is offline.</strong> Setup will be saved but cannot be applied until the backend is running. Start it with <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: C.bg }}>docker compose up -d</code>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -492,25 +759,34 @@ function SetupWizard() {
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
 
-            {currentStep === totalSteps - 1 ? (
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-colors font-mono disabled:opacity-50"
-                style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
-              >
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {isSubmitting ? 'DEPLOYING...' : 'DEPLOY HARBINGER'}
-              </button>
-            ) : (
-              <button
-                onClick={handleNext}
-                className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-colors font-mono"
-                style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
-              >
-                Continue <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-mono hidden sm:inline" style={{ color: `${C.textMuted}60` }}>
+                Press Enter
+              </span>
+              {currentStep === totalSteps - 1 ? (
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-all font-mono disabled:opacity-50"
+                  style={{ border: `1px solid ${C.accent}`, color: C.bg, background: C.accent }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#d4a830'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
+                >
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  {isSubmitting ? 'DEPLOYING...' : 'DEPLOY HARBINGER'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleNext}
+                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-medium text-sm transition-all font-mono"
+                  style={{ border: `1px solid ${C.accent}`, color: C.accent, background: 'transparent' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${C.accent}15`)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  Continue <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </motion.div>
       </div>
@@ -539,12 +815,14 @@ function InputField({ label, value, onChange, placeholder, description, type = '
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-lg px-4 focus:outline-none text-sm font-mono ${compact ? 'py-2' : 'py-2.5'}`}
+        className={`w-full rounded-lg px-4 focus:outline-none text-sm font-mono transition-colors ${compact ? 'py-2' : 'py-2.5'}`}
         style={{
           background: C.surfaceLight,
           border: `1px solid ${C.border}`,
           color: C.text,
         }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = C.accent)}
+        onBlur={(e) => (e.currentTarget.style.borderColor = C.border)}
       />
       {description && <p className="text-xs mt-1" style={{ color: C.textMuted }}>{description}</p>}
     </div>

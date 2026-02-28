@@ -567,7 +567,7 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 			"harbinger.managed":    "true",
 		},
 		"HostConfig": map[string]any{
-			"NetworkMode":  "harbinger_default",
+			"NetworkMode":  cfg.DockerNetwork,
 			"Memory":       int64(512 * 1024 * 1024), // 512MB limit
 			"NanoCpus":     int64(1000000000),         // 1 CPU
 			"AutoRemove":   false,

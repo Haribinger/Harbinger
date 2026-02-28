@@ -81,6 +81,7 @@ async function printUsage() {
         ['status',                    'Platform health dashboard'],
         ['dashboard',                 'Alias for status'],
         ['channels',                  'List configured channels'],
+        ['open [page]',               'Open dashboard in browser (or specific page)'],
         ['logs [service]',            'View Docker service logs'],
       ]],
       ['Docker', [
@@ -100,6 +101,8 @@ async function printUsage() {
         ['changelog',                 'Display formatted changelog'],
       ]],
       ['Secrets & Variables', [
+        ['secrets',                   'Show .env secrets status (safe masked view)'],
+        ['env',                       'Show all .env variables (masked)'],
         ['set-agent-secret <K> [V]',  'Set a GitHub secret with AGENT_ prefix'],
         ['set-agent-llm-secret <K> [V]', 'Set GitHub secret with AGENT_LLM_ prefix'],
         ['set-var <KEY> [VALUE]',     'Set a GitHub repository variable'],
@@ -514,7 +517,32 @@ switch (command) {
     dockerLogs(args[0]);
     break;
 
+  // ── Open ────────────────────────────────────────────────────────────
+  case 'open': {
+    const page = args[0] || '';
+    const { getFrontendUrl } = await import('./lib/api.js');
+    const url = page ? `${getFrontendUrl()}/${page}` : getFrontendUrl();
+    try {
+      const open = (await import('open')).default;
+      await open(url);
+      console.log(`\n  Opened ${url}\n`);
+    } catch {
+      console.log(`\n  Open: ${url}\n`);
+    }
+    break;
+  }
+
   // ── Secrets ──────────────────────────────────────────────────────────
+  case 'secrets': {
+    const { listSecrets } = await import('./lib/commands/secrets.js');
+    await listSecrets();
+    break;
+  }
+  case 'env': {
+    const { showEnv } = await import('./lib/commands/secrets.js');
+    await showEnv();
+    break;
+  }
   case 'set-agent-secret': {
     const { setAgentSecret } = await import('./lib/commands/secrets.js');
     await setAgentSecret(args[0], args[1]);
