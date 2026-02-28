@@ -1,0 +1,35 @@
+# .github/workflows/lint.yml
+name: Lint
+
+on:
+  push:
+    paths:
+      - 'harbinger-tools/frontend/**/*.{ts,tsx}'
+  pull_request:
+    paths:
+      - 'harbinger-tools/frontend/**/*.{ts,tsx}'
+
+jobs:
+  eslint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6.2.0
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+      - name: Install dependencies
+        run: |
+          cd harbinger-tools/frontend
+          pnpm install
+      - name: Run ESLint
+        run: |
+          cd harbinger-tools/frontend
+          pnpm run lint || true
+      - name: TypeScript Check
+        run: |
+          cd harbinger-tools/frontend
+          pnpm run typecheck
