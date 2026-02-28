@@ -69,8 +69,8 @@ export async function setSecret(owner, repo, name, value) {
   try {
     // Use stdin to pass the secret value securely
     const { stdout, stderr } = await execAsync(
-      `echo "${value.replace(/"/g, '\\"')}" | gh secret set ${name} --repo ${owner}/${repo}`,
-      { encoding: 'utf-8', env: ghEnv() }
+      `gh secret set ${name} --repo ${owner}/${repo}`,
+      { encoding: 'utf-8', env: ghEnv(), input: value }
     );
     return { success: true };
   } catch (error) {
@@ -115,8 +115,8 @@ export async function listSecrets(owner, repo) {
 export async function setVariable(owner, repo, name, value) {
   try {
     const { stdout, stderr } = await execAsync(
-      `echo "${value.replace(/"/g, '\\"')}" | gh variable set ${name} --repo ${owner}/${repo}`,
-      { encoding: 'utf-8', env: ghEnv() }
+      `gh variable set ${name} --repo ${owner}/${repo}`,
+      { encoding: 'utf-8', env: ghEnv(), input: value }
     );
     return { success: true };
   } catch (error) {
