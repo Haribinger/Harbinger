@@ -73,8 +73,8 @@ jobs:
           BRANCH="maintainer/nightly-$DATE"
           FIXED=0
 
-          # Remove console.log from non-test TS files
-          FILES=$(rg -l 'console\.log' --type ts --glob '!node_modules' --glob '!dist' --glob '!*.test.*' --glob '!*.spec.*' 2>/dev/null || true)
+          # FIXED: Use -g patterns instead of --type ts
+          FILES=$(rg -l 'console\.log' -g '*.ts' -g '*.tsx' --glob '!node_modules' --glob '!dist' --glob '!*.test.*' --glob '!*.spec.*' 2>/dev/null || true)
           if [ -n "$FILES" ]; then
             for file in $FILES; do
               sed -i '/^\s*console\.log(.*);*\s*$/d' "$file"
