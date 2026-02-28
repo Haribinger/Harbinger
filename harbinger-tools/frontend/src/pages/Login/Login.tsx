@@ -104,7 +104,7 @@ function Login() {
   const [providerKey, setProviderKey] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { login, initiateGitHubAuth, initiateGoogleAuth, validateProviderKey, startDeviceFlow, pollDeviceFlow, loginWithGHToken } = useAuthStore()
+  const { login, initiateGitHubAuth, initiateGoogleAuth, validateProviderKey, startDeviceFlow, pollDeviceFlow, loginWithGHToken, exchangeAuthCode } = useAuthStore()
   const navigate = useNavigate()
 
   // Clear device flow polling on unmount
@@ -114,26 +114,30 @@ function Login() {
     }
   }, [])
 
-  // Handle OAuth callback token / error in URL
+  // Handle OAuth callback — server redirects with ?code=<auth_code> (not raw JWT)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const token = params.get('token')
+    const code = params.get('code')
     const errorParam = params.get('error')
 
     if (errorParam) {
       setError(ERROR_MESSAGES[errorParam] ?? `Auth error: ${errorParam}`)
       window.history.replaceState({}, '', window.location.pathname)
-    } else if (token) {
-      const result = parseJWT(token)
-      if (result?.success && result.data) {
-        login(token, result.data)
-        window.history.replaceState({}, '', window.location.pathname)
-        navigate('/')
-      } else {
-        setError('Invalid token received from server')
-      }
+    } else if (code) {
+      // Exchange the short-lived auth code for a JWT
+      window.history.replaceState({}, '', window.location.pathname)
+      ;(async () => {
+        setIsLoading(true)
+        const ok = await exchangeAuthCode(code)
+        setIsLoading(false)
+        if (ok) {
+          navigate('/')
+        } else {
+          setError('Auth code exchange failed — try again')
+        }
+      })()
     }
-  }, [login, navigate])
+  }, [exchangeAuthCode, navigate])
 
   const switchTab = (t: Tab) => {
     setTab(t)

@@ -166,6 +166,7 @@ services:
       - DB_NAME=${DB_NAME:-harbinger}
       - DB_USER=${DB_USER:-harbinger}
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - DB_SSLMODE=${DB_SSLMODE:-prefer}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}

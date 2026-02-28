@@ -39,6 +39,7 @@ interface AuthState {
   initiateGoogleAuth: () => Promise<APIResponse<OAuthData> | null>
   initiateProviderAuth: (provider: string) => Promise<APIResponse<OAuthData> | null>
   validateProviderKey: (provider: string, apiKey: string) => Promise<{ ok: boolean; valid: boolean; jwt?: string; error?: string } | null>
+  exchangeAuthCode: (code: string) => Promise<boolean>
   startDeviceFlow: () => Promise<DeviceFlowData | null>
   pollDeviceFlow: (deviceCode: string) => Promise<boolean>
   loginWithGHToken: (token?: string) => Promise<{ ok: boolean; jwt?: string; error?: string } | null>
@@ -52,7 +53,7 @@ function isBrowser(): boolean {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
       isAuthenticated: false,
@@ -190,6 +191,27 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      exchangeAuthCode: async (code: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/api/auth/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+          })
+          const data = await res.json().catch(() => null)
+          if (data?.ok && data.jwt) {
+            const parsed = parseJWT(data.jwt)
+            if (parsed?.success && parsed.data) {
+              get().login(data.jwt, parsed.data)
+              return true
+            }
+          }
+          return false
+        } catch {
+          return false
+        }
+      },
+
       startDeviceFlow: async () => {
         try {
           const response = await fetch(`${API_BASE}/api/auth/github/device/start`, {
@@ -268,26 +290,29 @@ export const useAuthStore = create<AuthState>()(
   )
 )
 
-// Parse JWT token to extract claims
+// Parse JWT token to extract claims (client-side only — no signature verification)
 export function parseJWT(token: string): APIResponse<User> | null {
   try {
     const parts = token.split('.')
     if (parts.length !== 3) return null
 
-    const claimsJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
-    const claims = JSON.parse(claimsJson)
+    const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const claims = JSON.parse(decoded)
+
+    if (typeof claims !== 'object' || claims === null) return null
+    if (!claims.user_id || !claims.username) return null
 
     return {
       success: true,
       data: {
         id: claims.user_id,
         username: claims.username,
-        email: claims.email,
-        provider: claims.provider,
+        email: claims.email || '',
+        provider: claims.provider || '',
       },
     }
   } catch {
-    return { success: false, error: { code: 'invalid_token', message: 'Invalid token' } }
+    return null
   }
 }
 
@@ -297,8 +322,11 @@ export function isTokenExpired(token: string): boolean {
     const parts = token.split('.')
     if (parts.length !== 3) return true
 
-    const claimsJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
-    const claims = JSON.parse(claimsJson)
+    const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const claims = JSON.parse(decoded)
+
+    if (typeof claims !== 'object' || claims === null) return true
+    if (typeof claims.exp !== 'number') return true
 
     return claims.exp * 1000 < Date.now()
   } catch {

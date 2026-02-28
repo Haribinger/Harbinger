@@ -18,8 +18,8 @@ var db *sql.DB
 // Falls back to in-memory mode if the connection fails (dev without Docker).
 func initDB(c Config) {
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName, c.DBSSLMode,
 	)
 
 	var err error
@@ -33,6 +33,7 @@ func initDB(c Config) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(10 * time.Minute)
 
 	if err = db.Ping(); err != nil {
 		log.Printf("[DB] Ping failed: %v — running in memory-only mode", err)
@@ -46,6 +47,13 @@ func initDB(c Config) {
 // dbAvailable returns true when we have a live database connection.
 func dbAvailable() bool {
 	return db != nil
+}
+
+// closeDB closes the database connection if available.
+func closeDB() {
+	if db != nil {
+		db.Close()
+	}
 }
 
 // ============================================================================
@@ -1033,6 +1041,66 @@ func ensureAutonomousTable() {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_agent ON agent_thoughts(agent_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_status ON agent_thoughts(status)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_thoughts_type ON agent_thoughts(type)`)
+}
+
+func ensureChatTables() {
+	if db == nil {
+		return
+	}
+	db.Exec(`CREATE TABLE IF NOT EXISTS chat_sessions (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		title TEXT NOT NULL DEFAULT 'New Chat',
+		model TEXT NOT NULL DEFAULT 'default',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS chat_messages (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+		role TEXT NOT NULL,
+		content TEXT NOT NULL,
+		model TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)`)
+}
+
+func ensureC2Tables() {
+	if db == nil {
+		return
+	}
+	db.Exec(`CREATE TABLE IF NOT EXISTS c2_frameworks (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		host TEXT,
+		port INTEGER,
+		status TEXT NOT NULL DEFAULT 'disconnected',
+		api_key TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS c2_operations (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'planning',
+		target TEXT,
+		description TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS c2_implants (
+		id TEXT PRIMARY KEY,
+		framework_id TEXT REFERENCES c2_frameworks(id),
+		hostname TEXT,
+		ip TEXT,
+		os TEXT,
+		arch TEXT,
+		status TEXT NOT NULL DEFAULT 'active',
+		last_checkin TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
 }
 
 // dbStoreThought inserts a thought into PostgreSQL.

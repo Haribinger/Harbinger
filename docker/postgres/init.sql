@@ -376,6 +376,127 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id)
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 
 -- ============================================================================
+-- CHAT SESSIONS & MESSAGES
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'New Chat',
+    model TEXT NOT NULL DEFAULT 'default',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    model TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+
+-- ============================================================================
+-- C2 INFRASTRUCTURE PERSISTENCE
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS c2_frameworks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    host TEXT,
+    port INTEGER,
+    status TEXT NOT NULL DEFAULT 'disconnected',
+    api_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS c2_operations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'planning',
+    target TEXT,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS c2_implants (
+    id TEXT PRIMARY KEY,
+    framework_id TEXT REFERENCES c2_frameworks(id),
+    hostname TEXT,
+    ip TEXT,
+    os TEXT,
+    arch TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    last_checkin TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_c2_implants_framework ON c2_implants(framework_id);
+CREATE INDEX IF NOT EXISTS idx_c2_implants_status ON c2_implants(status);
+
+-- ============================================================================
+-- AGENT THOUGHTS (autonomous reasoning)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS agent_thoughts (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'observation',
+    content TEXT NOT NULL,
+    confidence REAL DEFAULT 0.5,
+    status TEXT NOT NULL DEFAULT 'pending',
+    parent_id TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_thoughts_agent ON agent_thoughts(agent_id);
+CREATE INDEX IF NOT EXISTS idx_thoughts_status ON agent_thoughts(status);
+CREATE INDEX IF NOT EXISTS idx_thoughts_type ON agent_thoughts(type);
+
+-- ============================================================================
+-- CODE HEALTH SCANS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS code_health_scans (
+    id SERIAL PRIMARY KEY,
+    score REAL NOT NULL,
+    lint_errors INTEGER DEFAULT 0,
+    type_errors INTEGER DEFAULT 0,
+    test_pass_rate REAL DEFAULT 0,
+    build_status TEXT DEFAULT 'unknown',
+    bundle_size_kb REAL DEFAULT 0,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================================
+-- MODEL ROUTER
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS model_routes (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS model_router_config (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    default_provider TEXT NOT NULL DEFAULT 'anthropic',
+    default_model TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+    fallback_provider TEXT DEFAULT '',
+    fallback_model TEXT DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================================
 -- ADMIN USER SETUP
 -- ============================================================================
 -- No hardcoded admin credentials. The first admin account is created via:

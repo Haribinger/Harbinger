@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,8 +16,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -241,25 +244,45 @@ type Config struct {
 	DockerSocket      string
 	DockerHost        string
 	DockerNetwork     string
-	GitHubClientID string
-	GitHubSecret    string
-	AppURL          string
+	GitHubClientID     string
+	GitHubSecret       string
+	AppURL             string
 	GitHubClientSecret string
 	GitHubRedirectURL  string
 	GitHubToken        string // GH_TOKEN — preloaded gh CLI token for direct auth
+	TrustedProxies     []string
+	DBSSLMode          string
 }
 
 func loadConfig() Config {
 	appURL := getEnv("APP_URL", "http://localhost:3000")
+
+	// Validate APP_ENV
+	appEnv := getEnv("APP_ENV", "development")
+	validEnvs := map[string]bool{"development": true, "staging": true, "production": true}
+	if !validEnvs[appEnv] {
+		log.Fatalf("[CONFIG] APP_ENV must be one of: development, staging, production (got %q)", appEnv)
+	}
+
+	// Parse trusted proxies
+	trustedRaw := getEnv("TRUSTED_PROXIES", "127.0.0.1,::1")
+	var trusted []string
+	for _, p := range strings.Split(trustedRaw, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			trusted = append(trusted, p)
+		}
+	}
+
 	return Config{
 		AppName:            getEnv("APP_NAME", "Harbinger"),
-		AppEnv:             getEnv("APP_ENV", "development"),
+		AppEnv:             appEnv,
 		Port:               getEnv("APP_PORT", "8080"),
 		DBHost:             getEnv("DB_HOST", "localhost"),
 		DBPort:             getEnv("DB_PORT", "5432"),
 		DBName:             getEnv("DB_NAME", "harbinger"),
 		DBUser:             getEnv("DB_USER", "harbinger"),
-		DBPass:             getEnv("DB_PASSWORD", "change-me"),
+		DBPass:             getEnv("DB_PASSWORD", ""),
 		RedisHost:          getEnv("REDIS_HOST", "localhost"),
 		RedisPort:          getEnv("REDIS_PORT", "6379"),
 		Neo4jHost:          getEnv("NEO4J_HOST", "localhost"),
@@ -280,6 +303,8 @@ func loadConfig() Config {
 		AppURL:             appURL,
 		GitHubRedirectURL:  getEnv("GITHUB_REDIRECT_URL", appURL+"/api/auth/github/callback"),
 		GitHubToken:        getEnv("GH_TOKEN", ""),
+		TrustedProxies:     trusted,
+		DBSSLMode:          getEnv("DB_SSLMODE", "prefer"),
 	}
 }
 
@@ -290,7 +315,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getEnvRequired returns the env value or fallback, but warns in production if using a weak default.
+// getEnvRequired returns the env value or fallback. Fatal in production if using a weak default.
 func getEnvRequired(key, fallback string) string {
 	v := os.Getenv(key)
 	if v != "" {
@@ -298,7 +323,7 @@ func getEnvRequired(key, fallback string) string {
 	}
 	env := os.Getenv("APP_ENV")
 	if env == "production" && (fallback == "" || fallback == "change-me-in-production" || fallback == "change-me") {
-		log.Printf("[SECURITY] WARNING: %s is not set — using insecure default. Set %s for production.", key, key)
+		log.Fatalf("[SECURITY] FATAL: %s is not set and has an insecure default. Set %s before running in production.", key, key)
 	}
 	return fallback
 }
@@ -322,22 +347,32 @@ func internalError(w http.ResponseWriter, context string, err error) {
 // ---- Rate Limiter (sliding window per IP) ----
 
 type rateLimiter struct {
-	mu       sync.Mutex
-	visitors map[string]*visitorBucket
-	rate     int           // requests per window
-	window   time.Duration // window size
+	mu         sync.Mutex
+	visitors   map[string]*visitorBucket
+	rate       int           // requests per window
+	window     time.Duration // window size
+	maxEntries int           // cap on tracked IPs to prevent memory exhaustion
 }
 
 type visitorBucket struct {
 	tokens    int
 	lastReset time.Time
+	failures  int       // consecutive failures (for auth lockout)
+	lockedAt  time.Time // when lockout started
 }
+
+const (
+	maxRateLimitEntries = 10000
+	lockoutThreshold    = 10            // failed auth attempts before lockout
+	lockoutDuration     = 15 * time.Minute
+)
 
 func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 	rl := &rateLimiter{
-		visitors: make(map[string]*visitorBucket),
-		rate:     rate,
-		window:   window,
+		visitors:   make(map[string]*visitorBucket),
+		rate:       rate,
+		window:     window,
+		maxEntries: maxRateLimitEntries,
 	}
 	// Evict stale entries every 5 minutes
 	go func() {
@@ -346,7 +381,7 @@ func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 			rl.mu.Lock()
 			cutoff := time.Now().Add(-2 * rl.window)
 			for ip, v := range rl.visitors {
-				if v.lastReset.Before(cutoff) {
+				if v.lastReset.Before(cutoff) && (v.lockedAt.IsZero() || time.Since(v.lockedAt) > lockoutDuration) {
 					delete(rl.visitors, ip)
 				}
 			}
@@ -359,8 +394,31 @@ func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 func (rl *rateLimiter) allow(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+
+	// Cap max tracked IPs to prevent memory exhaustion under DDoS
+	if len(rl.visitors) >= rl.maxEntries {
+		// Evict oldest entries when at capacity
+		oldest := time.Now()
+		oldestIP := ""
+		for ip, v := range rl.visitors {
+			if v.lastReset.Before(oldest) {
+				oldest = v.lastReset
+				oldestIP = ip
+			}
+		}
+		if oldestIP != "" {
+			delete(rl.visitors, oldestIP)
+		}
+	}
+
 	v, exists := rl.visitors[ip]
 	now := time.Now()
+
+	// Check lockout
+	if exists && !v.lockedAt.IsZero() && now.Sub(v.lockedAt) < lockoutDuration {
+		return false
+	}
+
 	if !exists || now.Sub(v.lastReset) >= rl.window {
 		rl.visitors[ip] = &visitorBucket{tokens: rl.rate - 1, lastReset: now}
 		return true
@@ -372,24 +430,65 @@ func (rl *rateLimiter) allow(ip string) bool {
 	return true
 }
 
+// recordAuthFailure tracks failed auth attempts for account lockout
+func (rl *rateLimiter) recordAuthFailure(ip string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	v, exists := rl.visitors[ip]
+	if !exists {
+		v = &visitorBucket{tokens: rl.rate, lastReset: time.Now()}
+		rl.visitors[ip] = v
+	}
+	v.failures++
+	if v.failures >= lockoutThreshold {
+		v.lockedAt = time.Now()
+		log.Printf("[SECURITY] IP %s locked out after %d failed auth attempts", ip, v.failures)
+	}
+}
+
+// resetAuthFailures clears failure count on successful login
+func (rl *rateLimiter) resetAuthFailures(ip string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if v, exists := rl.visitors[ip]; exists {
+		v.failures = 0
+		v.lockedAt = time.Time{}
+	}
+}
+
 // Global rate limiters — separate limits for auth vs general API
 var (
 	apiLimiter  = newRateLimiter(120, time.Minute) // 120 req/min per IP
-	authLimiter = newRateLimiter(20, time.Minute)  // 20 req/min per IP for auth
+	authLimiter = newRateLimiter(5, time.Minute)   // 5 req/min per IP for auth
 )
+
+// clientIP extracts the real client IP, only trusting X-Forwarded-For when
+// the direct connection comes from a configured trusted proxy.
+func clientIP(r *http.Request) string {
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+	// Only trust X-Forwarded-For if RemoteAddr is a trusted proxy
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		trusted := false
+		for _, p := range cfg.TrustedProxies {
+			if ip == p {
+				trusted = true
+				break
+			}
+		}
+		if trusted {
+			ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+		}
+	}
+	return ip
+}
 
 func rateLimitMiddleware(limiter *rateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-			if ip == "" {
-				ip = r.RemoteAddr
-			}
-			// Trust X-Forwarded-For behind reverse proxy (nginx/Docker)
-			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-				ip = strings.SplitN(fwd, ",", 2)[0]
-				ip = strings.TrimSpace(ip)
-			}
+			ip := clientIP(r)
 			if !limiter.allow(ip) {
 				w.Header().Set("Retry-After", "60")
 				writeJSON(w, http.StatusTooManyRequests, map[string]any{
@@ -439,7 +538,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token, x-api-key")
 			w.Header().Set("Access-Control-Expose-Headers", "Authorization")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Max-Age", "86400")
@@ -488,20 +587,20 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// HSTS: only set when behind HTTPS (check X-Forwarded-Proto or scheme)
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// authRateLimited wraps a handler with the stricter auth rate limiter
+// authRateLimited wraps a handler with the stricter auth rate limiter (5/min + lockout)
 func authRateLimited(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-		if ip == "" {
-			ip = r.RemoteAddr
-		}
-		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-			ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
-		}
+		ip := clientIP(r)
 		if !authLimiter.allow(ip) {
 			w.Header().Set("Retry-After", "60")
 			writeJSON(w, http.StatusTooManyRequests, map[string]any{
@@ -597,9 +696,73 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect back to frontend login with token in query string
-	redirectURL := fmt.Sprintf("%s/login?token=%s", cfg.AppURL, url.QueryEscape(token))
+	// Store JWT in a short-lived auth code to avoid exposing token in URL
+	authCode := storeAuthCode(token)
+	redirectURL := fmt.Sprintf("%s/login?code=%s&provider=github", cfg.AppURL, url.QueryEscape(authCode))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+// authCodeStore maps short-lived random codes to JWTs (60 second TTL, single-use)
+var authCodeStore = struct {
+	sync.Mutex
+	codes map[string]authCodeEntry
+}{codes: make(map[string]authCodeEntry)}
+
+type authCodeEntry struct {
+	jwt       string
+	createdAt time.Time
+}
+
+func storeAuthCode(jwt string) string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("[AUTH] rand.Read failed: %v", err)
+		return ""
+	}
+	code := hex.EncodeToString(b)
+	authCodeStore.Lock()
+	defer authCodeStore.Unlock()
+	// GC expired codes
+	now := time.Now()
+	for k, v := range authCodeStore.codes {
+		if now.Sub(v.createdAt) > 60*time.Second {
+			delete(authCodeStore.codes, k)
+		}
+	}
+	authCodeStore.codes[code] = authCodeEntry{jwt: jwt, createdAt: now}
+	return code
+}
+
+func consumeAuthCode(code string) (string, bool) {
+	authCodeStore.Lock()
+	defer authCodeStore.Unlock()
+	entry, ok := authCodeStore.codes[code]
+	if !ok {
+		return "", false
+	}
+	delete(authCodeStore.codes, code)
+	if time.Since(entry.createdAt) > 60*time.Second {
+		return "", false
+	}
+	return entry.jwt, true
+}
+
+// handleExchangeAuthCode exchanges a short-lived auth code for a JWT.
+// POST /api/auth/exchange
+func handleExchangeAuthCode(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Code == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "code required"})
+		return
+	}
+	jwt, ok := consumeAuthCode(body.Code)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid or expired code"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jwt": jwt})
 }
 
 // ---- JWT Token Functions ----
@@ -609,26 +772,50 @@ type Claims struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Provider string `json:"provider"`
+	Role     string `json:"role,omitempty"` // admin, operator, observer
 	Exp      int64  `json:"exp"`
+	Iat      int64  `json:"iat"`            // issued-at
+	Jti      string `json:"jti"`            // unique token ID for revocation
+	Aud      string `json:"aud"`            // audience — prevents cross-service reuse
 }
 
 func generateJWT(userID, username, email, provider string) (string, error) {
 	now := time.Now().Unix()
+	// Generate unique JTI
+	jtiBytes := make([]byte, 16)
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return "", fmt.Errorf("generate jti: %w", err)
+	}
+	jti := hex.EncodeToString(jtiBytes)
+
+	// Token expiry: configurable via JWT_EXPIRY_HOURS (default 24h)
+	expiryHours := 24
+	if v := os.Getenv("JWT_EXPIRY_HOURS"); v != "" {
+		if h, err := fmt.Sscanf(v, "%d", &expiryHours); err != nil || h != 1 || expiryHours < 1 {
+			expiryHours = 24
+		}
+	}
+
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		Email:    email,
 		Provider: provider,
-		Exp:      now + 24*60*60, // 24 hours
+		Exp:      now + int64(expiryHours)*3600,
+		Iat:      now,
+		Jti:      jti,
+		Aud:      "harbinger",
 	}
 
-	// Create header
-	header := map[string]string{
-		"alg": "HS256",
-		"typ": "JWT",
+	header := map[string]string{"alg": "HS256", "typ": "JWT"}
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return "", fmt.Errorf("marshal header: %w", err)
 	}
-	headerJSON, _ := json.Marshal(header)
-	claimsJSON, _ := json.Marshal(claims)
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", fmt.Errorf("marshal claims: %w", err)
+	}
 
 	headerB64 := base64URLEncode(headerJSON)
 	claimsB64 := base64URLEncode(claimsJSON)
@@ -647,7 +834,7 @@ func validateJWT(tokenString string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token format")
 	}
 
-	// Verify signature
+	// Verify signature (constant-time comparison)
 	signatureInput := parts[0] + "." + parts[1]
 	h := hmac.New(sha256.New, []byte(cfg.JWTSecret))
 	h.Write([]byte(signatureInput))
@@ -671,6 +858,11 @@ func validateJWT(tokenString string) (*Claims, error) {
 	// Check expiration
 	if time.Now().Unix() > claims.Exp {
 		return nil, fmt.Errorf("token expired")
+	}
+
+	// Verify audience
+	if claims.Aud != "" && claims.Aud != "harbinger" {
+		return nil, fmt.Errorf("invalid audience")
 	}
 
 	return &claims, nil
@@ -974,8 +1166,24 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		ctx := context.WithValue(r.Context(), "userID", claims.UserID)
 		ctx = context.WithValue(ctx, "username", claims.Username)
 		ctx = context.WithValue(ctx, "email", claims.Email)
+		ctx = context.WithValue(ctx, "role", claims.Role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
+}
+
+// requireAdmin wraps a handler to require the "admin" role from JWT claims.
+func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		role, _ := r.Context().Value("role").(string)
+		if role != "admin" {
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"ok":    false,
+				"error": "admin role required",
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func getUserIDFromContext(ctx context.Context) (string, error) {
@@ -1211,6 +1419,9 @@ func main() {
 		seedDefaultAgents()
 		ensureCodeHealthTable()
 		ensureModelRoutesTable()
+		ensureAutonomousTable()
+		ensureChatTables()
+		ensureC2Tables()
 	}
 
 	// Initialize channel configs from env
@@ -1245,6 +1456,10 @@ func main() {
 	mux.HandleFunc("GET /api/auth/google/callback", handleGoogleCallback)
 	mux.HandleFunc("GET /api/v1/auth/google", authRateLimited(handleGoogleLogin))
 	mux.HandleFunc("GET /api/v1/auth/google/callback", handleGoogleCallback)
+
+	// Auth code exchange (replaces token-in-URL pattern)
+	mux.HandleFunc("POST /api/auth/exchange", authRateLimited(handleExchangeAuthCode))
+	mux.HandleFunc("POST /api/v1/auth/exchange", authRateLimited(handleExchangeAuthCode))
 
 	// Provider key validation + connection testing
 	mux.HandleFunc("POST /api/auth/provider/validate", authRateLimited(handleValidateProviderKey))
@@ -1626,7 +1841,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/v1/lol/chains/{id}", authMiddleware(handleDeleteLOLChain))
 
 	// ── Realtime (SSE, Agent Status, Command Streams, Operators, Kill Switch) ──
-	mux.HandleFunc("GET /api/realtime/stream", handleSSEStream)
+	mux.HandleFunc("GET /api/realtime/stream", authMiddleware(handleSSEStream))
 	mux.HandleFunc("POST /api/realtime/events", authMiddleware(handleBroadcastEvent))
 	mux.HandleFunc("GET /api/realtime/events", authMiddleware(handleListRealtimeEvents))
 	mux.HandleFunc("GET /api/realtime/agents", authMiddleware(handleGetAgentStatus))
@@ -1639,11 +1854,11 @@ func main() {
 	mux.HandleFunc("GET /api/realtime/operators", authMiddleware(handleListOperators))
 	mux.HandleFunc("POST /api/realtime/operators", authMiddleware(handleRegisterOperator))
 	mux.HandleFunc("POST /api/realtime/operators/{id}/action", authMiddleware(handleOperatorAction))
-	mux.HandleFunc("DELETE /api/realtime/operators/{id}", authMiddleware(handleKickOperator))
+	mux.HandleFunc("DELETE /api/realtime/operators/{id}", requireAdmin(handleKickOperator))
 	mux.HandleFunc("GET /api/realtime/killswitch", authMiddleware(handleGetKillSwitch))
-	mux.HandleFunc("POST /api/realtime/killswitch", authMiddleware(handleToggleKillSwitch))
+	mux.HandleFunc("POST /api/realtime/killswitch", requireAdmin(handleToggleKillSwitch))
 	// v1 aliases
-	mux.HandleFunc("GET /api/v1/realtime/stream", handleSSEStream)
+	mux.HandleFunc("GET /api/v1/realtime/stream", authMiddleware(handleSSEStream))
 	mux.HandleFunc("POST /api/v1/realtime/events", authMiddleware(handleBroadcastEvent))
 	mux.HandleFunc("GET /api/v1/realtime/events", authMiddleware(handleListRealtimeEvents))
 	mux.HandleFunc("GET /api/v1/realtime/agents", authMiddleware(handleGetAgentStatus))
@@ -1656,9 +1871,9 @@ func main() {
 	mux.HandleFunc("GET /api/v1/realtime/operators", authMiddleware(handleListOperators))
 	mux.HandleFunc("POST /api/v1/realtime/operators", authMiddleware(handleRegisterOperator))
 	mux.HandleFunc("POST /api/v1/realtime/operators/{id}/action", authMiddleware(handleOperatorAction))
-	mux.HandleFunc("DELETE /api/v1/realtime/operators/{id}", authMiddleware(handleKickOperator))
+	mux.HandleFunc("DELETE /api/v1/realtime/operators/{id}", requireAdmin(handleKickOperator))
 	mux.HandleFunc("GET /api/v1/realtime/killswitch", authMiddleware(handleGetKillSwitch))
-	mux.HandleFunc("POST /api/v1/realtime/killswitch", authMiddleware(handleToggleKillSwitch))
+	mux.HandleFunc("POST /api/v1/realtime/killswitch", requireAdmin(handleToggleKillSwitch))
 
 	// ── Learning (Technique Scores, Campaigns, Discoveries, Agent Performance, Recommendations) ──
 	mux.HandleFunc("GET /api/learning/techniques", authMiddleware(handleListTechniqueScores))
@@ -1797,8 +2012,35 @@ func main() {
 		MaxHeaderBytes:    1 << 20, // 1 MB max headers
 	}
 
-	log.Printf("Server starting on :%s\n", cfg.Port)
-	log.Fatal(server.ListenAndServe())
+	// Graceful shutdown: listen for SIGTERM/SIGINT
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		log.Printf("Server starting on :%s\n", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	sig := <-shutdownCh
+	log.Printf("Received signal %v, shutting down gracefully...", sig)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Close DB connection pool
+	if dbAvailable() {
+		log.Println("Closing database connection pool...")
+		closeDB()
+	}
+
+	// Shutdown HTTP server (drains active connections)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	log.Println("Server stopped.")
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {

@@ -91,7 +91,8 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectURL := fmt.Sprintf("%s/login?token=%s&provider=google", cfg.AppURL, url.QueryEscape(token))
+	authCode := storeAuthCode(token)
+	redirectURL := fmt.Sprintf("%s/login?code=%s&provider=google", cfg.AppURL, url.QueryEscape(authCode))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
@@ -235,7 +236,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 
 	switch provider {
 	case "openai":
-		req, _ := http.NewRequest("GET", "https://api.openai.com/v1/models", nil)
+		req, err := http.NewRequest("GET", "https://api.openai.com/v1/models", nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		resp, err := client.Do(req)
 		if err != nil {
@@ -250,7 +254,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 
 	case "anthropic":
 		// Anthropic uses x-api-key header
-		req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", strings.NewReader(`{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}`))
+		req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", strings.NewReader(`{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}`))
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		req.Header.Set("x-api-key", apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
 		req.Header.Set("Content-Type", "application/json")
@@ -269,7 +276,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 		return false, nil, fmt.Errorf("Anthropic API returned %d", resp.StatusCode)
 
 	case "groq":
-		req, _ := http.NewRequest("GET", "https://api.groq.com/openai/v1/models", nil)
+		req, err := http.NewRequest("GET", "https://api.groq.com/openai/v1/models", nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		resp, err := client.Do(req)
 		if err != nil {
@@ -282,7 +292,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 		return false, nil, fmt.Errorf("Groq API returned %d", resp.StatusCode)
 
 	case "mistral":
-		req, _ := http.NewRequest("GET", "https://api.mistral.ai/v1/models", nil)
+		req, err := http.NewRequest("GET", "https://api.mistral.ai/v1/models", nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		resp, err := client.Do(req)
 		if err != nil {
@@ -295,8 +308,12 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 		return false, nil, fmt.Errorf("Mistral API returned %d", resp.StatusCode)
 
 	case "gemini", "google":
-		testURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", apiKey)
-		req, _ := http.NewRequest("GET", testURL, nil)
+		testURL := "https://generativelanguage.googleapis.com/v1beta/models"
+		req, err := http.NewRequest("GET", testURL, nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
+		req.Header.Set("x-goog-api-key", apiKey)
 		resp, err := client.Do(req)
 		if err != nil {
 			return false, nil, fmt.Errorf("network error: %v", err)
@@ -309,7 +326,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 
 	case "ollama":
 		baseURL := getEnv("OLLAMA_URL", "http://localhost:11434")
-		req, _ := http.NewRequest("GET", baseURL+"/api/tags", nil)
+		req, err := http.NewRequest("GET", baseURL+"/api/tags", nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return false, nil, fmt.Errorf("Ollama not reachable: %v", err)
@@ -333,7 +353,10 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 
 	case "lmstudio":
 		baseURL := getEnv("LMSTUDIO_URL", "http://localhost:1234/v1")
-		req, _ := http.NewRequest("GET", baseURL+"/models", nil)
+		req, err := http.NewRequest("GET", baseURL+"/models", nil)
+		if err != nil {
+			return false, nil, fmt.Errorf("create request: %v", err)
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return false, nil, fmt.Errorf("LM Studio not reachable: %v", err)

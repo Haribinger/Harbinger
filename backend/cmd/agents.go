@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -567,12 +569,16 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 			"harbinger.managed":    "true",
 		},
 		"HostConfig": map[string]any{
-			"NetworkMode":  cfg.DockerNetwork,
-			"Memory":       int64(512 * 1024 * 1024), // 512MB limit
-			"NanoCpus":     int64(1000000000),         // 1 CPU
-			"AutoRemove":   false,
-			"SecurityOpt":  []string{"no-new-privileges"},
-			"ReadonlyRootfs": false,
+			"NetworkMode":    cfg.DockerNetwork,
+			"Memory":         int64(512 * 1024 * 1024), // 512MB limit
+			"NanoCpus":       int64(1000000000),         // 1 CPU
+			"AutoRemove":     false,
+			"SecurityOpt":    []string{"no-new-privileges"},
+			"ReadonlyRootfs": true,
+			"CapDrop":        []string{"ALL"},
+			"CapAdd":         []string{"NET_RAW"},
+			"PidsLimit":      int64(256),
+			"Tmpfs":          map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"},
 		},
 	}
 
@@ -685,11 +691,17 @@ func handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 			defer resp.Body.Close()
 			var inspect map[string]any
 			json.NewDecoder(resp.Body).Decode(&inspect)
+			inspectImage := ""
+			if cfgMap, ok := inspect["Config"].(map[string]any); ok {
+				if img, ok := cfgMap["Image"].(string); ok {
+					inspectImage = img
+				}
+			}
 			status["container"] = map[string]any{
 				"id":     cid,
 				"state":  inspect["State"],
 				"name":   inspect["Name"],
-				"image":  inspect["Config"].(map[string]any)["Image"],
+				"image":  inspectImage,
 			}
 		}
 	}
@@ -792,6 +804,11 @@ func stopAndRemoveContainer(containerID string) error {
 // handleDockerContainerStats returns live resource usage for a container.
 func handleDockerContainerStats(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Validate container ID is hex-only to prevent path traversal
+	if matched, _ := regexp.MatchString(`^[a-f0-9]+$`, id); !matched {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid container ID"})
+		return
+	}
 	if !dockerAvailable() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
 		return
@@ -813,6 +830,11 @@ func handleDockerContainerStats(w http.ResponseWriter, r *http.Request) {
 // handleDockerContainerInspect returns full container metadata.
 func handleDockerContainerInspect(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Validate container ID is hex-only to prevent path traversal
+	if matched, _ := regexp.MatchString(`^[a-f0-9]+$`, id); !matched {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid container ID"})
+		return
+	}
 	if !dockerAvailable() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
 		return
@@ -841,13 +863,23 @@ func handleDockerPullImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate image name against allowed patterns
+	allowedPrefix := getEnv("DOCKER_IMAGE_PREFIX", "harbinger/")
+	if !strings.HasPrefix(body.Image, allowedPrefix) && !strings.HasPrefix(body.Image, "docker.io/"+allowedPrefix) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("image must start with %q", allowedPrefix),
+		})
+		return
+	}
+
 	if !dockerAvailable() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
 		return
 	}
 
 	resp, err := dockerAPIRequest("POST",
-		fmt.Sprintf("/v1.41/images/create?fromImage=%s", body.Image), nil)
+		fmt.Sprintf("/v1.41/images/create?fromImage=%s", url.QueryEscape(body.Image)), nil)
 	if err != nil {
 		internalError(w, "operation failed", err)
 		return
@@ -862,6 +894,11 @@ func handleDockerPullImage(w http.ResponseWriter, r *http.Request) {
 // handleDockerDeleteContainer removes a stopped container.
 func handleDockerDeleteContainer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Validate container ID is hex-only to prevent path traversal
+	if matched, _ := regexp.MatchString(`^[a-f0-9]+$`, id); !matched {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid container ID"})
+		return
+	}
 	if !dockerAvailable() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
 		return

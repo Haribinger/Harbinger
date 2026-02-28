@@ -115,6 +115,11 @@ func handleCreateBrowserSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	browserSessionsMu.Lock()
+	if len(browserSessions) >= 100 {
+		browserSessionsMu.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "maximum browser sessions reached"})
+		return
+	}
 	browserSessions[id] = session
 	browserSessionsMu.Unlock()
 

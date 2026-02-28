@@ -93,6 +93,21 @@ func handleCreateChatSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chatStore.Lock()
+	// Cap max sessions at 1000
+	if len(chatStore.sessions) >= 1000 {
+		// Evict oldest session
+		var oldestID string
+		var oldestTime string
+		for id, s := range chatStore.sessions {
+			if oldestID == "" || s.CreatedAt < oldestTime {
+				oldestTime = s.CreatedAt
+				oldestID = id
+			}
+		}
+		if oldestID != "" {
+			delete(chatStore.sessions, oldestID)
+		}
+	}
 	chatStore.sessions[session.ID] = session
 	chatStore.Unlock()
 
@@ -181,6 +196,20 @@ func handleChatMessage(w http.ResponseWriter, r *http.Request) {
 	chatStore.Lock()
 	session, ok := chatStore.sessions[body.SessionID]
 	if !ok {
+		// Cap max sessions at 1000
+		if len(chatStore.sessions) >= 1000 {
+			var oldestID string
+			var oldestTime string
+			for id, s := range chatStore.sessions {
+				if oldestID == "" || s.CreatedAt < oldestTime {
+					oldestTime = s.CreatedAt
+					oldestID = id
+				}
+			}
+			if oldestID != "" {
+				delete(chatStore.sessions, oldestID)
+			}
+		}
 		// Auto-create session
 		session = &ChatSession{
 			ID:        body.SessionID,
@@ -256,6 +285,20 @@ func handleChatStream(w http.ResponseWriter, r *http.Request) {
 	chatStore.Lock()
 	session, ok := chatStore.sessions[body.SessionID]
 	if !ok {
+		// Cap max sessions at 1000
+		if len(chatStore.sessions) >= 1000 {
+			var oldestID string
+			var oldestTime string
+			for id, s := range chatStore.sessions {
+				if oldestID == "" || s.CreatedAt < oldestTime {
+					oldestTime = s.CreatedAt
+					oldestID = id
+				}
+			}
+			if oldestID != "" {
+				delete(chatStore.sessions, oldestID)
+			}
+		}
 		session = &ChatSession{
 			ID:        body.SessionID,
 			Title:     "Chat",

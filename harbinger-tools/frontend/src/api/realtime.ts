@@ -123,9 +123,24 @@ export const realtimeApi = {
     return apiClient.post('/api/realtime/killswitch', { active })
   },
 
-  // SSE stream URL (for EventSource)
+  // SSE stream URL (for EventSource — includes JWT since EventSource can't set headers)
   getSSEUrl: (channel?: string) => {
     const base = '/api/realtime/stream'
-    return channel ? `${base}?channel=${encodeURIComponent(channel)}` : base
+    const params = new URLSearchParams()
+    if (channel) params.set('channel', channel)
+    // EventSource does not support custom headers, so pass JWT as query param
+    let token = localStorage.getItem('harbinger-token')
+    if (!token) {
+      try {
+        const persisted = localStorage.getItem('harbinger-auth')
+        if (persisted) {
+          const parsed = JSON.parse(persisted)
+          token = parsed?.state?.token || null
+        }
+      } catch { /* ignore */ }
+    }
+    if (token) params.set('token', token)
+    const qs = params.toString()
+    return qs ? `${base}?${qs}` : base
   },
 }

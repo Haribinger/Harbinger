@@ -74,7 +74,7 @@ class ErrorBoundary extends Component<Props, State> {
               </div>
               <div className="bg-[#0a0a0f] border border-[#1a1a2e] rounded-lg p-3 mb-4 max-h-32 overflow-auto">
                 <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
-                  {this.state.error?.message || 'Unknown error'}
+                  {import.meta.env.DEV ? (this.state.error?.message || 'Unknown error') : 'An unexpected error occurred'}
                 </pre>
               </div>
               <div className="flex gap-2">
@@ -125,21 +125,29 @@ class ErrorBoundary extends Component<Props, State> {
                 <span>TIMESTAMP: {timestamp}</span>
               </div>
 
-              {/* Error details */}
+              {/* Error details — hide internals in production */}
               <div className="bg-[#0a0a0f] border border-[#1a1a2e] rounded-lg p-4 mb-6 overflow-auto max-h-48">
                 <div className="text-[10px] text-gray-600 font-mono mb-1">ERROR OUTPUT</div>
-                <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
-                  {this.state.error?.message || 'Unknown error'}
-                </pre>
-                {this.state.errorInfo && (
-                  <details className="mt-3">
-                    <summary className="text-xs text-gray-500 font-mono cursor-pointer hover:text-gray-400">
-                      Stack trace
-                    </summary>
-                    <pre className="mt-2 text-xs text-gray-600 font-mono whitespace-pre-wrap break-words">
-                      {this.state.errorInfo}
+                {import.meta.env.DEV ? (
+                  <>
+                    <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
+                      {this.state.error?.message || 'Unknown error'}
                     </pre>
-                  </details>
+                    {this.state.errorInfo && (
+                      <details className="mt-3">
+                        <summary className="text-xs text-gray-500 font-mono cursor-pointer hover:text-gray-400">
+                          Stack trace
+                        </summary>
+                        <pre className="mt-2 text-xs text-gray-600 font-mono whitespace-pre-wrap break-words">
+                          {this.state.errorInfo}
+                        </pre>
+                      </details>
+                    )}
+                  </>
+                ) : (
+                  <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap break-words">
+                    An unexpected error occurred. Please try reloading the page.
+                  </pre>
                 )}
               </div>
 

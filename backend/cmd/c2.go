@@ -242,6 +242,11 @@ func handleCreateC2Framework(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.frameworks) >= 100 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum frameworks reached"})
+		return
+	}
 	c2Store.frameworks[fw.ID] = fw
 	c2Store.Unlock()
 
@@ -329,6 +334,11 @@ func handleCreateC2Listener(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.listeners) >= 500 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum listeners reached"})
+		return
+	}
 	c2Store.listeners[l.ID] = l
 	c2Store.Unlock()
 
@@ -382,6 +392,11 @@ func handleCreateC2Payload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.payloads) >= 500 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum payloads reached"})
+		return
+	}
 	c2Store.payloads[p.ID] = p
 	c2Store.Unlock()
 
@@ -428,6 +443,11 @@ func handleCreateC2Implant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.c2implants) >= 1000 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum implants reached"})
+		return
+	}
 	c2Store.c2implants[imp.ID] = imp
 	c2Store.Unlock()
 
@@ -496,6 +516,11 @@ func handleCreateC2Task(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.tasks) >= 5000 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum tasks reached"})
+		return
+	}
 	c2Store.tasks[t.ID] = t
 	c2Store.Unlock()
 
@@ -510,7 +535,10 @@ func handleCompleteC2Task(w http.ResponseWriter, r *http.Request) {
 		Error  string `json:"error"`
 		Status string `json:"status"`
 	}
-	json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid request body"})
+		return
+	}
 
 	c2Store.Lock()
 	t, ok := c2Store.tasks[id]
@@ -569,6 +597,11 @@ func handleCreateC2Operation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.operations) >= 200 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum operations reached"})
+		return
+	}
 	c2Store.operations[op.ID] = op
 	c2Store.Unlock()
 
@@ -654,6 +687,11 @@ func handleCreateC2AttackChain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c2Store.Lock()
+	if len(c2Store.chains) >= 200 {
+		c2Store.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"ok": false, "error": "maximum attack chains reached"})
+		return
+	}
 	c2Store.chains[ch.ID] = ch
 	c2Store.Unlock()
 

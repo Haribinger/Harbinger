@@ -116,9 +116,12 @@ func publishEvent(event RealtimeEvent) {
 // ── SSE stream handler ────────────────────────────────────────────────────────
 
 // handleSSEStream opens and holds an SSE connection for the caller.
+// Authentication: userID is extracted from JWT claims set by authMiddleware.
+// For EventSource clients that cannot set Authorization headers, a ?token=
+// query parameter is accepted as a fallback and validated server-side.
 // Query params:
 //   ?channel=  — optional channel filter (empty = all)
-//   ?userId=   — optional user identifier attached to the client record
+//   ?token=    — fallback JWT for EventSource (only used if no userID in context)
 //
 // The response never returns; the connection is kept alive until the client
 // disconnects or the server shuts down.
@@ -130,7 +133,26 @@ func handleSSEStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channel := r.URL.Query().Get("channel")
-	userID := r.URL.Query().Get("userId")
+
+	// Primary: extract userID from JWT claims set by authMiddleware.
+	userID, _ := r.Context().Value("userID").(string)
+
+	// Fallback: EventSource cannot set headers, so accept ?token= query param.
+	if userID == "" {
+		if tokenParam := r.URL.Query().Get("token"); tokenParam != "" {
+			claims, err := validateJWT(tokenParam)
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid token"})
+				return
+			}
+			userID = claims.UserID
+		}
+	}
+
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "authentication required"})
+		return
+	}
 
 	client := &SSEClient{
 		ID:      genRTID("sse"),
@@ -623,6 +645,7 @@ func handleListOperators(w http.ResponseWriter, r *http.Request) {
 
 // handleRegisterOperator creates a new operator session. Called when a user
 // authenticates and the frontend establishes its SSE connection.
+// Identity and role are derived from JWT claims — callers cannot self-assign.
 // POST /api/realtime/operators
 func handleRegisterOperator(w http.ResponseWriter, r *http.Request) {
 	var op OperatorSession
@@ -631,20 +654,24 @@ func handleRegisterOperator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(op.Username) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "username is required"})
+	// Extract identity from JWT claims set by authMiddleware — never trust request body.
+	ctxUserID, _ := r.Context().Value("userID").(string)
+	ctxUsername, _ := r.Context().Value("username").(string)
+	ctxRole, _ := r.Context().Value("role").(string)
+
+	if ctxUserID == "" || ctxUsername == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "authentication required"})
 		return
 	}
 
-	validRoles := map[string]bool{"admin": true, "operator": true, "observer": true}
-	if op.Role == "" {
+	op.UserID = ctxUserID
+	op.Username = ctxUsername
+
+	// Default role to "operator" — only allow "admin" if the JWT claims say so.
+	if ctxRole == "admin" {
+		op.Role = "admin"
+	} else {
 		op.Role = "operator"
-	} else if !validRoles[op.Role] {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"ok":    false,
-			"error": "invalid role — must be one of: admin, operator, observer",
-		})
-		return
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -789,17 +816,21 @@ func handleGetKillSwitch(w http.ResponseWriter, r *http.Request) {
 
 // handleToggleKillSwitch arms or disarms the emergency stop.
 // Broadcasts a system_alert to every connected SSE client immediately.
+// Route registration uses requireAdmin() so only admin-role JWTs reach here.
+// The acting user's identity is taken from JWT context, not the request body.
 // POST /api/realtime/killswitch
 func handleToggleKillSwitch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Active bool   `json:"active"`
 		Reason string `json:"reason"`
-		UserID string `json:"userId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
+
+	// Extract acting user from JWT context — never trust request body for identity.
+	userID, _ := r.Context().Value("userID").(string)
 
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -807,7 +838,7 @@ func handleToggleKillSwitch(w http.ResponseWriter, r *http.Request) {
 	killSwitchState.active = body.Active
 	if body.Active {
 		killSwitchState.activatedAt = now
-		killSwitchState.activatedBy = body.UserID
+		killSwitchState.activatedBy = userID
 	} else {
 		killSwitchState.activatedAt = ""
 		killSwitchState.activatedBy = ""
@@ -830,7 +861,7 @@ func handleToggleKillSwitch(w http.ResponseWriter, r *http.Request) {
 			"action":      action,
 			"active":      body.Active,
 			"reason":      body.Reason,
-			"activatedBy": body.UserID,
+			"activatedBy": userID,
 			"timestamp":   now,
 		},
 	})

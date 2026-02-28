@@ -124,9 +124,9 @@ func handleCreateThought(w http.ResponseWriter, r *http.Request) {
 	}
 
 	autonomousStore.thoughts = append(autonomousStore.thoughts, thought)
-	// Cap at 1000 thoughts in memory
-	if len(autonomousStore.thoughts) > 1000 {
-		autonomousStore.thoughts = autonomousStore.thoughts[len(autonomousStore.thoughts)-1000:]
+	// Cap at 10000 thoughts in memory
+	if len(autonomousStore.thoughts) > 10000 {
+		autonomousStore.thoughts = autonomousStore.thoughts[len(autonomousStore.thoughts)-10000:]
 	}
 	autonomousStore.Unlock()
 
