@@ -55,16 +55,37 @@ jobs:
       - name: Run maintenance scans
         id: scan
         run: |
-          chmod +x skills/claude-skills/maintainer/scripts/run-maintenance.sh
-          REPORT=$(bash skills/claude-skills/maintainer/scripts/run-maintenance.sh)
+          set -x  # Print every command
+          echo "=== Current directory ==="
+          pwd
+          echo "=== Files in skills directory ==="
+          ls -la skills/claude-skills/maintainer/scripts/
+          
+          echo "=== Making script executable ==="
+          chmod -v +x skills/claude-skills/maintainer/scripts/run-maintenance.sh
+          
+          echo "=== Running script with debugging ==="
+          bash -x skills/claude-skills/maintainer/scripts/run-maintenance.sh 2>&1 | tee script-output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          
+          echo "=== Script exit code: $EXIT_CODE ==="
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "=== Script failed! Last 20 lines of output ==="
+            tail -20 script-output.log
+            exit $EXIT_CODE
+          fi
+          
+          REPORT=$(cat script-output.log)
           echo "$REPORT" > maintenance-report.json
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo "$REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
+      
           SCORE=$(echo "$REPORT" | grep -o '"score": [0-9]*' | head -1 | grep -o '[0-9]*$' || echo 0)
           SCORE=${SCORE:-0}
           echo "score=$SCORE" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Apply safe fixes
         id: fix
