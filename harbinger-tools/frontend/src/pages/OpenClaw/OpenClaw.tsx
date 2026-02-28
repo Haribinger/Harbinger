@@ -206,8 +206,11 @@ export default function OpenClaw() {
 
   const connectGateway = async () => {
     try {
+      const gatewayUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}:3007`
+        : 'http://localhost:3007'
       await apiClient.post('/api/openclaw/connect', {
-        gateway: 'http://localhost:3007',
+        gateway: gatewayUrl,
         version: '1.0.0',
       })
       fetchAll()
@@ -542,7 +545,7 @@ export default function OpenClaw() {
               <Step n={2} text="Run the integration installer" code="bash openclaw/scripts/install.sh" />
               <Step n={3} text="Start Harbinger stack" code="docker-compose up -d" />
               <Step n={4} text="Start OpenClaw gateway" code="openclaw gateway start" />
-              <Step n={5} text="Open mission control" code="http://localhost:5173/openclaw" />
+              <Step n={5} text="Open mission control" code={typeof window !== 'undefined' ? `${window.location.origin}/openclaw` : '/openclaw'} />
             </div>
           </div>
         </div>

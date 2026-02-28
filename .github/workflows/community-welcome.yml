@@ -53,7 +53,7 @@ jobs:
 
             1. **PR Health Check** runs automatically — your code health score will be posted as a comment
             2. A maintainer will review your changes
-            3. Make sure \`pnpm build:ui\` and \`go build ./cmd/\` pass locally before pushing
+            3. Make sure \`pnpm build:ui\` and \`cd backend && go build -o /tmp/harbinger-backend ./cmd/\` pass locally before pushing
 
             **Quick checklist:**
             - [ ] Follows the Obsidian Command design system (dark theme, monospace, \`#f0c040\` accent)
@@ -61,7 +61,7 @@ jobs:
             - [ ] No \`console.log\` in production paths
             - [ ] New pages have: API module + Zustand store + lazy route + Sidebar entry
 
-            See [CLAUDE.md](../blob/main/CLAUDE.md) for full guidelines.`
+            See [CLAUDE.md](https://github.com/Haribinger/Harbinger/blob/main/CLAUDE.md) for full guidelines.`
             });
 
             await github.rest.issues.addLabels({

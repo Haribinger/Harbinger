@@ -175,7 +175,7 @@ jobs:
             });
 
       - name: Fail on critical score
-        if: steps.scan.outputs.score < 30
+        if: ${{ fromJSON(steps.scan.outputs.score) < 30 }}
         run: |
           echo "::error::Health score ${{ steps.scan.outputs.score }}/100 is below critical threshold (30)"
           exit 1
