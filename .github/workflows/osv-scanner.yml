@@ -1,0 +1,23 @@
+# .github/workflows/osv-scanner.yml
+name: OSV Scanner
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: OSV Scanner
+        uses: google/osv-scanner-action@v2.3.3
+        with:
+          scan-args: |-
+            --recursive
+            ./harbinger-tools/frontend/package-lock.json
+            ./backend/go.mod
