@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Swords,
@@ -25,7 +25,24 @@ import {
   Zap,
   BarChart3,
   X,
+  Shield,
+  Globe,
+  Link2,
+  Crosshair,
+  Copy,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  Skull,
+  Bug,
+  Server,
+  Activity,
+  Hash,
 } from 'lucide-react'
+import { useC2Store } from '../../store/c2Store'
+import { useLOLStore } from '../../store/lolStore'
+import type { C2Framework, C2Implant, C2AttackChain } from '../../api/c2'
+import type { LOLEntry, LOLProject } from '../../api/lol'
 
 // ---- Types ----
 
@@ -34,7 +51,7 @@ type SessionStatus = 'active' | 'dead' | 'sleeping'
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
 type PlaybookStatus = 'draft' | 'running' | 'completed' | 'paused'
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-type TabId = 'c2' | 'socks' | 'playbooks' | 'neo4j' | 'parsers' | 'search' | 'analysis'
+type TabId = 'c2' | 'c2-infra' | 'lol-browser' | 'lol-chains' | 'socks' | 'playbooks' | 'neo4j' | 'parsers' | 'search' | 'analysis'
 
 interface C2Server {
   id: string
@@ -1269,10 +1286,699 @@ Based on the gathered intelligence, here are the key attack paths:
   )
 }
 
+// ---- C2 Infrastructure Tab ----
+
+function C2InfraTab() {
+  const {
+    dashboard, frameworks, listeners, payloads, implants, operations, chains,
+    fetchDashboard, fetchFrameworks, fetchListeners, fetchPayloads, fetchImplants, fetchOperations, fetchChains,
+    createFramework, deleteFramework, connectFramework, createListener, createPayload, createOperation, createChain, executeChain,
+    killImplant, createTask,
+  } = useC2Store()
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [showAddListener, setShowAddListener] = useState(false)
+  const [showAddPayload, setShowAddPayload] = useState(false)
+  const [showAddOp, setShowAddOp] = useState(false)
+  const [subTab, setSubTab] = useState<'overview' | 'frameworks' | 'listeners' | 'payloads' | 'implants' | 'operations'>('overview')
+  const [newFw, setNewFw] = useState({ name: '', type: 'mythic' as C2Framework['type'], url: '' })
+  const [newListener, setNewListener] = useState({ frameworkId: '', name: '', type: 'https' as 'https' | 'http' | 'tcp' | 'smb' | 'dns', bindAddress: '0.0.0.0', bindPort: 443 })
+  const [newPayload, setNewPayload] = useState({ frameworkId: '', name: '', type: 'exe' as 'exe' | 'dll' | 'shellcode' | 'ps1', platform: 'windows' as 'windows' | 'linux' | 'macos', arch: 'x64' as 'x64' | 'x86', listenerId: '' })
+  const [newOp, setNewOp] = useState({ name: '', objective: '' })
+
+  useEffect(() => {
+    fetchFrameworks()
+    fetchListeners()
+    fetchPayloads()
+    fetchImplants()
+    fetchOperations()
+    fetchChains()
+    fetchDashboard()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const subTabs = [
+    { id: 'overview', label: 'Overview', icon: Activity },
+    { id: 'frameworks', label: 'Frameworks', icon: Server },
+    { id: 'listeners', label: 'Listeners', icon: Radio },
+    { id: 'payloads', label: 'Payloads', icon: Bug },
+    { id: 'implants', label: 'Implants', icon: Terminal },
+    { id: 'operations', label: 'Operations', icon: Crosshair },
+  ]
+
+  return (
+    <div>
+      {/* Sub-tabs */}
+      <div className="flex gap-1 mb-4 overflow-x-auto">
+        {subTabs.map(st => (
+          <button key={st.id} onClick={() => setSubTab(st.id as typeof subTab)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+              subTab === st.id ? 'bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30' : 'text-text-secondary hover:text-text-primary bg-surface-light border border-transparent'
+            }`}>
+            <st.icon className="w-3.5 h-3.5" /> {st.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {subTab === 'overview' && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          {[
+            { label: 'Frameworks', value: dashboard?.frameworks ?? 0, color: 'text-red-400' },
+            { label: 'Active Listeners', value: dashboard?.listeners ?? 0, color: 'text-green-400' },
+            { label: 'Active Implants', value: dashboard?.activeImplants ?? 0, color: 'text-[#f0c040]' },
+            { label: 'Total Tasks', value: dashboard?.totalTasks ?? 0, color: 'text-blue-400' },
+            { label: 'Operations', value: dashboard?.operations ?? 0, color: 'text-purple-400' },
+            { label: 'Attack Chains', value: dashboard?.attackChains ?? 0, color: 'text-cyan-400' },
+          ].map(s => (
+            <div key={s.label} className="bg-surface rounded-xl border border-border p-3">
+              <span className={`text-xs ${s.color}`}>{s.label}</span>
+              <div className="text-xl font-bold mt-1">{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Frameworks */}
+      {subTab === 'frameworks' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-text-secondary">{frameworks.length} registered frameworks</span>
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-lg text-sm">
+              <Plus className="w-3.5 h-3.5" /> Add Framework
+            </button>
+          </div>
+          {frameworks.map(fw => (
+            <div key={fw.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center">
+                  <span className="text-red-400 text-xs font-bold font-mono">{fw.type.slice(0, 3).toUpperCase()}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{fw.name}</span>
+                    <StatusBadge status={fw.status} />
+                    <span className="text-xs text-text-secondary font-mono">{fw.type}</span>
+                  </div>
+                  <span className="text-xs text-text-secondary font-mono">{fw.url}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => connectFramework(fw.id)} className="px-2 py-1 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded hover:bg-green-600/30">Connect</button>
+                  <button onClick={() => deleteFramework(fw.id)} className="px-2 py-1 text-xs bg-red-600/20 text-red-400 border border-red-500/30 rounded hover:bg-red-600/30">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {/* Add Framework Modal */}
+          <AnimatePresence>
+            {showAdd && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowAdd(false)}>
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-surface border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                  <h3 className="font-semibold text-lg mb-4">Add C2 Framework</h3>
+                  <div className="space-y-3">
+                    <div><label className="text-sm text-text-secondary block mb-1">Name</label><input value={newFw.name} onChange={e => setNewFw({...newFw, name: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="My Mythic" /></div>
+                    <div><label className="text-sm text-text-secondary block mb-1">Type</label>
+                      <select value={newFw.type} onChange={e => setNewFw({...newFw, type: e.target.value as C2Framework['type']})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                        <option value="mythic">Mythic</option><option value="sliver">Sliver</option><option value="havoc">Havoc</option><option value="cobalt_strike">Cobalt Strike</option><option value="custom">Custom</option>
+                      </select>
+                    </div>
+                    <div><label className="text-sm text-text-secondary block mb-1">URL</label><input value={newFw.url} onChange={e => setNewFw({...newFw, url: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm font-mono" placeholder="https://mythic.internal:7443" /></div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary">Cancel</button>
+                      <button onClick={() => { createFramework(newFw); setShowAdd(false); setNewFw({name:'',type:'mythic',url:''}) }} className="px-4 py-2 text-sm bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30">Add</button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Listeners */}
+      {subTab === 'listeners' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-text-secondary">{listeners.length} listeners</span>
+            <button onClick={() => setShowAddListener(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 rounded-lg text-sm">
+              <Plus className="w-3.5 h-3.5" /> Add Listener
+            </button>
+          </div>
+          {listeners.map(l => (
+            <div key={l.id} className="bg-surface rounded-xl border border-border p-3 flex items-center gap-3">
+              <Radio className="w-4 h-4 text-green-400" />
+              <div className="flex-1">
+                <span className="font-medium text-sm">{l.name}</span>
+                <span className="text-xs text-text-secondary ml-2 font-mono">{l.type} → {l.bindAddress}:{l.bindPort}</span>
+              </div>
+              <StatusBadge status={l.status} />
+            </div>
+          ))}
+          <AnimatePresence>
+            {showAddListener && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowAddListener(false)}>
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-surface border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                  <h3 className="font-semibold mb-4">Add Listener</h3>
+                  <div className="space-y-3">
+                    <div><label className="text-sm text-text-secondary block mb-1">Name</label><input value={newListener.name} onChange={e => setNewListener({...newListener, name: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" /></div>
+                    <div><label className="text-sm text-text-secondary block mb-1">Type</label>
+                      <select value={newListener.type} onChange={e => setNewListener({...newListener, type: e.target.value as typeof newListener.type})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                        <option value="https">HTTPS</option><option value="http">HTTP</option><option value="tcp">TCP</option><option value="smb">SMB</option><option value="dns">DNS</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className="text-sm text-text-secondary block mb-1">Bind Address</label><input value={newListener.bindAddress} onChange={e => setNewListener({...newListener, bindAddress: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm font-mono" /></div>
+                      <div><label className="text-sm text-text-secondary block mb-1">Port</label><input type="number" value={newListener.bindPort} onChange={e => setNewListener({...newListener, bindPort: parseInt(e.target.value)})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm font-mono" /></div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button onClick={() => setShowAddListener(false)} className="px-4 py-2 text-sm text-text-secondary">Cancel</button>
+                      <button onClick={() => { createListener(newListener); setShowAddListener(false) }} className="px-4 py-2 text-sm bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg">Add</button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Payloads */}
+      {subTab === 'payloads' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-text-secondary">{payloads.length} payloads</span>
+            <button onClick={() => setShowAddPayload(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30 rounded-lg text-sm">
+              <Plus className="w-3.5 h-3.5" /> Generate Payload
+            </button>
+          </div>
+          {payloads.map(p => (
+            <div key={p.id} className="bg-surface rounded-xl border border-border p-3">
+              <div className="flex items-center gap-3">
+                <Bug className="w-4 h-4 text-purple-400" />
+                <div className="flex-1">
+                  <span className="font-medium text-sm">{p.name}</span>
+                  <span className="text-xs text-text-secondary ml-2">{p.type} | {p.platform} | {p.arch}</span>
+                </div>
+                <StatusBadge status={p.status} />
+                {p.evasion.length > 0 && <span className="text-xs text-yellow-400">{p.evasion.length} evasions</span>}
+              </div>
+            </div>
+          ))}
+          <AnimatePresence>
+            {showAddPayload && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowAddPayload(false)}>
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-surface border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                  <h3 className="font-semibold mb-4">Generate Payload</h3>
+                  <div className="space-y-3">
+                    <div><label className="text-sm text-text-secondary block mb-1">Name</label><input value={newPayload.name} onChange={e => setNewPayload({...newPayload, name: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="beacon_x64" /></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><label className="text-sm text-text-secondary block mb-1">Type</label>
+                        <select value={newPayload.type} onChange={e => setNewPayload({...newPayload, type: e.target.value as typeof newPayload.type})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                          <option value="exe">EXE</option><option value="dll">DLL</option><option value="shellcode">Shellcode</option><option value="ps1">PS1</option>
+                        </select>
+                      </div>
+                      <div><label className="text-sm text-text-secondary block mb-1">Platform</label>
+                        <select value={newPayload.platform} onChange={e => setNewPayload({...newPayload, platform: e.target.value as typeof newPayload.platform})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                          <option value="windows">Windows</option><option value="linux">Linux</option><option value="macos">macOS</option>
+                        </select>
+                      </div>
+                      <div><label className="text-sm text-text-secondary block mb-1">Arch</label>
+                        <select value={newPayload.arch} onChange={e => setNewPayload({...newPayload, arch: e.target.value as typeof newPayload.arch})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                          <option value="x64">x64</option><option value="x86">x86</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button onClick={() => setShowAddPayload(false)} className="px-4 py-2 text-sm text-text-secondary">Cancel</button>
+                      <button onClick={() => { createPayload(newPayload); setShowAddPayload(false) }} className="px-4 py-2 text-sm bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg">Generate</button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Implants */}
+      {subTab === 'implants' && (
+        <div className="space-y-3">
+          <span className="text-sm text-text-secondary">{implants.length} implants</span>
+          {implants.length === 0 && (
+            <div className="bg-surface rounded-xl border border-border p-8 text-center text-text-secondary">
+              <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No implants registered. Deploy a payload to establish a callback.</p>
+            </div>
+          )}
+          {implants.map(imp => (
+            <div key={imp.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${imp.status === 'active' ? 'bg-green-400 animate-pulse' : imp.status === 'dormant' ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm font-mono">{imp.hostname}</span>
+                    <span className="text-xs text-text-secondary">{imp.username}</span>
+                    <StatusBadge status={imp.status} />
+                    <span className={`text-xs px-1.5 py-0.5 rounded border ${imp.integrity === 'system' ? 'bg-red-600/20 text-red-400 border-red-500/30' : imp.integrity === 'high' ? 'bg-yellow-600/20 text-yellow-400 border-yellow-500/30' : 'bg-gray-600/20 text-gray-400 border-gray-500/30'}`}>{imp.integrity}</span>
+                  </div>
+                  <div className="text-xs text-text-secondary mt-1 font-mono">
+                    {imp.ip} | {imp.os} {imp.arch} | PID {imp.pid} | {imp.process} | Sleep {imp.sleep}s/{imp.jitter}%
+                  </div>
+                </div>
+                <button onClick={() => killImplant(imp.id)} className="px-2 py-1 text-xs bg-red-600/20 text-red-400 border border-red-500/30 rounded hover:bg-red-600/30">Kill</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Operations */}
+      {subTab === 'operations' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-text-secondary">{operations.length} operations</span>
+            <button onClick={() => setShowAddOp(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0c040]/20 hover:bg-[#f0c040]/30 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-sm">
+              <Plus className="w-3.5 h-3.5" /> New Operation
+            </button>
+          </div>
+          {operations.map(op => (
+            <div key={op.id} className="bg-surface rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Crosshair className="w-4 h-4 text-[#f0c040]" />
+                    <span className="font-medium">{op.name}</span>
+                    <StatusBadge status={op.status} />
+                  </div>
+                  {op.objective && <p className="text-xs text-text-secondary mt-1">{op.objective}</p>}
+                </div>
+                <div className="text-xs text-text-secondary">{op.mitreTactics.length} tactics</div>
+              </div>
+            </div>
+          ))}
+          <AnimatePresence>
+            {showAddOp && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowAddOp(false)}>
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-surface border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                  <h3 className="font-semibold mb-4">New Operation</h3>
+                  <div className="space-y-3">
+                    <div><label className="text-sm text-text-secondary block mb-1">Operation Name</label><input value={newOp.name} onChange={e => setNewOp({...newOp, name: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="APT29 Emulation" /></div>
+                    <div><label className="text-sm text-text-secondary block mb-1">Objective</label><input value={newOp.objective} onChange={e => setNewOp({...newOp, objective: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="Gain domain admin access" /></div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button onClick={() => setShowAddOp(false)} className="px-4 py-2 text-sm text-text-secondary">Cancel</button>
+                      <button onClick={() => { createOperation(newOp); setShowAddOp(false); setNewOp({name:'',objective:''}) }} className="px-4 py-2 text-sm bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg">Create</button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- LOL Browser Tab ----
+
+const PLATFORM_COLORS: Record<string, string> = {
+  windows: 'bg-blue-600/20 text-blue-400 border-blue-500/30',
+  linux: 'bg-orange-600/20 text-orange-400 border-orange-500/30',
+  macos: 'bg-gray-600/20 text-gray-300 border-gray-500/30',
+  esxi: 'bg-green-600/20 text-green-400 border-green-500/30',
+  cross: 'bg-purple-600/20 text-purple-400 border-purple-500/30',
+  ad: 'bg-yellow-600/20 text-yellow-400 border-yellow-500/30',
+  cloud: 'bg-cyan-600/20 text-cyan-400 border-cyan-500/30',
+  hardware: 'bg-red-600/20 text-red-400 border-red-500/30',
+}
+
+function LOLBrowserTab() {
+  const { stats, projects, entries, searchResults, fetchEntries, searchEntries, setFilter, selectedProject, selectedPlatform } = useLOLStore()
+  const [searchQ, setSearchQ] = useState('')
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null)
+
+  const handleSearch = useCallback((q: string) => {
+    setSearchQ(q)
+    if (q.trim()) {
+      searchEntries(q)
+    }
+  }, [searchEntries])
+
+  const displayEntries = searchQ.trim() ? searchResults : entries
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      {/* Left: Projects sidebar */}
+      <div className="xl:col-span-1 space-y-3">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <Globe className="w-4 h-4 text-[#f0c040]" />
+          LOL Projects ({projects.length})
+        </h3>
+        <div className="space-y-1 max-h-[70vh] overflow-y-auto pr-1">
+          <button onClick={() => { setFilter('selectedProject', ''); fetchEntries() }}
+            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${!selectedProject ? 'bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30' : 'text-text-secondary hover:text-text-primary hover:bg-surface-light'}`}>
+            All Projects
+          </button>
+          {projects.map(p => (
+            <button key={p.id} onClick={() => setFilter('selectedProject', p.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                selectedProject === p.id ? 'bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30' : 'text-text-secondary hover:text-text-primary hover:bg-surface-light'
+              }`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] border ${PLATFORM_COLORS[p.platform] || 'bg-gray-600/20 text-gray-400 border-gray-500/30'}`}>{p.platform}</span>
+                <span className="truncate">{p.shortName}</span>
+              </div>
+              <span className="text-[10px] text-text-secondary flex-shrink-0">{p.entryCount}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Platform filter */}
+        <div className="pt-3 border-t border-border">
+          <h4 className="text-xs text-text-secondary mb-2">Platform Filter</h4>
+          <div className="flex flex-wrap gap-1">
+            {['windows', 'linux', 'macos', 'ad', 'cross', 'esxi'].map(pl => (
+              <button key={pl} onClick={() => setFilter('selectedPlatform', selectedPlatform === pl ? '' : pl)}
+                className={`px-2 py-1 rounded text-[10px] border transition-colors ${
+                  selectedPlatform === pl ? PLATFORM_COLORS[pl] : 'text-text-secondary border-border hover:text-text-primary'
+                }`}>{pl}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats */}
+        {stats && (
+          <div className="pt-3 border-t border-border">
+            <h4 className="text-xs text-text-secondary mb-2">MITRE Coverage</h4>
+            <div className="space-y-1">
+              {Object.entries(stats.mitreHeatmap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id, count]) => (
+                <div key={id} className="flex items-center justify-between text-xs">
+                  <span className="text-[#00d4ff] font-mono">{id}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 bg-surface-light rounded-full overflow-hidden">
+                      <div className="h-full bg-[#f0c040] rounded-full" style={{ width: `${Math.min(100, (count / Math.max(...Object.values(stats.mitreHeatmap))) * 100)}%` }} />
+                    </div>
+                    <span className="text-text-secondary w-4 text-right">{count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Right: Entries browser */}
+      <div className="xl:col-span-3">
+        {/* Search */}
+        <div className="flex gap-2 mb-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+            <input value={searchQ} onChange={e => handleSearch(e.target.value)}
+              className="w-full bg-surface-light border border-border rounded-lg pl-10 pr-3 py-2 text-sm"
+              placeholder="Search LOL entries — certutil, mimikatz, reverse shell, T1059..."
+            />
+          </div>
+          <button onClick={() => { setSearchQ(''); fetchEntries() }} className="px-3 py-2 bg-surface-light border border-border rounded-lg text-sm text-text-secondary hover:text-text-primary">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Entries list */}
+        <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+          {displayEntries.length === 0 && (
+            <div className="bg-surface rounded-xl border border-border p-8 text-center text-text-secondary">
+              <Skull className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No entries found. Try a different search or filter.</p>
+            </div>
+          )}
+          {displayEntries.map(entry => (
+            <div key={entry.id} className="bg-surface rounded-xl border border-border overflow-hidden">
+              <button onClick={() => setExpandedEntry(expandedEntry === entry.id ? null : entry.id)}
+                className="w-full text-left p-3 flex items-center gap-3 hover:bg-surface-light/50 transition-colors">
+                {expandedEntry === entry.id ? <ChevronDown className="w-4 h-4 text-[#f0c040] flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-text-secondary flex-shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm font-mono text-[#f0c040]">{entry.name}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] border ${PLATFORM_COLORS[entry.platform] || 'bg-gray-600/20 text-gray-400 border-gray-500/30'}`}>{entry.platform}</span>
+                    <span className="text-[10px] text-text-secondary bg-surface-light px-1.5 py-0.5 rounded">{entry.projectId}</span>
+                    {entry.mitreIds.map(m => (
+                      <span key={m} className="text-[10px] text-[#00d4ff] bg-[#00d4ff]/10 border border-[#00d4ff]/20 px-1.5 py-0.5 rounded font-mono">{m}</span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-text-secondary mt-1 truncate">{entry.description}</p>
+                </div>
+                <span className="text-xs text-text-secondary flex-shrink-0">{entry.commands.length} cmd{entry.commands.length !== 1 ? 's' : ''}</span>
+              </button>
+
+              {/* Expanded details */}
+              <AnimatePresence>
+                {expandedEntry === entry.id && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-border">
+                    <div className="p-4 space-y-3">
+                      {/* Commands */}
+                      {entry.commands.map((cmd, i) => (
+                        <div key={i} className="bg-[#0a0a0f] rounded-lg p-3 border border-border">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-text-secondary">{cmd.description}</span>
+                            <div className="flex items-center gap-2">
+                              {cmd.privileges && <span className="text-[10px] text-yellow-400 bg-yellow-600/10 px-1.5 py-0.5 rounded border border-yellow-500/20">{cmd.privileges}</span>}
+                              {cmd.mitreId && <span className="text-[10px] text-[#00d4ff] font-mono">{cmd.mitreId}</span>}
+                              <button onClick={() => navigator.clipboard.writeText(cmd.command)} className="p-1 text-text-secondary hover:text-text-primary" title="Copy command">
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                          <pre className="text-xs font-mono text-green-400 whitespace-pre-wrap break-all">{cmd.command}</pre>
+                        </div>
+                      ))}
+
+                      {/* Tags & paths */}
+                      <div className="flex flex-wrap gap-2">
+                        {entry.tags.map(t => (
+                          <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-light text-text-secondary border border-border">{t}</span>
+                        ))}
+                      </div>
+                      {entry.paths && entry.paths.length > 0 && (
+                        <div className="text-xs text-text-secondary">
+                          <span className="text-text-primary">Paths: </span>
+                          {entry.paths.map((p, i) => <code key={i} className="font-mono text-[#f0c040] mr-2">{p}</code>)}
+                        </div>
+                      )}
+
+                      {/* Detection */}
+                      {entry.detection && entry.detection.length > 0 && (
+                        <div className="text-xs">
+                          <span className="text-text-primary">Detection: </span>
+                          {entry.detection.map((d, i) => (
+                            <span key={i} className="text-red-400 mr-2">[{d.type}] {d.name || d.value}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---- LOL Chains Tab ----
+
+function LOLChainsTab() {
+  const { chains, entries, fetchChains, createChain, deleteChain } = useLOLStore()
+  const { chains: c2Chains, createChain: createC2Chain, executeChain: executeC2Chain, fetchChains: fetchC2Chains } = useC2Store()
+  const [showCreate, setShowCreate] = useState(false)
+  const [newChain, setNewChain] = useState({ name: '', description: '', platform: 'windows' })
+  const [selectedEntries, setSelectedEntries] = useState<string[]>([])
+
+  useEffect(() => {
+    fetchChains()
+    fetchC2Chains()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCreateChain = () => {
+    const steps = selectedEntries.map((entryId, i) => {
+      const entry = entries.find(e => e.id === entryId)
+      return {
+        order: i + 1,
+        entryId,
+        entryName: entry?.name || entryId,
+        projectId: entry?.projectId || '',
+        commandIdx: 0,
+        description: entry?.description || '',
+        mitreId: entry?.mitreIds?.[0] || '',
+        tactic: entry?.category || '',
+      }
+    })
+    createChain({ ...newChain, steps, mitreTactics: [] })
+    setShowCreate(false)
+    setNewChain({ name: '', description: '', platform: 'windows' })
+    setSelectedEntries([])
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-[#f0c040]" />
+            Attack Chains
+          </h3>
+          <p className="text-xs text-text-secondary mt-1">Build LOL attack chains from catalog entries and C2 operations</p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0c040]/20 hover:bg-[#f0c040]/30 text-[#f0c040] border border-[#f0c040]/30 rounded-lg text-sm">
+          <Plus className="w-3.5 h-3.5" /> Build Chain
+        </button>
+      </div>
+
+      {/* LOL Chains */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium text-text-secondary">LOL Attack Chains ({chains.length})</h4>
+        {chains.length === 0 && (
+          <div className="bg-surface rounded-xl border border-border p-6 text-center text-text-secondary text-sm">
+            No LOL chains created. Click "Build Chain" to compose LOL entries into an attack sequence.
+          </div>
+        )}
+        {chains.map(ch => (
+          <div key={ch.id} className="bg-surface rounded-xl border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-[#f0c040]" />
+                <span className="font-medium">{ch.name}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] border ${PLATFORM_COLORS[ch.platform] || 'bg-gray-600/20 text-gray-400 border-gray-500/30'}`}>{ch.platform}</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => deleteChain(ch.id)} className="p-1 text-red-400 hover:bg-red-600/20 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+            {ch.description && <p className="text-xs text-text-secondary mb-3">{ch.description}</p>}
+            {/* Steps visualization */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              {ch.steps.map((step, i) => (
+                <div key={i} className="flex items-center gap-1 flex-shrink-0">
+                  <div className="bg-[#0a0a0f] border border-border rounded-lg px-3 py-2 text-xs">
+                    <span className="text-[#f0c040] font-mono">{step.entryName}</span>
+                    {step.mitreId && <span className="text-[#00d4ff] ml-1 text-[10px]">{step.mitreId}</span>}
+                  </div>
+                  {i < ch.steps.length - 1 && <ChevronRight className="w-3 h-3 text-text-secondary flex-shrink-0" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* C2 Attack Chains */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium text-text-secondary">C2 Attack Chains ({c2Chains.length})</h4>
+        {c2Chains.map(ch => (
+          <div key={ch.id} className="bg-surface rounded-xl border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Crosshair className="w-4 h-4 text-red-400" />
+                <span className="font-medium">{ch.name}</span>
+                <StatusBadge status={ch.status} />
+              </div>
+              {ch.status === 'pending' && (
+                <button onClick={() => executeC2Chain(ch.id)} className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded">
+                  <Play className="w-3 h-3" /> Execute
+                </button>
+              )}
+            </div>
+            <div className="space-y-1">
+              {ch.steps.map((step, i) => (
+                <div key={step.id} className="flex items-center gap-2 text-xs">
+                  <span className="text-text-secondary w-4">{i + 1}.</span>
+                  <StatusBadge status={step.status} />
+                  <span className={step.type === 'lolbin' ? 'text-[#f0c040]' : 'text-text-primary'}>{step.name}</span>
+                  {step.mitreId && <span className="text-[#00d4ff] font-mono text-[10px]">{step.mitreId}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Chain Builder Modal */}
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setShowCreate(false)}>
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-surface border border-border rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h3 className="font-semibold text-lg mb-4">Build Attack Chain</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-sm text-text-secondary block mb-1">Chain Name</label><input value={newChain.name} onChange={e => setNewChain({...newChain, name: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="LOLBin Download & Execute" /></div>
+                  <div><label className="text-sm text-text-secondary block mb-1">Platform</label>
+                    <select value={newChain.platform} onChange={e => setNewChain({...newChain, platform: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm">
+                      <option value="windows">Windows</option><option value="linux">Linux</option><option value="macos">macOS</option><option value="ad">Active Directory</option><option value="cross">Cross-Platform</option>
+                    </select>
+                  </div>
+                </div>
+                <div><label className="text-sm text-text-secondary block mb-1">Description</label><input value={newChain.description} onChange={e => setNewChain({...newChain, description: e.target.value})} className="w-full bg-surface-light border border-border rounded-lg px-3 py-2 text-sm" placeholder="Download payload via certutil, execute via mshta" /></div>
+
+                {/* Selected entries */}
+                <div>
+                  <label className="text-sm text-text-secondary block mb-2">Chain Steps ({selectedEntries.length})</label>
+                  <div className="space-y-1 mb-3">
+                    {selectedEntries.map((id, i) => {
+                      const entry = entries.find(e => e.id === id)
+                      return (
+                        <div key={i} className="flex items-center gap-2 bg-[#0a0a0f] p-2 rounded-lg border border-border">
+                          <span className="text-xs text-text-secondary w-4">{i + 1}.</span>
+                          <span className="text-xs text-[#f0c040] font-mono flex-1">{entry?.name || id}</span>
+                          <button onClick={() => setSelectedEntries(selectedEntries.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300"><X className="w-3 h-3" /></button>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Available entries */}
+                  <div className="bg-surface-light rounded-lg border border-border p-2 max-h-48 overflow-y-auto">
+                    <p className="text-[10px] text-text-secondary mb-2">Click to add to chain:</p>
+                    <div className="space-y-0.5">
+                      {entries.filter(e => !selectedEntries.includes(e.id)).slice(0, 30).map(e => (
+                        <button key={e.id} onClick={() => setSelectedEntries([...selectedEntries, e.id])}
+                          className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-surface transition-colors flex items-center gap-2">
+                          <Plus className="w-3 h-3 text-green-400" />
+                          <span className="font-mono text-[#f0c040]">{e.name}</span>
+                          <span className="text-text-secondary">{e.projectId}</span>
+                          <span className={`px-1 py-0.5 rounded text-[9px] border ${PLATFORM_COLORS[e.platform] || ''}`}>{e.platform}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-text-secondary">Cancel</button>
+                  <button onClick={handleCreateChain} disabled={!newChain.name || selectedEntries.length === 0}
+                    className="px-4 py-2 text-sm bg-[#f0c040]/20 text-[#f0c040] border border-[#f0c040]/30 rounded-lg hover:bg-[#f0c040]/30 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Create Chain
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 // ---- Main component ----
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: 'c2', label: 'C2 Sessions', icon: Radio },
+  { id: 'c2-infra', label: 'C2 Infrastructure', icon: Server },
+  { id: 'lol-browser', label: 'LOL Browser', icon: Skull },
+  { id: 'lol-chains', label: 'Attack Chains', icon: Link2 },
   { id: 'socks', label: 'SOCKS Tasks', icon: Network },
   { id: 'playbooks', label: 'Playbooks', icon: Layers },
   { id: 'neo4j', label: 'Neo4j / Graph', icon: Database },
@@ -1289,6 +1995,18 @@ export default function RedTeam() {
   const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOK_TEMPLATES)
   const [findings, setFindings] = useState<Finding[]>([])
   const [parsers, setParsers] = useState<LogParser[]>([])
+
+  // C2 Infrastructure & LOL stores
+  const c2 = useC2Store()
+  const lol = useLOLStore()
+
+  useEffect(() => {
+    c2.fetchDashboard()
+    c2.fetchFrameworks()
+    lol.fetchStats()
+    lol.fetchProjects()
+    lol.fetchEntries()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Actions
   const addC2Server = (server: C2Server) => setC2Servers([...c2Servers, server])
@@ -1313,7 +2031,9 @@ export default function RedTeam() {
 
   const stats = [
     { label: 'Active Sessions', value: sessions.filter(s => s.status === 'active').length, icon: Terminal, color: 'text-green-400' },
-    { label: 'C2 Servers', value: c2Servers.length, icon: Radio, color: 'text-red-400' },
+    { label: 'C2 Frameworks', value: c2.frameworks.length, icon: Server, color: 'text-red-400' },
+    { label: 'LOL Entries', value: lol.stats?.totalEntries ?? 0, icon: Skull, color: 'text-[#f0c040]' },
+    { label: 'LOL Projects', value: lol.stats?.totalProjects ?? 0, icon: Globe, color: 'text-[#00d4ff]' },
     { label: 'Playbooks', value: playbooks.length, icon: Lock, color: 'text-yellow-400' },
     { label: 'Findings', value: findings.length, icon: AlertTriangle, color: 'text-red-400' },
   ]
@@ -1332,7 +2052,7 @@ export default function RedTeam() {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Red Team Operations</h1>
-            <p className="text-text-secondary text-sm">C2 management, SOCKS tasks, playbooks & AI analysis</p>
+            <p className="text-text-secondary text-sm">C2 infrastructure, LOL integration (28 projects), attack chains & AI analysis</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1348,7 +2068,7 @@ export default function RedTeam() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         {stats.map(s => (
           <div key={s.label} className="bg-surface rounded-xl border border-border p-4">
             <div className={`flex items-center gap-2 mb-1 ${s.color}`}>
@@ -1388,6 +2108,9 @@ export default function RedTeam() {
           transition={{ duration: 0.15 }}
         >
           {activeTab === 'c2' && <C2Tab servers={c2Servers} sessions={sessions} setServers={setC2Servers} setSessions={setSessions} />}
+          {activeTab === 'c2-infra' && <C2InfraTab />}
+          {activeTab === 'lol-browser' && <LOLBrowserTab />}
+          {activeTab === 'lol-chains' && <LOLChainsTab />}
           {activeTab === 'socks' && <SocksTasksTab sessions={sessions} tasks={tasks} setTasks={setTasks} />}
           {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} setPlaybooks={setPlaybooks} />}
           {activeTab === 'neo4j' && <Neo4jTab />}
