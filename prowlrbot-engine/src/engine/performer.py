@@ -1,0 +1,120 @@
+import json
+import time
+
+from src.engine.monitor import ExecutionMonitor
+from src.engine.summarizer import summarize_chain, summarize_output
+from src.engine.tools.registry import ToolExecutor
+
+RESULT_SIZE_LIMIT = 16384
+
+
+async def perform_agent_chain(
+    chain: list[dict],
+    executor: ToolExecutor,
+    llm,
+    max_iterations: int = 100,
+    model: str | None = None,
+    on_action=None,
+) -> dict:
+    """Core ReAct loop. Reason -> Act -> Observe -> Repeat.
+
+    Returns: {"status": "done"|"waiting"|"failed", "result": str, "chain": list}
+    """
+    monitor = ExecutionMonitor(
+        same_tool_limit=max(max_iterations // 2, 5),
+        total_limit=max_iterations,
+    )
+
+    total_tokens = {"input": 0, "output": 0}
+
+    for iteration in range(max_iterations):
+        # Call LLM with tools
+        response = await llm.call_with_tools(
+            chain, executor.get_tool_definitions(), model
+        )
+
+        # Track tokens
+        usage = response.get("usage", {})
+        total_tokens["input"] += usage.get("input", 0)
+        total_tokens["output"] += usage.get("output", 0)
+
+        tool_calls = response.get("tool_calls", [])
+
+        # No tool calls — LLM is stuck
+        if not tool_calls:
+            # Append a nudge
+            chain.append({
+                "role": "system",
+                "content": "You did not call any tool. You must call a tool to make progress, or call 'done' to finish.",
+            })
+            continue
+
+        # Execute each tool call
+        for tc in tool_calls:
+            tool_name = tc["name"]
+            tool_args = tc.get("args", {})
+
+            # Execution monitor check
+            check = monitor.check(tool_name)
+            if check == "abort":
+                return {
+                    "status": "failed",
+                    "result": f"Aborted: exceeded {max_iterations} total tool calls",
+                    "chain": chain,
+                    "tokens": total_tokens,
+                }
+            elif check == "adviser":
+                chain.append({
+                    "role": "system",
+                    "content": f"WARNING: You have called '{tool_name}' repeatedly. Try a different approach or call 'done' to finish.",
+                })
+                continue
+
+            # Execute the tool
+            start = time.time()
+            result = await executor.execute(tool_name, tool_args)
+            duration = time.time() - start
+
+            # Callback for observability
+            if on_action:
+                await on_action(tool_name, tool_args, result, duration)
+
+            # Check barriers
+            if tool_name == "done":
+                return {
+                    "status": "done",
+                    "result": tool_args.get("result", result),
+                    "chain": chain,
+                    "tokens": total_tokens,
+                }
+            elif tool_name == "ask":
+                return {
+                    "status": "waiting",
+                    "result": result,
+                    "chain": chain,
+                    "tokens": total_tokens,
+                }
+
+            # Summarize large output
+            if len(result) > RESULT_SIZE_LIMIT:
+                result = await summarize_output(result, tool_name)
+
+            # Append tool result to chain
+            chain.append({
+                "role": "tool",
+                "tool_call_id": tc.get("id", tool_name),
+                "name": tool_name,
+                "content": result,
+            })
+
+        # Summarize chain if too long
+        if len(chain) > 50:
+            chain = await summarize_chain(chain, keep_recent=10)
+
+    # Max iterations reached
+    return {
+        "status": "failed",
+        "result": f"Max iterations ({max_iterations}) reached without completion",
+        "chain": chain,
+        "tokens": total_tokens,
+    }
