@@ -109,10 +109,30 @@ func (s *Scanner) Scan() *Report {
 		}
 		if info.IsDir() {
 			base := info.Name()
-			if base == "node_modules" || base == ".git" || base == "dist" || base == "build" ||
-				base == "vendor" || base == "__pycache__" || base == ".next" || base == ".venv" ||
-				base == "venv" || base == ".tox" {
+			skipDirs := map[string]bool{
+				"node_modules": true, ".git": true, "dist": true, "build": true,
+				"vendor": true, "__pycache__": true, ".next": true, ".venv": true,
+				"venv": true, ".tox": true, ".claude": true, ".cursor": true,
+				".idea": true, ".vscode": true, "coverage": true, ".nyc_output": true,
+				".pytest_cache": true, ".mypy_cache": true, ".ruff_cache": true,
+				"target": true, "Pods": true, ".gradle": true, "obj": true, "bin": true,
+				".terraform": true, ".serverless": true, ".vercel": true,
+				".pnpm-store": true, ".yarn": true, ".npm": true, ".cache": true,
+				".auto-claude": true, ".worktrees": true,
+			}
+			if skipDirs[base] {
 				return filepath.SkipDir
+			}
+			// Skip virtual environment directories
+			if strings.HasSuffix(base, "-env") || strings.HasSuffix(base, "_env") {
+				return filepath.SkipDir
+			}
+			// Skip anything inside site-packages (vendored Python)
+			if base == "site-packages" || base == "lib" {
+				rel, _ := filepath.Rel(s.config.Dir, path)
+				if strings.Contains(rel, "site-packages") || strings.Contains(rel, "-env/lib") || strings.Contains(rel, "_env/lib") {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}

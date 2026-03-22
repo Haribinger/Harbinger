@@ -12,6 +12,8 @@ func allRules() []Rule {
 		vibeCodeRules(),
 		securityRules(),
 		simulationRules(),
+		vibeCoderRules(),
+		testKeyRules(),
 	)
 }
 
