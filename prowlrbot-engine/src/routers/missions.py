@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -83,3 +83,46 @@ async def get_mission(mission_id: int):
         if mission is None:
             raise HTTPException(status_code=404, detail="mission not found")
         return mission
+
+
+# ---------------------------------------------------------------------------
+# Execution
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/v2/missions/{mission_id}/execute", status_code=202)
+async def execute_mission(mission_id: int, background_tasks: BackgroundTasks):
+    """Start executing a mission. Returns immediately, runs in background."""
+    if not db_available():
+        raise HTTPException(status_code=503, detail="database not available")
+
+    async with async_session() as session:
+        mission = await session.get(Mission, mission_id)
+        if mission is None:
+            raise HTTPException(status_code=404, detail="mission not found")
+        if mission.status not in ("created", "failed"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"mission is {mission.status}, cannot execute",
+            )
+
+        mission.status = "running"
+        await session.commit()
+
+    # Run in background (Phase 2 will add proper DAG scheduler)
+    background_tasks.add_task(_run_mission_background, mission_id)
+
+    return {"status": "started", "mission_id": mission_id}
+
+
+async def _run_mission_background(mission_id: int):
+    """Background task: execute all tasks in a mission.
+
+    Placeholder — Phase 2 implements the full DAG scheduler with parallel
+    task execution, container orchestration, and LLM integration.
+    """
+    async with async_session() as session:
+        mission = await session.get(Mission, mission_id)
+        if mission:
+            mission.status = "running"
+            await session.commit()
