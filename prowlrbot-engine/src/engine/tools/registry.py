@@ -4,6 +4,9 @@ from src.engine.tools.file_tool import FileTool
 from src.engine.tools.terminal import TerminalTool
 from src.engine.tools.delegation import DelegationTool, DELEGATION_SCHEMAS
 from src.engine.tools.memory_tools import MemoryTool, MEMORY_TOOL_NAMES
+from src.engine.tools.browser import BrowserTool
+from src.engine.tools.subtasks import SubtaskListTool, SubtaskPatchTool, ReportResultTool
+from src.engine.tools.search_engines import get_search_tool, SEARCH_TOOL_SCHEMAS
 
 # Tool types for observability
 TOOL_TYPES = {
@@ -82,6 +85,34 @@ class ToolExecutor:
                 mt = MemoryTool(tool_name=tool_name)
                 self._tools[tool_name] = mt
                 self._schemas[tool_name] = mt.schema()
+
+        # Search engine tools
+        for tool_name in allowed_tools:
+            if tool_name in SEARCH_TOOL_SCHEMAS:
+                st = get_search_tool(tool_name)
+                if st:
+                    self._tools[tool_name] = st
+                    self._schemas[tool_name] = SEARCH_TOOL_SCHEMAS[tool_name]
+
+        # Browser tool
+        if "browser" in allowed_tools:
+            bt = BrowserTool()
+            self._tools["browser"] = bt
+            self._schemas["browser"] = bt.schema()
+
+        # Subtask management tools
+        if "subtask_list" in allowed_tools:
+            sl = SubtaskListTool()
+            self._tools["subtask_list"] = sl
+            self._schemas["subtask_list"] = sl.schema()
+        if "subtask_patch" in allowed_tools:
+            sp = SubtaskPatchTool()
+            self._tools["subtask_patch"] = sp
+            self._schemas["subtask_patch"] = sp.schema()
+        if "report_result" in allowed_tools:
+            rr = ReportResultTool()
+            self._tools["report_result"] = rr
+            self._schemas["report_result"] = rr.schema()
 
     def get_tool_definitions(self) -> list[dict]:
         """Return LLM-compatible tool definitions."""

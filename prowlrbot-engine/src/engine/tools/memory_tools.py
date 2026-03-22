@@ -147,6 +147,26 @@ MEMORY_SCHEMAS: dict[str, dict] = {
             "required": ["content"],
         },
     },
+    "graphiti_search": {
+        "name": "graphiti_search",
+        "description": (
+            "Search the temporal knowledge graph for past executions, entities, "
+            "and relationships. Supports: hosts, vulns, credentials, techniques, general."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "search_type": {
+                    "type": "string",
+                    "enum": ["hosts", "vulns", "credentials", "techniques", "general"],
+                    "description": "Type of graph search",
+                    "default": "general",
+                },
+            },
+            "required": ["query"],
+        },
+    },
 }
 
 MEMORY_TOOL_NAMES = set(MEMORY_SCHEMAS.keys())

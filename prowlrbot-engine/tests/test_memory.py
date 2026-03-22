@@ -26,10 +26,11 @@ from src.memory.store import VALID_COLLECTIONS, EMBEDDING_DIM
 
 
 class TestMemoryToolSchemas:
-    def test_all_7_memory_tools_have_schemas(self):
+    def test_all_memory_tools_have_schemas(self):
         expected = {
             "search_in_memory", "search_guide", "store_guide",
             "search_answer", "store_answer", "search_code", "store_code",
+            "graphiti_search",
         }
         assert set(MEMORY_SCHEMAS.keys()) == expected
 
