@@ -1435,6 +1435,11 @@ func main() {
 	// Initialize LOL (Living Off the Land) catalog with all 28 projects
 	initLOLCatalog()
 
+	// Initialize execution engine subsystems
+	initExecutor(cfg)
+	initPipeline()
+	initVectorMem()
+
 	mux := http.NewServeMux()
 
 	// Public routes
@@ -1996,6 +2001,48 @@ func main() {
 	mux.HandleFunc("GET /api/v1/cve/feed", authMiddleware(handleCVEFeed))
 	mux.HandleFunc("GET /api/v1/cve/matches", authMiddleware(handleCVEMatching))
 	mux.HandleFunc("POST /api/v1/cve/refresh", authMiddleware(handleCVERefresh))
+
+	// ── Execution Engine ─────────────────────────────────────────────────
+	mux.HandleFunc("POST /api/exec/spawn", authMiddleware(handleSpawnExecution))
+	mux.HandleFunc("POST /api/v1/exec/spawn", authMiddleware(handleSpawnExecution))
+	mux.HandleFunc("POST /api/exec/{id}/run", authMiddleware(handleExecCommand))
+	mux.HandleFunc("POST /api/v1/exec/{id}/run", authMiddleware(handleExecCommand))
+	mux.HandleFunc("POST /api/exec/{id}/stop", authMiddleware(handleStopExecution))
+	mux.HandleFunc("POST /api/v1/exec/{id}/stop", authMiddleware(handleStopExecution))
+	mux.HandleFunc("DELETE /api/exec/{id}", authMiddleware(handleRemoveExecution))
+	mux.HandleFunc("DELETE /api/v1/exec/{id}", authMiddleware(handleRemoveExecution))
+
+	// ── Pipelines ────────────────────────────────────────────────────────
+	mux.HandleFunc("POST /api/pipelines", authMiddleware(handleCreatePipeline))
+	mux.HandleFunc("POST /api/v1/pipelines", authMiddleware(handleCreatePipeline))
+	mux.HandleFunc("GET /api/pipelines", authMiddleware(handleListPipelines))
+	mux.HandleFunc("GET /api/v1/pipelines", authMiddleware(handleListPipelines))
+	mux.HandleFunc("GET /api/pipelines/{id}", authMiddleware(handleGetPipeline))
+	mux.HandleFunc("GET /api/v1/pipelines/{id}", authMiddleware(handleGetPipeline))
+	mux.HandleFunc("PATCH /api/pipelines/{id}", authMiddleware(handleUpdatePipelineStatus))
+	mux.HandleFunc("PATCH /api/v1/pipelines/{id}", authMiddleware(handleUpdatePipelineStatus))
+	mux.HandleFunc("POST /api/pipelines/{id}/tasks", authMiddleware(handleAddPipelineTask))
+	mux.HandleFunc("POST /api/v1/pipelines/{id}/tasks", authMiddleware(handleAddPipelineTask))
+	mux.HandleFunc("GET /api/pipelines/{id}/tasks", authMiddleware(handleListPipelineTasks))
+	mux.HandleFunc("GET /api/v1/pipelines/{id}/tasks", authMiddleware(handleListPipelineTasks))
+
+	// ── Vector Memory ────────────────────────────────────────────────────
+	mux.HandleFunc("POST /api/memory/store", authMiddleware(handleStoreMemory))
+	mux.HandleFunc("POST /api/v1/memory/store", authMiddleware(handleStoreMemory))
+	mux.HandleFunc("POST /api/memory/search", authMiddleware(handleSearchMemory))
+	mux.HandleFunc("POST /api/v1/memory/search", authMiddleware(handleSearchMemory))
+	mux.HandleFunc("DELETE /api/memory/{id}", authMiddleware(handleDeleteMemory))
+	mux.HandleFunc("DELETE /api/v1/memory/{id}", authMiddleware(handleDeleteMemory))
+	mux.HandleFunc("GET /api/memory/agent/{agent_id}", authMiddleware(handleListAgentMemories))
+	mux.HandleFunc("GET /api/v1/memory/agent/{agent_id}", authMiddleware(handleListAgentMemories))
+
+	// ── Observability (LLM Tracing) ──────────────────────────────────────
+	mux.HandleFunc("POST /api/observability/trace", authMiddleware(handleRecordTrace))
+	mux.HandleFunc("POST /api/v1/observability/trace", authMiddleware(handleRecordTrace))
+	mux.HandleFunc("GET /api/observability/traces", authMiddleware(handleListTraces))
+	mux.HandleFunc("GET /api/v1/observability/traces", authMiddleware(handleListTraces))
+	mux.HandleFunc("GET /api/observability/stats", authMiddleware(handleObservabilityStats))
+	mux.HandleFunc("GET /api/v1/observability/stats", authMiddleware(handleObservabilityStats))
 
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux
