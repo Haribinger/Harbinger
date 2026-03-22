@@ -2038,14 +2038,28 @@ func main() {
 	mux.HandleFunc("POST /api/v1/chat/message", authMiddleware(handleChatMessage))
 	mux.HandleFunc("POST /api/v1/chat/stream", authMiddleware(handleChatStream))
 
-	// ── CVE Monitor (CISA KEV Feed) ─────────────────────────────────────
+	// ── CVE Monitor (multi-source: CISA KEV, NVD, GitHub Advisories, custom) ──
 	mux.HandleFunc("GET /api/cve/feed", authMiddleware(handleCVEFeed))
-	mux.HandleFunc("GET /api/cve/matches", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/cve/stats", authMiddleware(handleCVEStats))
+	mux.HandleFunc("GET /api/cve/match", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/cve/matches", authMiddleware(handleCVEMatching))   // legacy alias
 	mux.HandleFunc("POST /api/cve/refresh", authMiddleware(handleCVERefresh))
+	mux.HandleFunc("GET /api/cve/sources", authMiddleware(handleListCVESources))
+	mux.HandleFunc("POST /api/cve/sources", authMiddleware(handleAddCVESource))
+	mux.HandleFunc("PUT /api/cve/sources/{id}", authMiddleware(handleUpdateCVESource))
+	mux.HandleFunc("DELETE /api/cve/sources/{id}", authMiddleware(handleDeleteCVESource))
+	mux.HandleFunc("GET /api/cve/{id}", authMiddleware(handleGetCVEByID))
 	// v1 aliases
 	mux.HandleFunc("GET /api/v1/cve/feed", authMiddleware(handleCVEFeed))
-	mux.HandleFunc("GET /api/v1/cve/matches", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/v1/cve/stats", authMiddleware(handleCVEStats))
+	mux.HandleFunc("GET /api/v1/cve/match", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/v1/cve/matches", authMiddleware(handleCVEMatching)) // legacy alias
 	mux.HandleFunc("POST /api/v1/cve/refresh", authMiddleware(handleCVERefresh))
+	mux.HandleFunc("GET /api/v1/cve/sources", authMiddleware(handleListCVESources))
+	mux.HandleFunc("POST /api/v1/cve/sources", authMiddleware(handleAddCVESource))
+	mux.HandleFunc("PUT /api/v1/cve/sources/{id}", authMiddleware(handleUpdateCVESource))
+	mux.HandleFunc("DELETE /api/v1/cve/sources/{id}", authMiddleware(handleDeleteCVESource))
+	mux.HandleFunc("GET /api/v1/cve/{id}", authMiddleware(handleGetCVEByID))
 
 	// ── Execution Engine ─────────────────────────────────────────────────
 	// ── Agent Shell ─────────────────────────────────────────────────────
@@ -2282,8 +2296,8 @@ func main() {
 	mux.HandleFunc("GET /api/v1/autonomous/stats", authMiddleware(handleAutonomousStats))
 
 	// ── Additional missing routes found in final audit ────────────────
-	mux.HandleFunc("GET /api/cve/matching", authMiddleware(handleCVEMatching))
-	mux.HandleFunc("GET /api/v1/cve/matching", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/cve/matching", authMiddleware(handleCVEMatching))   // legacy alias
+	mux.HandleFunc("GET /api/v1/cve/matching", authMiddleware(handleCVEMatching)) // legacy alias
 	mux.HandleFunc("PATCH /api/agents/{id}/status", authMiddleware(handleUpdateAgentByID))
 	mux.HandleFunc("PATCH /api/v1/agents/{id}/status", authMiddleware(handleUpdateAgentByID))
 	mux.HandleFunc("GET /api/workflows/{id}", authMiddleware(handleGetWorkflowByID))

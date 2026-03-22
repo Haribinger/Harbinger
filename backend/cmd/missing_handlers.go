@@ -204,47 +204,6 @@ func handleListBountyPrograms(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "programs": bountyPrograms})
 }
 
-// ── CVE: /api/cve/agent-scan, /api/cve/auto-triage ──────────────────────
-
-func handleCVEAgentScan(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		CVEID     string `json:"cveID"`
-		AgentType string `json:"agentType"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid body"})
-		return
-	}
-	if body.CVEID == "" || body.AgentType == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "cveID and agentType required"})
-		return
-	}
-	taskID := fmt.Sprintf("cve-scan-%d", time.Now().UnixMilli())
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "taskId": taskID})
-}
-
-func handleCVEAutoTriage(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		CVEIDs []string `json:"cveIDs"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid body"})
-		return
-	}
-	results := make([]map[string]any, 0, len(body.CVEIDs))
-	for _, id := range body.CVEIDs {
-		results = append(results, map[string]any{
-			"cveID":         id,
-			"priority":      "medium",
-			"agentAssigned": "BREACH",
-			"action":        "scan",
-			"reason":        "Auto-triaged based on severity and scope match",
-			"autoTriagedAt": time.Now().Format(time.RFC3339),
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "results": results})
-}
-
 // ── Docker: /api/docker/networks, /api/docker/volumes, images/prune ──────
 
 func handleDockerNetworks(w http.ResponseWriter, r *http.Request) {
