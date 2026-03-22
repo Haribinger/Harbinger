@@ -14,6 +14,7 @@ from src.routers.warroom import router as warroom_router
 from src.routers.memory import router as memory_router
 from src.routers.killswitch import router as killswitch_router
 from src.routers.tools import router as tools_router
+from src.routers.registry import router as registry_router
 from src.channels.setup import setup_channel_bridge
 
 
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(killswitch_router)
     app.include_router(tools_router)
+    app.include_router(registry_router)
 
     return app
 
