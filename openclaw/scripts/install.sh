@@ -225,7 +225,7 @@ configure_webhook() {
   "id": "harbinger",
   "name": "Harbinger Events",
   "url": "${HARBINGER_API}/api/openclaw/webhook",
-  "secret": "$(openssl rand -hex 16 2>/dev/null || echo 'change-me')",
+  "secret": "$(openssl rand -hex 32)",
   "events": [
     "agent.spawned",
     "agent.stopped",

@@ -212,8 +212,8 @@ jobs:
 
           # Disabled TLS verification
           if grep -rn 'InsecureSkipVerify:\s*true' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then
-            echo "::warning::InsecureSkipVerify=true — TLS verification disabled"
-            WARNS=$((WARNS + 1))
+            echo "::error::InsecureSkipVerify=true — TLS verification disabled"
+            exit 1
           fi
 
           if [ "$WARNS" -gt 0 ]; then

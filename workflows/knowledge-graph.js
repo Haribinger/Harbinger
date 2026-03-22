@@ -38,14 +38,22 @@ class KnowledgeGraph {
     try {
       // Load entities
       if (fs.existsSync(CONFIG.ENTITIES_FILE)) {
-        const entitiesData = JSON.parse(fs.readFileSync(CONFIG.ENTITIES_FILE, 'utf8'));
-        entitiesData.forEach(e => this.entities.set(e.id, e));
+        try {
+          const entitiesData = JSON.parse(fs.readFileSync(CONFIG.ENTITIES_FILE, 'utf8'));
+          entitiesData.forEach(e => this.entities.set(e.id, e));
+        } catch (e) {
+          console.error('[GRAPH] Malformed entities file:', e.message);
+        }
       }
-      
+
       // Load relations
       if (fs.existsSync(CONFIG.RELATIONS_FILE)) {
-        const relationsData = JSON.parse(fs.readFileSync(CONFIG.RELATIONS_FILE, 'utf8'));
-        relationsData.forEach(r => this.relations.set(r.id, r));
+        try {
+          const relationsData = JSON.parse(fs.readFileSync(CONFIG.RELATIONS_FILE, 'utf8'));
+          relationsData.forEach(r => this.relations.set(r.id, r));
+        } catch (e) {
+          console.error('[GRAPH] Malformed relations file:', e.message);
+        }
       }
       
       console.log(`[GRAPH] Loaded ${this.entities.size} entities, ${this.relations.size} relations`);

@@ -284,9 +284,11 @@ func (c *Config) GetDSN() string {
 }
 
 func (c *Config) GetRedisURL() string {
+	if u := os.Getenv("REDIS_URL"); u != "" {
+		return u
+	}
 	if c.Redis.Password != "" {
-		// Redis URL format: redis://[username]:[password]@host:port/db — username intentionally empty for standard Redis auth
-		return fmt.Sprintf("redis://%s:%s@%s:%d/%d", "", c.Redis.Password, c.Redis.Host, c.Redis.Port, c.Redis.DB)
+		return "redis://:" + c.Redis.Password + "@" + fmt.Sprintf("%s:%d/%d", c.Redis.Host, c.Redis.Port, c.Redis.DB)
 	}
 	return fmt.Sprintf("redis://%s:%d/%d", c.Redis.Host, c.Redis.Port, c.Redis.DB)
 }

@@ -156,7 +156,7 @@ jobs:
 
           # Insecure TLS
           if grep -rn 'InsecureSkipVerify:\s*true' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then
-            echo "::warning::InsecureSkipVerify=true disables TLS verification"
+            echo "::error::InsecureSkipVerify=true disables TLS verification"
             echo "- :warning: InsecureSkipVerify=true found" >> "$GITHUB_STEP_SUMMARY"
             ISSUES=$((ISSUES + 1))
           fi

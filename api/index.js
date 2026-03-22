@@ -152,7 +152,7 @@ async function processChannelMessage(adapter, normalized) {
         'Sorry, I encountered an error processing your message.',
         normalized.metadata
       )
-      .catch(() => {});
+      .catch((sendErr) => console.error('Failed to send error response:', sendErr));
   } finally {
     stopIndicator();
   }

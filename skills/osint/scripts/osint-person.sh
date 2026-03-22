@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OSINT investigation on a person/email
-# Usage: ./skills/scripts/osint-person.sh "John Doe" john.doe@example.com
+# Usage: ./skills/scripts/osint-person.sh "<Person Name>" <email>
 set -euo pipefail
 
 PERSON_NAME="${1:?Usage: osint-person.sh \"<Person Name>\" <email>}"
