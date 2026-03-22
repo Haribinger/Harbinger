@@ -35,6 +35,8 @@ pnpm-debug.log*
 
 # ── AI Model Files ────────────────────────────────────────────────────────────
 models/
+# Exception: prowlrbot-engine SQLAlchemy model package (not AI weights)
+!prowlrbot-engine/src/models/
 **/*.bin
 **/*.gguf
 **/*.onnx

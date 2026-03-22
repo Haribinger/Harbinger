@@ -3,14 +3,24 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.db import close_db, init_db
+from src.db import close_db, engine, init_db
 from src.routers.health import router as health_router
+from src.routers.missions import router as missions_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+
+    # Create all SQLAlchemy-managed tables when the DB is reachable.
+    # Safe to call repeatedly — CREATE TABLE IF NOT EXISTS semantics.
+    if engine:
+        from src.models import Base  # local import avoids circular deps at module load
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
     yield
     # Shutdown
     await close_db()
@@ -32,6 +42,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(missions_router)
 
     return app
 
