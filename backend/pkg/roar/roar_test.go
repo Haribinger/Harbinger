@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // --- Identity tests ---
@@ -276,4 +277,190 @@ func TestMessageVerifyReplayProtection(t *testing.T) {
 	if msg2.Verify(secret, 300) {
 		t.Fatal("10-minute-old message should fail with 300s replay window")
 	}
+}
+
+// --- Bus tests ---
+
+func TestBusPublishSubscribe(t *testing.T) {
+	bus := NewBus(BusConfig{BufferSize: 10})
+
+	targetDID := "did:roar:recon:pathfinder-aaa111"
+	ch := bus.Subscribe(targetDID, nil)
+
+	from := AgentIdentity{DID: "did:roar:web:breach-bbb222", DisplayName: "Breach", AgentType: "web"}
+	to := AgentIdentity{DID: targetDID, DisplayName: "Pathfinder", AgentType: "recon"}
+	msg := NewMessage(from, to, IntentExecute, map[string]any{"target": "example.com"})
+
+	n, err := bus.Publish(msg)
+	if err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 delivery, got %d", n)
+	}
+
+	select {
+	case received := <-ch:
+		if received.ID != msg.ID {
+			t.Fatalf("received wrong message ID: %s vs %s", received.ID, msg.ID)
+		}
+		if received.Payload["target"] != "example.com" {
+			t.Fatal("payload mismatch")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for message")
+	}
+}
+
+func TestBusBroadcast(t *testing.T) {
+	bus := NewBus(BusConfig{BufferSize: 10})
+
+	targetDID := "did:roar:recon:pathfinder-aaa111"
+	otherDID := "did:roar:cloud:phantom-ccc333"
+
+	// Specific subscriber for targetDID
+	chSpecific := bus.Subscribe(targetDID, nil)
+	// Wildcard subscriber (receives all)
+	chWildcard := bus.SubscribeAll(nil)
+	// Subscriber for a different DID — should NOT receive the message
+	chOther := bus.Subscribe(otherDID, nil)
+
+	from := AgentIdentity{DID: "did:roar:web:breach-bbb222"}
+	to := AgentIdentity{DID: targetDID}
+	msg := NewMessage(from, to, IntentNotify, map[string]any{"status": "done"})
+
+	n, err := bus.Publish(msg)
+	if err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected 2 deliveries (specific + wildcard), got %d", n)
+	}
+
+	// Specific subscriber should get it
+	select {
+	case received := <-chSpecific:
+		if received.ID != msg.ID {
+			t.Fatal("specific subscriber got wrong message")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("specific subscriber timed out")
+	}
+
+	// Wildcard subscriber should get it
+	select {
+	case received := <-chWildcard:
+		if received.ID != msg.ID {
+			t.Fatal("wildcard subscriber got wrong message")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("wildcard subscriber timed out")
+	}
+
+	// Other DID subscriber should NOT get it
+	select {
+	case <-chOther:
+		t.Fatal("other DID subscriber should not receive the message")
+	case <-time.After(50 * time.Millisecond):
+		// expected — no message
+	}
+}
+
+func TestBusUnsubscribe(t *testing.T) {
+	bus := NewBus(BusConfig{BufferSize: 10})
+
+	subID := bus.SubscribeWithID("did:roar:test:agent-xxx", nil)
+	if bus.SubscriberCount() != 1 {
+		t.Fatalf("expected 1 subscriber, got %d", bus.SubscriberCount())
+	}
+
+	bus.Unsubscribe(subID)
+	if bus.SubscriberCount() != 0 {
+		t.Fatalf("expected 0 subscribers after unsubscribe, got %d", bus.SubscriberCount())
+	}
+
+	// Double unsubscribe should not panic
+	bus.Unsubscribe(subID)
+}
+
+// --- Stream Event Bus tests ---
+
+func TestEventBus(t *testing.T) {
+	eb := NewEventBus(100)
+
+	sub := eb.Subscribe(StreamFilter{
+		EventTypes: []StreamEventType{EventAgentStatus},
+	}, 10, false)
+
+	// Emit an agent_status event — should be delivered
+	eb.Emit(StreamEvent{
+		Type:   EventAgentStatus,
+		Source: "did:roar:recon:pathfinder-aaa111",
+		Data:   map[string]any{"status": "online"},
+	})
+
+	// Emit a tool_call event — should NOT be delivered
+	eb.Emit(StreamEvent{
+		Type:   EventToolCall,
+		Source: "did:roar:recon:pathfinder-aaa111",
+		Data:   map[string]any{"tool": "nmap"},
+	})
+
+	select {
+	case evt := <-sub.Ch:
+		if evt.Type != EventAgentStatus {
+			t.Fatalf("expected agent_status event, got %s", evt.Type)
+		}
+		if evt.Data["status"] != "online" {
+			t.Fatal("wrong event data")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for agent_status event")
+	}
+
+	// Verify no tool_call event leaked through
+	select {
+	case evt := <-sub.Ch:
+		t.Fatalf("should not receive tool_call event, got %s", evt.Type)
+	case <-time.After(50 * time.Millisecond):
+		// expected
+	}
+
+	eb.Unsubscribe(sub.ID)
+}
+
+func TestEventBusReplay(t *testing.T) {
+	eb := NewEventBus(100)
+
+	// Emit 3 events before subscribing
+	for i := 0; i < 3; i++ {
+		eb.Emit(StreamEvent{
+			Type:   EventTaskUpdate,
+			Source: "did:roar:web:breach-bbb222",
+			Data:   map[string]any{"seq": i},
+		})
+	}
+
+	// Subscribe with replay enabled and a filter matching task_update
+	sub := eb.Subscribe(StreamFilter{
+		EventTypes: []StreamEventType{EventTaskUpdate},
+	}, 10, true)
+
+	// Should receive all 3 buffered events
+	for i := 0; i < 3; i++ {
+		select {
+		case evt := <-sub.Ch:
+			if evt.Type != EventTaskUpdate {
+				t.Fatalf("expected task_update, got %s", evt.Type)
+			}
+			seq, ok := evt.Data["seq"].(int)
+			if !ok || seq != i {
+				t.Fatalf("expected seq %d, got %v", i, evt.Data["seq"])
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for replayed event %d", i)
+		}
+	}
+
+	eb.Unsubscribe(sub.ID)
 }
