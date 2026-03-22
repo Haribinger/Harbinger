@@ -234,47 +234,39 @@ func (r *Report) PrintText(w io.Writer) {
 	}
 	fmt.Fprintf(w, "\n")
 
-	// Findings detail
+	// Codebase maturity assessment
+	maturity := detectMaturity(r, r.FilesScanned)
+	printMaturity(maturity)
+
+	// Findings detail — enhanced card format
 	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
 	fmt.Fprintf(w, "  %s%s FINDINGS DETAIL%s\n", bold, white, reset)
-	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n\n", dim, reset)
+	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
 
-	lastFile := ""
 	for i, f := range r.Findings {
-		if f.File != lastFile {
-			if lastFile != "" {
-				fmt.Fprintf(w, "\n")
-			}
-			fmt.Fprintf(w, "  %s%s📄 %s%s\n", bold, white, f.File, reset)
-			fmt.Fprintf(w, "  %s────────────────────────────────────────────%s\n", dim, reset)
-			lastFile = f.File
-		}
+		printEnhancedFinding(f, i+1)
+	}
 
-		sColor := sevColor(f.Severity)
-		confColor := confBadgeColor(f.Confidence)
-		fmt.Fprintf(w, "  %s %s %s %s%s%s %s[%s]%s L%d: %s\n",
-			sColor, f.Severity.Label(), reset,
-			confColor, f.ConfidenceLabel, reset,
-			gray, f.Rule, reset,
-			f.Line, f.Message)
-
-		if f.Snippet != "" {
-			fmt.Fprintf(w, "      %s│%s %s%s%s\n", dim, reset, italic, truncate(f.Snippet, 100), reset)
+	// Auto-fix summary
+	autoFixable := 0
+	needsReview := 0
+	for _, f := range r.Findings {
+		if canAutoFix(f) {
+			autoFixable++
+		} else {
+			needsReview++
 		}
-		if f.Fix != "" {
-			fmt.Fprintf(w, "      %s│%s %s↳ Fix: %s%s\n", dim, reset, green, f.Fix, reset)
-		}
-		if len(f.ConfidenceReasons) > 0 && f.Confidence < 0.60 {
-			fmt.Fprintf(w, "      %s│%s %s↳ FP signals: %s%s\n", dim, reset, gray, strings.Join(f.ConfidenceReasons, ", "), reset)
-		}
-
-		if i < len(r.Findings)-1 && r.Findings[i+1].File == f.File {
-			fmt.Fprintf(w, "      %s│%s\n", dim, reset)
-		}
+	}
+	if r.TotalCount > 0 {
+		fmt.Fprintf(w, "\n  %s%s🔧 FIX SUMMARY%s\n", bold, white, reset)
+		fmt.Fprintf(w, "  %s────────────────────────────────────────────%s\n", dim, reset)
+		fmt.Fprintf(w, "    %s%s✔ Auto-fixable:%s  %d  %s(mockhunter fix --auto)%s\n", green, bold, reset, autoFixable, dim, reset)
+		fmt.Fprintf(w, "    %s%s⚠ Needs review:%s  %d  %s(mockhunter fix --fixer claude)%s\n", yellow, bold, reset, needsReview, dim, reset)
+		fmt.Println()
 	}
 
 	// Footer
-	fmt.Fprintf(w, "\n  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
+	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
 	if r.CriticalCount > 0 {
 		fmt.Fprintf(w, "  %s%s⚠ %d CRITICAL issues must be fixed before shipping%s\n", bgRed, white+bold, r.CriticalCount, reset)
 	} else if r.HighCount > 0 {

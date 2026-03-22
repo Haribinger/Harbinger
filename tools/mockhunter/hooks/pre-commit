@@ -1,0 +1,41 @@
+#!/bin/sh
+# MockHunter pre-commit hook — scans only changed files for issues
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Or: mockhunter setup --hook
+
+set -e
+
+MOCKHUNTER="${MOCKHUNTER_BIN:-mockhunter}"
+
+if ! command -v "$MOCKHUNTER" >/dev/null 2>&1; then
+  echo "[mockhunter] Not installed — skipping pre-commit check"
+  echo "[mockhunter] Install: go install github.com/Haribinger/mockhunter@latest"
+  exit 0
+fi
+
+echo "[mockhunter] Scanning changed files..."
+
+# Only scan changed files, high severity, exclude tests
+$MOCKHUNTER scan \
+  --git-diff \
+  --min-severity high \
+  --min-confidence 0.60 \
+  --exclude-tests \
+  --format text
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 2 ]; then
+  echo ""
+  echo "[mockhunter] ❌ CRITICAL issues found — commit blocked"
+  echo "[mockhunter] Run 'mockhunter fix' to resolve, or 'git commit --no-verify' to bypass"
+  exit 1
+elif [ $EXIT_CODE -eq 1 ]; then
+  echo ""
+  echo "[mockhunter] ⚠ HIGH severity issues found — review before pushing"
+  echo "[mockhunter] Run 'mockhunter fix' to resolve"
+  # Don't block on HIGH — just warn
+  exit 0
+fi
+
+echo "[mockhunter] ✔ Clean"
