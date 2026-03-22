@@ -109,3 +109,7 @@ docs/prompts/
 
 # Auto Claude data directory
 .auto-claude/
+
+# Python engine virtualenv and build artifacts
+prowlrbot-engine/.venv/
+prowlrbot-engine/*.egg-info/
