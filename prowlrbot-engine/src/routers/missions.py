@@ -289,6 +289,12 @@ async def _run_mission_scheduler(mission_id: int):
                 await session.commit()
 
 
+@router.get("/api/v2/missions/{mission_id}/metrics")
+async def mission_metrics(mission_id: int):
+    from src.observability.metrics import get_mission_metrics
+    return await get_mission_metrics(mission_id)
+
+
 import logging
 
 logger = logging.getLogger(__name__)
