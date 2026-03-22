@@ -238,31 +238,35 @@ func (r *Report) PrintText(w io.Writer) {
 	maturity := detectMaturity(r, r.FilesScanned)
 	printMaturity(maturity)
 
-	// Findings detail — enhanced card format
+	// Architecture flags — high-level system issues
+	archFlags := detectArchFlags(r.Findings)
+	printArchFlags(archFlags)
+
+	// Auto-clustering — group related findings
+	clusters := clusterFindings(r.Findings)
+	printClusters(clusters)
+
+	// Fix campaigns — prioritized fix batches
+	campaigns := buildCampaigns(clusters)
+	printCampaigns(campaigns)
+
+	// Production readiness check
+	checks := checkReadiness(r.Findings, r.FilesScanned)
+	printReadiness(checks)
+
+	// Findings detail — enhanced card format (top 10 only if many)
 	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
-	fmt.Fprintf(w, "  %s%s FINDINGS DETAIL%s\n", bold, white, reset)
+	maxShow := r.TotalCount
+	if maxShow > 15 {
+		maxShow = 15
+		fmt.Fprintf(w, "  %s%s FINDINGS DETAIL%s (showing top %d of %d — use --format json for all)\n", bold, white, reset, maxShow, r.TotalCount)
+	} else {
+		fmt.Fprintf(w, "  %s%s FINDINGS DETAIL%s\n", bold, white, reset)
+	}
 	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
 
-	for i, f := range r.Findings {
-		printEnhancedFinding(f, i+1)
-	}
-
-	// Auto-fix summary
-	autoFixable := 0
-	needsReview := 0
-	for _, f := range r.Findings {
-		if canAutoFix(f) {
-			autoFixable++
-		} else {
-			needsReview++
-		}
-	}
-	if r.TotalCount > 0 {
-		fmt.Fprintf(w, "\n  %s%s🔧 FIX SUMMARY%s\n", bold, white, reset)
-		fmt.Fprintf(w, "  %s────────────────────────────────────────────%s\n", dim, reset)
-		fmt.Fprintf(w, "    %s%s✔ Auto-fixable:%s  %d  %s(mockhunter fix --auto)%s\n", green, bold, reset, autoFixable, dim, reset)
-		fmt.Fprintf(w, "    %s%s⚠ Needs review:%s  %d  %s(mockhunter fix --fixer claude)%s\n", yellow, bold, reset, needsReview, dim, reset)
-		fmt.Println()
+	for i := 0; i < maxShow && i < len(r.Findings); i++ {
+		printEnhancedFinding(r.Findings[i], i+1)
 	}
 
 	// Command suggestions
