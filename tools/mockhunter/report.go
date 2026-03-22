@@ -265,6 +265,9 @@ func (r *Report) PrintText(w io.Writer) {
 		fmt.Println()
 	}
 
+	// Command suggestions
+	suggestNextCommands(r)
+
 	// Footer
 	fmt.Fprintf(w, "  %s═══════════════════════════════════════════════════════════%s\n", dim, reset)
 	if r.CriticalCount > 0 {
@@ -275,6 +278,27 @@ func (r *Report) PrintText(w io.Writer) {
 		fmt.Fprintf(w, "  %s%s✔ No critical or high issues — looking good!%s\n", green, bold, reset)
 	}
 	fmt.Fprintf(w, "\n")
+}
+
+// PrintDangerous renders findings with exploit scenarios (authorized testing only)
+func (r *Report) PrintDangerous(w io.Writer) {
+	fmt.Fprintf(w, "\n%s%s", bgRed, white+bold)
+	fmt.Fprintf(w, "  ⚠ DANGEROUS MODE — EXPLOIT SCENARIOS                          ")
+	fmt.Fprintf(w, "%s\n", reset)
+	fmt.Fprintf(w, "  %sThis output is for authorized security testing only.%s\n", red, reset)
+	fmt.Fprintf(w, "  %sUsing this information against systems you don't own is illegal.%s\n\n", red, reset)
+
+	shown := 0
+	for _, f := range r.Findings {
+		d := diagnose(f, nil)
+		if d.RiskLevel == "exploitable" || d.RiskLevel == "showstopper" || d.RiskLevel == "critical-path" {
+			printDangerousMode(f, d)
+			shown++
+		}
+	}
+	if shown == 0 {
+		fmt.Fprintf(w, "  %sNo exploitable findings at current severity/confidence level.%s\n\n", dim, reset)
+	}
 }
 
 func bar(count, total int, color string) string {

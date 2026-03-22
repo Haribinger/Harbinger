@@ -79,6 +79,7 @@ type ScanConfig struct {
 	MinConfidence float64  // 0.0 to 1.0, findings below this are suppressed
 	ExcludeTests  bool
 	GitDiffOnly   bool     // only scan files changed in git
+	DangerousMode bool     // show exploit scenarios
 	Categories    []string // empty = all categories
 	MaxWorkers    int
 }

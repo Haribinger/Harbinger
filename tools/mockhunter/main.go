@@ -64,6 +64,7 @@ func cmdScan(args []string) {
 	minConf := fs.Float64("min-confidence", 0.35, "Minimum confidence 0.0-1.0")
 	showNoise := fs.Bool("show-noise", false, "Show all including noise")
 	gitDiff := fs.Bool("git-diff", false, "Only scan files changed in git (staged + unstaged + untracked)")
+	dangerous := fs.Bool("dangerous", false, "Show exploit scenarios for high-risk findings (authorized testing only)")
 	fs.Parse(args)
 
 	if *showNoise {
@@ -79,7 +80,7 @@ func cmdScan(args []string) {
 	scanner := NewScanner(ScanConfig{
 		Dir: absDir, MinSeverity: parseSeverity(*severity),
 		MinConfidence: *minConf, ExcludeTests: *excludeTests,
-		GitDiffOnly: *gitDiff,
+		GitDiffOnly: *gitDiff, DangerousMode: *dangerous,
 	})
 	report := scanner.Scan()
 
@@ -110,6 +111,9 @@ func cmdScan(args []string) {
 		enc.Encode(report.ToSARIF())
 	default:
 		report.PrintText(os.Stdout)
+		if *dangerous {
+			report.PrintDangerous(os.Stdout)
+		}
 		printOnboardingTips(report)
 	}
 

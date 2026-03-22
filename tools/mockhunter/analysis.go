@@ -350,6 +350,21 @@ func printEnhancedFinding(f Finding, idx int) {
 	sColor := sevColor(f.Severity)
 	cause := analyzeRootCause(f)
 	fixable := autoFixLabel(f)
+	d := diagnose(f, nil) // surrounding lines loaded during scan, use nil for display
+	verdict := classifySystem(f, f.Snippet, f.ConfidenceReasons)
+
+	// Risk level color
+	riskColor := gray
+	switch d.RiskLevel {
+	case "showstopper":
+		riskColor = bgRed + white + bold
+	case "critical-path":
+		riskColor = red + bold
+	case "exploitable":
+		riskColor = red
+	case "low":
+		riskColor = yellow
+	}
 
 	fmt.Printf("\n  %s┌─ Finding #%d ─────────────────────────────────────────┐%s\n", dim, idx, reset)
 	fmt.Printf("  %s│%s %s %s %s  %s%s%s  conf:%s%.2f%s  %s\n",
@@ -358,6 +373,11 @@ func printEnhancedFinding(f Finding, idx int) {
 		gray, f.Rule, reset,
 		cyan, f.Confidence, reset,
 		fixable)
+	fmt.Printf("  %s│%s %sRisk:%s %s%s%s  %sVerdict:%s %s%s %s%s  %sFix safety:%s %s\n",
+		dim, reset,
+		dim, reset, riskColor, d.RiskLevel, reset,
+		dim, reset, verdict.Color(), verdict.Icon(), verdict, reset,
+		dim, reset, fixSafetyBar(d.FixSafety))
 	fmt.Printf("  %s│%s\n", dim, reset)
 	fmt.Printf("  %s│%s %s📄 %s:%d%s\n", dim, reset, bold, f.File, f.Line, reset)
 	fmt.Printf("  %s│%s %s%s%s\n", dim, reset, white, f.Message, reset)
@@ -365,9 +385,9 @@ func printEnhancedFinding(f Finding, idx int) {
 		fmt.Printf("  %s│%s\n", dim, reset)
 		fmt.Printf("  %s│%s %s  %s%s\n", dim, reset, gray, truncate(f.Snippet, 90), reset)
 	}
-	fmt.Printf("  %s│%s\n", dim, reset)
 
 	// What to check
+	fmt.Printf("  %s│%s\n", dim, reset)
 	fmt.Printf("  %s│%s %s🔍 What to check:%s\n", dim, reset, bold, reset)
 	switch f.Category {
 	case "secrets":
@@ -381,23 +401,41 @@ func printEnhancedFinding(f Finding, idx int) {
 	case "mock-data":
 		fmt.Printf("  %s│%s   • Is the real backend endpoint implemented?\n", dim, reset)
 		fmt.Printf("  %s│%s   • Is this intentional fallback data?\n", dim, reset)
-	case "vibe-code":
-		fmt.Printf("  %s│%s   • Is this dead code that can be removed?\n", dim, reset)
-		fmt.Printf("  %s│%s   • Will this cause issues in production?\n", dim, reset)
+	case "auth":
+		fmt.Printf("  %s│%s   • Is auth middleware applied to this route?\n", dim, reset)
+		fmt.Printf("  %s│%s   • Can this endpoint be accessed without authentication?\n", dim, reset)
+		fmt.Printf("  %s│%s   • Is role/permission checked (not just authentication)?\n", dim, reset)
 	default:
 		fmt.Printf("  %s│%s   • Does this need to be fixed before shipping?\n", dim, reset)
 	}
 
-	// Fix suggestion
-	if f.Fix != "" {
+	// Patch fix vs better fix
+	fmt.Printf("  %s│%s\n", dim, reset)
+	if d.BetterFix != "" && d.BetterFix != f.Fix {
+		fmt.Printf("  %s│%s %s🩹 Quick patch:%s %s\n", dim, reset, yellow, reset, f.Fix)
+		fmt.Printf("  %s│%s %s✅ Better fix:%s\n", dim, reset, green+bold, reset)
+		for _, line := range strings.Split(d.BetterFix, "\n") {
+			fmt.Printf("  %s│%s     %s\n", dim, reset, strings.TrimSpace(line))
+		}
+	} else if f.Fix != "" {
+		fmt.Printf("  %s│%s %s✅ Fix:%s %s\n", dim, reset, green+bold, reset, f.Fix)
+	}
+
+	// Architectural issue flag
+	if d.IsArchIssue {
 		fmt.Printf("  %s│%s\n", dim, reset)
-		fmt.Printf("  %s│%s %s✅ Safe fix:%s %s\n", dim, reset, green+bold, reset, f.Fix)
+		fmt.Printf("  %s│%s %s🏗️  ARCHITECTURAL ISSUE%s\n", dim, reset, red+bold, reset)
+		fmt.Printf("  %s│%s %s  %s%s\n", dim, reset, dim, d.ArchAnalysis, reset)
+	}
+
+	// Intent detection
+	if d.Intent != "" {
+		fmt.Printf("  %s│%s\n", dim, reset)
+		fmt.Printf("  %s│%s %s🎯 Intent:%s %s\n", dim, reset, cyan, reset, d.Intent)
 	}
 
 	// Why this happened
-	fmt.Printf("  %s│%s\n", dim, reset)
-	fmt.Printf("  %s│%s %s💭 Why this happened:%s %s(%s)%s\n", dim, reset, yellow, reset, cause.Reason, cause.Likelihood, reset)
-	fmt.Printf("  %s│%s %s  %s%s\n", dim, reset, dim, cause.Detail, reset)
+	fmt.Printf("  %s│%s %s💭 Why:%s %s (%s)\n", dim, reset, yellow, reset, cause.Reason, cause.Likelihood)
 
 	// Human review needed?
 	fmt.Printf("  %s│%s\n", dim, reset)
