@@ -12,10 +12,13 @@ Token shape (Go backend, backend/cmd/main.go):
     }
 """
 
+import logging
 from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, Request
+
+logger = logging.getLogger(__name__)
 
 
 def get_jwt_secret() -> str:
@@ -24,8 +27,12 @@ def get_jwt_secret() -> str:
 
     secret = settings.jwt_secret
     if not secret:
-        # Fail loudly during request handling — a missing secret is a
-        # configuration error, not something we should silently degrade.
+        # Warn at startup (module import time callers) so operators see it in
+        # logs before the first request arrives, then fail loudly per-request.
+        logger.warning(
+            "JWT_SECRET is empty — auth is effectively disabled; "
+            "all authenticated endpoints will return 503"
+        )
         raise HTTPException(
             status_code=503,
             detail="JWT_SECRET not configured — cannot validate tokens",

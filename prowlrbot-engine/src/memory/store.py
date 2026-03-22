@@ -181,6 +181,12 @@ async def search(
     if conditions:
         where = "WHERE " + " AND ".join(conditions)
 
+    # Bind LIMIT as a parameter — never interpolate user-supplied integers into SQL
+    # even though `limit` is typed as int, defense-in-depth prevents injection if
+    # the type annotation is bypassed at a call site.
+    limit_param = f"${param_idx}"
+    params.append(limit)
+
     # Cosine distance: 1 - distance = similarity
     sql = f"""
         SELECT id, content, collection, agent_id, mission_id, metadata,
@@ -189,7 +195,7 @@ async def search(
         FROM vector_memories
         {where}
         ORDER BY embedding <=> $1::vector
-        LIMIT {limit}
+        LIMIT {limit_param}
     """
 
     pool = await _get_pool()

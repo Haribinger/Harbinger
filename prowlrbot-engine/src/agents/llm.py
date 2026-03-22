@@ -74,7 +74,15 @@ class LLMAdapter:
             response = await litellm.acompletion(**kwargs)
         except Exception as exc:
             logger.error("LLM call failed (model=%s): %s", effective_model, exc)
-            return {"tool_calls": [], "content": None, "usage": {"input": 0, "output": 0}}
+            # Signal the caller that this was a hard failure, not an empty response.
+            # The performer checks for "error" to avoid looping uselessly on every
+            # subsequent iteration when the provider is down.
+            return {
+                "tool_calls": [],
+                "content": None,
+                "usage": {"input": 0, "output": 0},
+                "error": str(exc),
+            }
 
         message = response.choices[0].message
 

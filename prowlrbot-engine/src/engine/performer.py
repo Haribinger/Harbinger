@@ -41,6 +41,16 @@ async def perform_agent_chain(
         total_tokens["input"] += usage.get("input", 0)
         total_tokens["output"] += usage.get("output", 0)
 
+        # Hard LLM failure — stop immediately rather than looping max_iterations
+        # times nudging a provider that is down.
+        if response.get("error"):
+            return {
+                "status": "failed",
+                "result": f"LLM call failed: {response['error']}",
+                "chain": chain,
+                "tokens": total_tokens,
+            }
+
         tool_calls = response.get("tool_calls", [])
 
         # No tool calls — LLM is stuck

@@ -88,9 +88,11 @@ async def execute_task(
     # Workspace on the host bind-mounted at /work inside the container.
     # Each mission gets its own directory so parallel tasks don't collide.
     workspace = f"/tmp/harbinger/missions/{mission_id}"
+    # Docker enforces a 63-character limit on container names; truncate to stay safe
+    # even with long codenames or large mission/task IDs.
     container_name = (
         f"harbinger-m{mission_id}-{agent_codename.lower()}-t{task_id}"
-    )
+    )[:63]
 
     docker = DockerClient()
     container_id: str | None = None
@@ -152,7 +154,9 @@ async def execute_task(
             try:
                 await docker.stop_container(container_id)
                 await docker.remove_container(container_id)
-            except Exception:
-                # Container may already be stopped/removed; not a fatal error
-                pass
+            except Exception as cleanup_err:
+                # Container may already be stopped/removed; log so ops can spot leaks
+                logger.warning(
+                    "Container cleanup failed for %s: %s", container_name, cleanup_err
+                )
         await docker.close()
