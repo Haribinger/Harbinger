@@ -158,6 +158,9 @@ services:
         - VERSION=${APP_VERSION:-1.1.0}
     container_name: harbinger-backend
     restart: unless-stopped
+    extra_hosts:
+      # Required on Linux/WSL2 — maps host.docker.internal to the host gateway
+      - "host.docker.internal:host-gateway"
     environment:
       - APP_NAME=${APP_NAME:-Harbinger}
       - APP_ENV=${APP_ENV:-production}
