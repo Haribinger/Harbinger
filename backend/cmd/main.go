@@ -304,7 +304,7 @@ func loadConfig() Config {
 		GitHubRedirectURL:  getEnv("GITHUB_REDIRECT_URL", appURL+"/api/auth/github/callback"),
 		GitHubToken:        getEnv("GH_TOKEN", ""),
 		TrustedProxies:     trusted,
-		DBSSLMode:          getEnv("DB_SSLMODE", "prefer"),
+		DBSSLMode:          getEnv("DB_SSLMODE", "disable"),
 	}
 }
 
@@ -1440,6 +1440,9 @@ func main() {
 	initPipeline()
 	initVectorMem()
 
+	// Initialize ROAR protocol (agent-to-agent messaging bus + directory)
+	initROAR(cfg)
+
 	mux := http.NewServeMux()
 
 	// Public routes
@@ -2043,6 +2046,18 @@ func main() {
 	mux.HandleFunc("GET /api/v1/observability/traces", authMiddleware(handleListTraces))
 	mux.HandleFunc("GET /api/observability/stats", authMiddleware(handleObservabilityStats))
 	mux.HandleFunc("GET /api/v1/observability/stats", authMiddleware(handleObservabilityStats))
+
+	// ── ROAR Protocol (Agent-to-Agent Messaging) ────────────────────────
+	mux.HandleFunc("POST /api/roar/message", authMiddleware(handleROARPublish))
+	mux.HandleFunc("POST /api/v1/roar/message", authMiddleware(handleROARPublish))
+	mux.HandleFunc("GET /api/roar/agents", authMiddleware(handleROARAgents))
+	mux.HandleFunc("GET /api/v1/roar/agents", authMiddleware(handleROARAgents))
+	mux.HandleFunc("GET /api/roar/lookup", authMiddleware(handleROARLookup))
+	mux.HandleFunc("GET /api/v1/roar/lookup", authMiddleware(handleROARLookup))
+	mux.HandleFunc("GET /api/roar/search", authMiddleware(handleROARSearch))
+	mux.HandleFunc("GET /api/v1/roar/search", authMiddleware(handleROARSearch))
+	mux.HandleFunc("GET /api/roar/events", authMiddleware(handleROARSubscribe))
+	mux.HandleFunc("GET /api/v1/roar/events", authMiddleware(handleROARSubscribe))
 
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux
