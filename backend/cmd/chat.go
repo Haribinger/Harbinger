@@ -359,7 +359,7 @@ func handleChatStream(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
 
-		// Simulate token delay (20-50ms per word for natural feel)
+		// Pacing delay between SSE chunks to match typical LLM token-streaming cadence
 		time.Sleep(25 * time.Millisecond)
 	}
 

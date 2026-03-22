@@ -220,11 +220,50 @@ jobs:
             echo "::warning::Found $WARNS security warnings (non-blocking)"
           fi
 
+  # ─── MockHunter ───────────────────────────────────────────────────────────
+  mockhunter:
+    name: MockHunter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build MockHunter
+        run: go build -o /tmp/mockhunter .
+        working-directory: tools/mockhunter
+
+      - name: Scan codebase
+        run: |
+          /tmp/mockhunter scan --dir . \
+            --min-severity high \
+            --min-confidence 0.7 \
+            --exclude-tests \
+            --format text 2>&1 | tee /tmp/mockhunter-output.txt
+
+          /tmp/mockhunter scan --dir . \
+            --min-severity high \
+            --min-confidence 0.7 \
+            --exclude-tests \
+            --format sarif > /tmp/mockhunter.sarif 2>/dev/null || true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: /tmp/mockhunter.sarif
+        continue-on-error: true
+
   # ─── Summary ────────────────────────────────────────────────────────────────
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [build-frontend, build-backend, security-scan]
+    needs: [build-frontend, build-backend, security-scan, mockhunter]
     if: always() && !cancelled()
     steps:
       - name: Evaluate results and write summary
@@ -232,10 +271,12 @@ jobs:
           FE_RESULT: ${{ needs.build-frontend.result }}
           BE_RESULT: ${{ needs.build-backend.result }}
           SEC_RESULT: ${{ needs.security-scan.result }}
+          MH_RESULT: ${{ needs.mockhunter.result }}
         run: |
           FE_ICON=$( [ "$FE_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
           BE_ICON=$( [ "$BE_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
           SEC_ICON=$( [ "$SEC_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
+          MH_ICON=$( [ "$MH_RESULT" = "success" ] && echo "pass" || echo "FAIL" )
 
           ALL_PASS="false"
           if [ "$FE_RESULT" = "success" ] && [ "$BE_RESULT" = "success" ] && [ "$SEC_RESULT" = "success" ]; then
@@ -256,6 +297,7 @@ jobs:
           | **Frontend** | $FE_ICON | install, typecheck, lint, build, test |
           | **Backend** | $BE_ICON | build, vet, test |
           | **Security** | $SEC_ICON | secrets scan, env check |
+          | **MockHunter** | $MH_ICON | build, scan (high sev, 0.7+ conf) |
 
           **Commit:** \`${GITHUB_SHA::8}\` on \`${GITHUB_REF_NAME}\`
           **Run:** [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})

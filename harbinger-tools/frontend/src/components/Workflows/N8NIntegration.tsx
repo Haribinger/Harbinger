@@ -48,9 +48,11 @@ const N8NIntegration: React.FC<N8NIntegrationProps> = ({ n8nInstanceUrl }) => {
   const handleTriggerWorkflow = async (workflowId: string) => {
     try {
       await triggerWorkflow(workflowId);
-      alert('Workflow triggered successfully!');
+      // TODO: replace with proper toast notification when toast system is wired up
+      console.warn('[N8NIntegration] Workflow triggered successfully:', workflowId);
     } catch (err: unknown) {
-      alert(`Failed to trigger workflow: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      // TODO: replace with proper toast notification when toast system is wired up
+      console.warn('[N8NIntegration] Failed to trigger workflow:', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 

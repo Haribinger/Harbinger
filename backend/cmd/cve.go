@@ -57,7 +57,7 @@ func fetchCISAKEV() (*CISAKEVCatalog, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50<<20)) // 50MB limit — CISA KEV feed is large
 	if err != nil {
 		return nil, err
 	}

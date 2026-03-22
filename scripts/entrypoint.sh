@@ -131,7 +131,7 @@ EOF
   },
   "security": {
     "jwt_expires_in": "${JWT_EXPIRES_IN:-24h}",
-    "cors_origin": "${CORS_ORIGIN:-*}",
+    "cors_origin": "${CORS_ORIGIN:-http://localhost:3000}",
     "rate_limit_requests": ${RATE_LIMIT_REQUESTS:-100}
   },
   "logging": {

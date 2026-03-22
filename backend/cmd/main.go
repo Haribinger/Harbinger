@@ -940,7 +940,7 @@ func exchangeGitHubCode(code string) (*GitHubTokenResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		return nil, fmt.Errorf("GitHub token exchange failed: %s", string(body))
 	}
 
@@ -969,7 +969,7 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		return nil, fmt.Errorf("GitHub API error: %s", string(body))
 	}
 
@@ -2348,8 +2348,8 @@ func handleMfaSetup(w http.ResponseWriter, r *http.Request) {
 	secret := generateRandomString(32)
 	mfaSecrets[userID] = MFASecret{UserID: userID, Secret: secret}
 
-	// In a real application, you would generate a QR code URL here
-	// For now, just return the secret
+	// TODO: Generate a TOTP QR code URL (otpauth://totp/...) for authenticator app enrollment
+	// Returns the raw secret for manual entry until QR generation is implemented
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "secret": secret})
 }
 
@@ -2959,7 +2959,7 @@ func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 			var containers []struct {
 				State string `json:"State"`
 			}
-			if respBody, readErr := io.ReadAll(resp.Body); readErr == nil {
+			if respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 10<<20)); readErr == nil { // 10MB limit
 				if json.Unmarshal(respBody, &containers) == nil {
 					containerTotal = len(containers)
 					for _, c := range containers {
@@ -3051,7 +3051,7 @@ func handleDockerContainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -3173,7 +3173,7 @@ func handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		log.Printf("[Docker] action %s on %s returned %d: %s", action, id, resp.StatusCode, string(body))
 		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": fmt.Sprintf("Container %s failed (status %d)", action, resp.StatusCode)})
 		return
@@ -3206,11 +3206,11 @@ func handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": string(body)})
 		return
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	if err != nil {
 		internalError(w, "operation failed", err)
 		return
@@ -3233,7 +3233,7 @@ func handleDockerImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -3337,7 +3337,8 @@ func probeService(serviceURL string) (string, int64) {
 	}
 
 	start := time.Now()
-	resp, err := http.Get(serviceURL + "/health") // Assuming a /health endpoint
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(serviceURL + "/health")
 	if err != nil {
 		return "down", 0
 	}

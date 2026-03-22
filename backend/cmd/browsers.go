@@ -198,8 +198,7 @@ func handleBrowserScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return existing screenshot or a placeholder
-	// In production, this would use CDP Page.captureScreenshot
+	// Return cached screenshot data if available — upgrade to CDP Page.captureScreenshot for live capture
 	data := session.Screenshot
 	if data == "" {
 		data = "" // Empty — frontend handles the empty state
@@ -246,7 +245,7 @@ func handleBrowserExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In production, this would use CDP Runtime.evaluate
+	// Returns nil result — upgrade to CDP Runtime.evaluate for actual JS execution
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":     true,
 		"result": nil,
@@ -357,7 +356,7 @@ func handleBrowserClear(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/browser/sessions/{id}/elements — list page elements
 func handleBrowserElements(w http.ResponseWriter, r *http.Request) {
-	// In production, this would use CDP DOM.getDocument + DOM.querySelectorAll
+	// Returns empty list — upgrade to CDP DOM.getDocument + DOM.querySelectorAll for live element inspection
 	writeJSON(w, http.StatusOK, []map[string]string{})
 }
 
@@ -374,7 +373,7 @@ func handleBrowserSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In production, this would use CDP DOM.getOuterHTML
+	// Returns minimal placeholder HTML — upgrade to CDP DOM.getOuterHTML for full page source
 	writeJSON(w, http.StatusOK, map[string]any{
 		"html":      fmt.Sprintf("<!-- Page source for %s -->", session.URL),
 		"sessionId": id,

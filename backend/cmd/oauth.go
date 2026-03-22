@@ -138,7 +138,7 @@ func exchangeGoogleCode(code string) (*GoogleTokenResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		return nil, fmt.Errorf("Google token exchange failed (%d): %s", resp.StatusCode, string(body))
 	}
 
@@ -164,7 +164,7 @@ func getGoogleUser(accessToken string) (*GoogleUser, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		return nil, fmt.Errorf("Google API error (%d): %s", resp.StatusCode, string(body))
 	}
 
@@ -250,7 +250,7 @@ func validateProviderKey(provider, apiKey, baseURL string) (bool, map[string]str
 		if resp.StatusCode == http.StatusOK {
 			return true, map[string]string{"username": "openai-user", "models": "available"}, nil
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 		return false, nil, fmt.Errorf("OpenAI API returned %d: %s", resp.StatusCode, string(body))
 
 	case "anthropic":

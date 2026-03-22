@@ -71,9 +71,14 @@ function loadSnapshot(domain) {
   const filePath = path.join(CONFIG.SHOTSNAP_DIR, `${domain}.json`);
   
   if (fs.existsSync(filePath)) {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (error) {
+      console.error(`[ERROR] Failed to parse snapshot for ${domain}:`, error.message);
+      return null;
+    }
   }
-  
+
   return null;
 }
 
@@ -117,7 +122,11 @@ function logChanges(diff) {
   let log = [];
   
   if (fs.existsSync(CONFIG.DIFF_LOG)) {
-    log = JSON.parse(fs.readFileSync(CONFIG.DIFF_LOG, 'utf8'));
+    try {
+      log = JSON.parse(fs.readFileSync(CONFIG.DIFF_LOG, 'utf8'));
+    } catch (error) {
+      console.error('[ERROR] Failed to parse diff log:', error.message);
+    }
   }
   
   log.push(diff);

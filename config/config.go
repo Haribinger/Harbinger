@@ -196,7 +196,7 @@ func setDefaults() {
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.name", "harbinger")
 	viper.SetDefault("database.user", "harbinger")
-	viper.SetDefault("database.password", "change-me")
+	viper.SetDefault("database.password", "")
 	viper.SetDefault("database.ssl", false)
 	viper.SetDefault("database.max_connections", 20)
 	
@@ -224,10 +224,10 @@ func setDefaults() {
 	
 	viper.SetDefault("security.jwt_secret", "change-me-in-production")
 	viper.SetDefault("security.jwt_expires_in", "24h")
-	viper.SetDefault("security.cors_origin", "*")
+	viper.SetDefault("security.cors_origin", "http://localhost:3000")
 	viper.SetDefault("security.rate_limit_requests", 100)
 	viper.SetDefault("security.rate_limit_window", "15m")
-	viper.SetDefault("security.encryption_key", "change-me")
+	viper.SetDefault("security.encryption_key", "")
 	
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "json")
@@ -260,7 +260,7 @@ func setDefaults() {
 
 func (c *Config) Validate() error {
 	if c.App.Env == "production" {
-		if c.Database.Password == "change-me" {
+		if c.Database.Password == "" || c.Database.Password == "change-me" {
 			return fmt.Errorf("database password must be changed in production")
 		}
 		if c.Security.JWTSecret == "change-me-in-production" {
@@ -285,6 +285,7 @@ func (c *Config) GetDSN() string {
 
 func (c *Config) GetRedisURL() string {
 	if c.Redis.Password != "" {
+		// Redis URL format: redis://[username]:[password]@host:port/db — username intentionally empty for standard Redis auth
 		return fmt.Sprintf("redis://%s:%s@%s:%d/%d", "", c.Redis.Password, c.Redis.Host, c.Redis.Port, c.Redis.DB)
 	}
 	return fmt.Sprintf("redis://%s:%d/%d", c.Redis.Host, c.Redis.Port, c.Redis.DB)

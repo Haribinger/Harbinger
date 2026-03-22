@@ -593,7 +593,7 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 	defer createResp.Body.Close()
 
 	if createResp.StatusCode != http.StatusCreated && createResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(createResp.Body)
+		body, _ := io.ReadAll(io.LimitReader(createResp.Body, 10<<20)) // 10MB limit
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok": false, "error": "Docker create failed: " + string(body),
 		})
@@ -615,7 +615,7 @@ func handleSpawnAgent(w http.ResponseWriter, r *http.Request) {
 	defer startResp.Body.Close()
 
 	if startResp.StatusCode != http.StatusNoContent && startResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(startResp.Body)
+		body, _ := io.ReadAll(io.LimitReader(startResp.Body, 10<<20)) // 10MB limit
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok": false, "error": "Docker start failed: " + string(body),
 		})
@@ -746,7 +746,7 @@ func handleAgentLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	// Docker log stream has 8-byte header per frame; strip for plain text
 	cleaned := stripDockerLogHeaders(data)
 	w.Header().Set("Content-Type", "text/plain")
@@ -821,7 +821,7 @@ func handleDockerContainerStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -847,7 +847,7 @@ func handleDockerContainerInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -887,7 +887,7 @@ func handleDockerPullImage(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	// Stream the pull progress back
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "output": string(data)})
 }
 
@@ -916,7 +916,7 @@ func handleDockerDeleteContainer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "container removed"})
 		return
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	writeJSON(w, resp.StatusCode, map[string]any{"ok": false, "error": string(body)})
 }
 

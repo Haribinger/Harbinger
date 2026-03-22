@@ -38,7 +38,13 @@ async function fetchTopStories() {
     https.get(`${CONFIG.HN_API_BASE}/topstories.json`, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(JSON.parse(data)));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (error) {
+          reject(new Error(`Failed to parse top stories response: ${error.message}`));
+        }
+      });
       res.on('error', reject);
     });
   });

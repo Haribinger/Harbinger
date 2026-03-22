@@ -331,6 +331,7 @@ func dbUpdateAgent(id string, fields map[string]any) error {
 	}
 
 	setClauses = append(setClauses, "updated_at = NOW()")
+	// Column names are hardcoded in the switch above, values use parameterized $N placeholders — safe from injection
 	query := fmt.Sprintf("UPDATE agents SET %s WHERE id = $%d", strings.Join(setClauses, ", "), i)
 	args = append(args, id)
 
@@ -569,6 +570,7 @@ func dbUpdateWorkflow(id string, fields map[string]any) error {
 	}
 
 	setClauses = append(setClauses, "updated_at = NOW()", fmt.Sprintf("version = version + 1"))
+	// Column names are hardcoded in the switch above, values use parameterized $N placeholders — safe from injection
 	query := fmt.Sprintf("UPDATE workflows SET %s WHERE id = $%d", strings.Join(setClauses, ", "), i)
 	args = append(args, id)
 

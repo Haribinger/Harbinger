@@ -721,7 +721,8 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
   const runPlaybook = (id: string) => {
     const runningPlaybooks = playbooks.map(p => p.id === id ? { ...p, status: 'running' as const, currentStep: 0 } : p)
     setPlaybooks(runningPlaybooks)
-    // Simulate step execution
+    // TODO: Replace simulated step execution with real backend playbook runner (POST /api/c2/playbooks/:id/run)
+    // Currently uses setInterval to fake step progression client-side
     let step = 0
     const interval = setInterval(() => {
       step++

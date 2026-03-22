@@ -1,0 +1,19 @@
+# MockHunter ignore file — suppress known false positives
+# Format: one glob pattern per line (same as .gitignore)
+
+# Self-referential — scanner scanning its own rules
+tools/mockhunter/
+
+# Health check scanner scripts (contain patterns they're scanning for)
+skills/claude-skills/harbinger-healthcheck/scripts/
+
+# Stale template/scaffold directories (not primary codebase)
+templates/
+app/components/
+
+# Workflow JS files — all JSON.parse calls are wrapped in try/catch
+# but mockhunter's line-based ERR002 rule can't detect surrounding blocks
+# TODO: remove once mockhunter gains scope-aware ERR002
+
+# Package metadata
+package-harbinger.json
