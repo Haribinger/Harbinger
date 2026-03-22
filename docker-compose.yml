@@ -81,7 +81,7 @@ services:
 
   # ==== REDIS CACHE ====
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.6-alpine
     container_name: harbinger-redis
     restart: unless-stopped
     command: >
