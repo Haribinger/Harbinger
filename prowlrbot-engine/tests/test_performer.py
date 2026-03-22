@@ -48,21 +48,49 @@ async def test_performer_executes_terminal_and_finishes():
 
 
 @pytest.mark.asyncio
-async def test_performer_returns_waiting_on_ask():
+async def test_performer_resumes_after_ask():
+    """ask barrier now pauses, receives an operator response, and the loop continues to done."""
     llm = FakeLLM([
         {"tool_calls": [{"name": "ask", "args": {"question": "Should I proceed?"}}], "usage": {"input": 10, "output": 10}},
+        {"tool_calls": [{"name": "done", "args": {"status": "success", "result": "Continued after ask"}}], "usage": {"input": 10, "output": 10}},
     ])
 
     executor = ToolExecutor(allowed_tools=[])
 
-    result = await perform_agent_chain(
-        chain=[{"role": "system", "content": "You are a test agent"}],
-        executor=executor,
-        llm=llm,
-        max_iterations=10,
-    )
+    # Inject a mock barrier that resolves instantly so the test does not hang
+    import src.engine.performer as performer_module
+    from unittest.mock import AsyncMock, MagicMock
 
-    assert result["status"] == "waiting"
+    mock_barrier = MagicMock()
+    mock_barrier.ask = AsyncMock(return_value="yes, proceed")
+
+    import importlib
+    import src.engine.ask_barrier as ask_barrier_module
+
+    original_singleton = ask_barrier_module.ask_barrier
+    ask_barrier_module.ask_barrier = mock_barrier
+    try:
+        result = await perform_agent_chain(
+            chain=[{"role": "system", "content": "You are a test agent"}],
+            executor=executor,
+            llm=llm,
+            max_iterations=10,
+            subtask_id="test-subtask-1",
+            mission_id="test-mission",
+            agent_codename="BREACH",
+        )
+    finally:
+        ask_barrier_module.ask_barrier = original_singleton
+
+    assert result["status"] == "done"
+    assert result["result"] == "Continued after ask"
+    mock_barrier.ask.assert_called_once_with(
+        subtask_id="test-subtask-1",
+        mission_id="test-mission",
+        agent_codename="BREACH",
+        question="Should I proceed?",
+        options=None,
+    )
 
 
 @pytest.mark.asyncio

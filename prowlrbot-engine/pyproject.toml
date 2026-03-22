@@ -14,7 +14,12 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "litellm>=1.55.0",
     "jinja2>=3.1.0",
+    "typer>=0.15.0",
+    "rich>=13.9.0",
 ]
+
+[project.scripts]
+harbinger = "cli.main:main"
 
 [project.optional-dependencies]
 dev = [

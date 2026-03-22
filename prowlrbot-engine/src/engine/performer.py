@@ -15,6 +15,9 @@ async def perform_agent_chain(
     max_iterations: int = 100,
     model: str | None = None,
     on_action=None,
+    subtask_id: str = "",
+    mission_id: str = "",
+    agent_codename: str = "",
 ) -> dict:
     """Core ReAct loop. Reason -> Act -> Observe -> Repeat.
 
@@ -88,12 +91,30 @@ async def perform_agent_chain(
                     "tokens": total_tokens,
                 }
             elif tool_name == "ask":
-                return {
-                    "status": "waiting",
-                    "result": result,
-                    "chain": chain,
-                    "tokens": total_tokens,
-                }
+                # Lazy import to avoid circular deps at module load
+                from src.engine.ask_barrier import ask_barrier
+
+                question = tool_args.get("question", "Need operator input")
+                options = tool_args.get("options")
+                # Use caller-supplied subtask_id, fall back to iteration-scoped id
+                effective_subtask_id = subtask_id or f"ask-{iteration}"
+
+                operator_response = await ask_barrier.ask(
+                    subtask_id=effective_subtask_id,
+                    mission_id=mission_id,
+                    agent_codename=agent_codename,
+                    question=question,
+                    options=options,
+                )
+
+                # Feed the operator's answer back into the chain and continue
+                chain.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", "ask"),
+                    "name": "ask",
+                    "content": f"Operator response: {operator_response}",
+                })
+                # Do not return — resume the ReAct loop with the response injected
 
             # Summarize large output
             if len(result) > RESULT_SIZE_LIMIT:
