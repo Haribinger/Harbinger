@@ -53,7 +53,21 @@ RUN CGO_ENABLED=0 go install -v github.com/lc/gau/v2/cmd/gau@latest && \
     go install -v github.com/tomnomnom/anew@latest && \
     go install -v github.com/tomnomnom/qsreplace@latest && \
     go install -v github.com/tomnomnom/unfurl@latest && \
+    go install -v github.com/tomnomnom/waybackurls@latest && \
     go install -v github.com/hakluke/hakrawler@latest
+
+# User's Go recon tools — each with fallback so one failure doesn't block others
+RUN CGO_ENABLED=0 go install -v github.com/tomnomnom/assetfinder@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/jaeles-project/gospider@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/BishopFox/jsluice/cmd/jsluice@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/haccer/subjack@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/projectdiscovery/urlfinder/cmd/urlfinder@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/gwen001/github-subdomains@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/edoardottt/csprecon/cmd/csprecon@latest || true
+RUN CGO_ENABLED=0 go install -v github.com/projectdiscovery/pdtm/cmd/pdtm@latest || true
+
+# shef — Shodan/Censys/Fofa facet search
+RUN CGO_ENABLED=0 go install -v github.com/1hehaq/shef@latest || true
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM alpine:3.21

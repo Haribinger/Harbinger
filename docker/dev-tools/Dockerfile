@@ -11,7 +11,9 @@ FROM golang:1.24 AS go-builder
 RUN go install -v github.com/gitleaks/gitleaks/v8/cmd/gitleaks@latest && \
     go install -v github.com/securego/gosec/v2/cmd/gosec@latest && \
     go install -v github.com/google/osv-scanner/cmd/osv-scanner@latest && \
-    go install -v github.com/trufflesecurity/trufflehog/v3@latest
+    go install -v github.com/trufflesecurity/trufflehog/v3@latest && \
+    go install -v github.com/sw33tLie/bbscope@latest && \
+    go install -v github.com/Haribinger/Harbinger/tools/mockhunter@latest || true
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM python:3.12-slim

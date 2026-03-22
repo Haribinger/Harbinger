@@ -44,6 +44,13 @@ RUN go install github.com/hahwul/dalfox/v2@latest && \
 RUN go install github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest && \
     cp /root/go/bin/crlfuzz /usr/local/bin/ || true
 
+# User's Go exploit tools
+RUN go install github.com/hahwul/authz0@latest && \
+    cp /root/go/bin/authz0 /usr/local/bin/ || true
+
+RUN go install github.com/hahwul/jwt-hack@latest && \
+    cp /root/go/bin/jwt-hack /usr/local/bin/ || true
+
 # trufflehog — use binary release (too large to compile in Kali's Go)
 RUN curl -sSL "https://github.com/trufflesecurity/trufflehog/releases/latest/download/trufflehog_linux_amd64.tar.gz" \
     | tar xz -C /usr/local/bin trufflehog || \
