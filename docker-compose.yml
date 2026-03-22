@@ -129,7 +129,8 @@ services:
     networks:
       - harbinger-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7474/db/neo4j/cluster/available || exit 1"]
+      # Community edition: use cypher-shell (wget/curl and HTTP paths vary by version)
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$(echo $$NEO4J_AUTH | cut -d/ -f2)\" 'RETURN 1' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -177,7 +178,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - MCP_ENABLED=${MCP_ENABLED:-true}
       - HEXSTRIKE_URL=http://hexstrike:3001
-      - PENTAGI_URL=http://pentagi:3002
       - MCP_UI_URL=http://mcp-ui:3003
       - REDTEAM_URL=http://redteam:3004
       - BROWSER_SERVICE_URL=${BROWSER_SERVICE_URL:-}
@@ -188,6 +188,7 @@ services:
       - APP_URL=${APP_URL:-http://localhost}
       - GITHUB_REDIRECT_URL=${GITHUB_REDIRECT_URL:-http://localhost/api/auth/github/callback}
       - GH_TOKEN=${GH_TOKEN:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - SKILLS_DIR=/app/skills
     # No host ports — only reachable through nginx
     volumes:
@@ -256,39 +257,6 @@ services:
           cpus: "0.5"
           memory: 256M
 
-  # ==== PENTAGI AUTONOMOUS AGENT SYSTEM ====
-  pentagi:
-    build:
-      context: ./mcp-plugins/pentagi
-      dockerfile: Dockerfile
-    container_name: harbinger-pentagi
-    restart: unless-stopped
-    environment:
-      - PENTAGI_PORT=3002
-      - PENTAGI_API_URL=http://pentagi:3002
-      - HARBINGER_API_URL=http://backend:8080
-    # No host ports — only reachable through nginx
-    networks:
-      - harbinger-network
-    depends_on:
-      backend:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "3"
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 1G
-        reservations:
-          cpus: "0.25"
-          memory: 256M
-
   # ==== RED TEAM OPERATIONS ====
   redteam:
     build:
@@ -302,7 +270,7 @@ services:
       - NEO4J_HOST=neo4j
       - NEO4J_PORT=7687
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_URL=redis://1234567890@redis:6379
     # No host ports — only reachable through nginx
     volumes:
       - report_data:/app/reports
@@ -374,7 +342,7 @@ services:
     environment:
       - MCP_UI_PORT=3003
       - HARBINGER_API_URL=http://backend:8080
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_URL=redis://1234567890@redis:6379
     # No host ports — only reachable through nginx
     networks:
       - harbinger-network
@@ -403,8 +371,8 @@ services:
     container_name: harbinger-nginx
     restart: unless-stopped
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
+      - "${NGINX_HTTP_PORT:-8980}:80"
+      - "${NGINX_HTTPS_PORT:-8943}:443"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./brand:/usr/share/nginx/html/brand:ro
