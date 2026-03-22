@@ -1422,6 +1422,7 @@ func main() {
 		ensureAutonomousTable()
 		ensureChatTables()
 		ensureC2Tables()
+		ensureVectorMemoryTable()
 	}
 
 	// Initialize channel configs from env
@@ -3133,8 +3134,13 @@ func dockerAPIRequest(method, path string, body io.Reader) (*http.Response, erro
 	var client *http.Client
 
 	if cfg.DockerHost != "" {
-		// TCP mode — connect to docker-socket-proxy or remote Docker host
+		// TCP mode — connect to docker-socket-proxy or remote Docker host (Docker API is HTTP over TCP)
 		host = cfg.DockerHost
+		if strings.HasPrefix(host, "tcp://") {
+			host = "http://" + strings.TrimPrefix(host, "tcp://")
+		} else if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+			host = "http://" + host
+		}
 		client = &http.Client{Timeout: 30 * time.Second}
 	} else {
 		// Unix socket mode — direct Docker socket access

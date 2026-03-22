@@ -1103,6 +1103,48 @@ func ensureC2Tables() {
 	)`)
 }
 
+// ============================================================================
+// VECTOR MEMORY (pgvector)
+// ============================================================================
+
+// ensureVectorMemoryTable enables pgvector and creates the vector_memories table.
+func ensureVectorMemoryTable() {
+	if db == nil {
+		return
+	}
+
+	// Enable pgvector extension
+	_, err := db.Exec(`CREATE EXTENSION IF NOT EXISTS vector`)
+	if err != nil {
+		log.Printf("[DB] Failed to create pgvector extension: %v", err)
+		return
+	}
+
+	// Create table for storing agent memory embeddings
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS vector_memories (
+			id         SERIAL PRIMARY KEY,
+			agent_id   TEXT NOT NULL,
+			flow_id    TEXT,
+			task_id    TEXT,
+			content    TEXT NOT NULL,
+			embedding  vector(1536),
+			doc_type   TEXT NOT NULL DEFAULT 'general',
+			metadata   JSONB DEFAULT '{}',
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create vector_memories table: %v", err)
+		return
+	}
+
+	// Indexes — non-fatal if they fail (e.g. not enough rows for ivfflat)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vector_memories_embedding ON vector_memories USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vector_memories_agent ON vector_memories (agent_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vector_memories_type ON vector_memories (doc_type)`)
+}
+
 // dbStoreThought inserts a thought into PostgreSQL.
 func dbStoreThought(t AgentThought) error {
 	if !dbAvailable() {
