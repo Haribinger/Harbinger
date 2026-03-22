@@ -245,6 +245,26 @@ async def list_pending_approvals():
 
 
 # ---------------------------------------------------------------------------
+# Mission templates
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/v2/missions/templates/list")
+async def list_mission_templates():
+    from src.engine.templates import list_templates
+    return list_templates()
+
+
+@router.get("/api/v2/missions/templates/{template_name}")
+async def get_mission_template(template_name: str):
+    from src.engine.templates import get_template
+    template = get_template(template_name)
+    if not template:
+        raise HTTPException(404, f"Template '{template_name}' not found")
+    return template
+
+
+# ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
 
