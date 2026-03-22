@@ -1423,6 +1423,7 @@ func main() {
 		ensureChatTables()
 		ensureC2Tables()
 		ensureVectorMemoryTable()
+		ensureExecutionTables()
 	}
 
 	// Initialize channel configs from env

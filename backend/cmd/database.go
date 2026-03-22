@@ -1145,6 +1145,107 @@ func ensureVectorMemoryTable() {
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vector_memories_type ON vector_memories (doc_type)`)
 }
 
+// ============================================================================
+// EXECUTION / PIPELINE TABLES
+// ============================================================================
+
+// ensureExecutionTables creates pipeline orchestration and container execution tables.
+func ensureExecutionTables() {
+	if db == nil {
+		return
+	}
+
+	// Pipelines — multi-step agent workflows
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS pipelines (
+			id          TEXT PRIMARY KEY,
+			name        TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'created',
+			agent_id    TEXT,
+			input       TEXT,
+			result      TEXT,
+			config      JSONB DEFAULT '{}',
+			created_at  TIMESTAMPTZ DEFAULT NOW(),
+			updated_at  TIMESTAMPTZ DEFAULT NOW(),
+			completed_at TIMESTAMPTZ
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create pipelines table: %v", err)
+		return
+	}
+
+	// Pipeline tasks — steps within a pipeline
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS pipeline_tasks (
+			id           TEXT PRIMARY KEY,
+			pipeline_id  TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+			title        TEXT NOT NULL,
+			status       TEXT NOT NULL DEFAULT 'created',
+			input        TEXT,
+			result       TEXT,
+			agent_type   TEXT,
+			sequence_num INT NOT NULL DEFAULT 0,
+			created_at   TIMESTAMPTZ DEFAULT NOW(),
+			updated_at   TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create pipeline_tasks table: %v", err)
+		return
+	}
+
+	// Pipeline subtasks — atomic execution units
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS pipeline_subtasks (
+			id           TEXT PRIMARY KEY,
+			task_id      TEXT NOT NULL REFERENCES pipeline_tasks(id) ON DELETE CASCADE,
+			pipeline_id  TEXT NOT NULL,
+			title        TEXT NOT NULL,
+			description  TEXT,
+			status       TEXT NOT NULL DEFAULT 'created',
+			result       TEXT,
+			container_id TEXT,
+			created_at   TIMESTAMPTZ DEFAULT NOW(),
+			updated_at   TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create pipeline_subtasks table: %v", err)
+		return
+	}
+
+	// Executions — Docker container runs
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS executions (
+			id             TEXT PRIMARY KEY,
+			subtask_id     TEXT REFERENCES pipeline_subtasks(id) ON DELETE SET NULL,
+			agent_id       TEXT,
+			container_id   TEXT,
+			container_name TEXT,
+			image          TEXT NOT NULL,
+			command        TEXT,
+			status         TEXT NOT NULL DEFAULT 'pending',
+			exit_code      INT,
+			stdout         TEXT,
+			stderr         TEXT,
+			started_at     TIMESTAMPTZ,
+			completed_at   TIMESTAMPTZ,
+			created_at     TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to create executions table: %v", err)
+		return
+	}
+
+	// Indexes — non-fatal
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_pipeline_tasks_pipeline ON pipeline_tasks (pipeline_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_pipeline_subtasks_task ON pipeline_subtasks (task_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_executions_subtask ON executions (subtask_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_executions_status ON executions (status)`)
+}
+
 // dbStoreThought inserts a thought into PostgreSQL.
 func dbStoreThought(t AgentThought) error {
 	if !dbAvailable() {
