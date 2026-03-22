@@ -8,44 +8,19 @@ name encodes the mission/task IDs so it's easy to track in Docker logs.
 
 import logging
 
+from src.agents.config import get_agent_config
+from src.agents.llm import LLMAdapter
+from src.agents.prompts import build_system_prompt
 from src.docker.client import DockerClient
 from src.engine.performer import perform_agent_chain
 from src.engine.tools.registry import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
-# Per-agent configuration: tools the agent may call and the default Docker
-# image to use when the caller doesn't override it.  max_iterations caps the
-# ReAct loop so a runaway agent can't consume unbounded LLM tokens.
-AGENT_CONFIG: dict[str, dict] = {
-    "PATHFINDER": {
-        "tools": ["terminal", "file", "done"],
-        "docker_image": "harbinger/base:latest",
-        "max_iterations": 100,
-    },
-    "BREACH": {
-        "tools": ["terminal", "file", "done", "ask"],
-        "docker_image": "harbinger/base:latest",
-        "max_iterations": 100,
-    },
-    "SAM": {
-        "tools": ["terminal", "file", "done"],
-        "docker_image": "harbinger/base:latest",
-        "max_iterations": 100,
-    },
-    "SCRIBE": {
-        "tools": ["done"],
-        "docker_image": "harbinger/base:latest",
-        "max_iterations": 20,
-    },
-}
-
-# Fallback for agents not listed above
-DEFAULT_CONFIG: dict = {
-    "tools": ["terminal", "file", "done"],
-    "docker_image": "harbinger/base:latest",
-    "max_iterations": 50,
-}
+# Agent configuration is the authoritative source from src.agents.config.
+# Re-exported here so DelegationTool (delegation.py) can import without a cycle —
+# it uses: from src.engine.executor import AGENT_CONFIG, DEFAULT_CONFIG
+from src.agents.config import AGENT_CONFIG, DEFAULT_CONFIG  # noqa: E402 (re-export)
 
 
 async def execute_task(
@@ -54,14 +29,14 @@ async def execute_task(
     docker_image: str | None,
     mission_id: int,
     task_input: str,
-    llm,
+    llm=None,
 ) -> dict:
-    """Execute a single mission task inside an ephemeral Docker container.
+    """Execute a single mission task, optionally inside an ephemeral Docker container.
 
     Workflow:
       1. Resolve agent config (tools, image, iteration cap).
-      2. Create + start a container named after mission/task IDs.
-      3. Build a ToolExecutor scoped to the container.
+      2. If the agent requires a container: create + start it, else run in-process.
+      3. Build a ToolExecutor scoped to the container (and LLM for delegation).
       4. Run the ReAct loop via perform_agent_chain.
       5. Stop + remove the container regardless of outcome.
 
@@ -69,8 +44,46 @@ async def execute_task(
         {"status": "done"|"waiting"|"failed", "result": str,
          "chain": list, "tokens": dict}
     """
-    config = AGENT_CONFIG.get(agent_codename.upper(), DEFAULT_CONFIG)
+    config = get_agent_config(agent_codename)
     effective_image = docker_image or config["docker_image"]
+
+    # Ensure we always have an LLM — fall back to default adapter if the caller
+    # didn't provide one (e.g. when the scheduler is started with llm=None).
+    effective_llm = llm if llm is not None else LLMAdapter()
+
+    system_prompt = build_system_prompt(
+        agent_codename=agent_codename,
+        mission_id=mission_id,
+        task_id=task_id,
+        task_input=task_input,
+    )
+    chain = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": task_input},
+    ]
+
+    # Agents with no docker_image (ORCHESTRATOR, ADVISER) run in-process with
+    # delegation/barrier tools only — no container needed.
+    if not effective_image:
+        executor = ToolExecutor(
+            allowed_tools=config["tools"],
+            container_id=None,
+            docker_client=None,
+            llm=effective_llm,
+        )
+        try:
+            return await perform_agent_chain(
+                chain=chain,
+                executor=executor,
+                llm=effective_llm,
+                max_iterations=config["max_iterations"],
+            )
+        except Exception as exc:
+            logger.error(
+                "in-process task failed — mission=%s task=%s agent=%s: %s",
+                mission_id, task_id, agent_codename, exc,
+            )
+            return {"status": "failed", "result": str(exc), "chain": [], "tokens": {}}
 
     # Workspace on the host bind-mounted at /work inside the container.
     # Each mission gets its own directory so parallel tasks don't collide.
@@ -108,23 +121,13 @@ async def execute_task(
             allowed_tools=config["tools"],
             container_id=container_id,
             docker_client=docker,
+            llm=effective_llm,
         )
-
-        system_prompt = (
-            f"You are {agent_codename}, a Harbinger security agent.\n"
-            f"Mission {mission_id}, task {task_id}.\n"
-            f"Execute the task and report results using the 'done' tool.\n\n"
-            f"Task: {task_input}"
-        )
-        chain = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": task_input},
-        ]
 
         return await perform_agent_chain(
             chain=chain,
             executor=executor,
-            llm=llm,
+            llm=effective_llm,
             max_iterations=config["max_iterations"],
         )
 

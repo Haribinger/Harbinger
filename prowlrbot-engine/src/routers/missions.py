@@ -5,7 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from src.db import async_session, db_available
+from src.engine.scheduler import MissionScheduler, approval_gate
 from src.models.mission import Mission
+from src.models.task import Task
 
 router = APIRouter()
 
@@ -43,8 +45,40 @@ class MissionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TaskCreate(BaseModel):
+    title: str
+    description: str | None = None
+    agent_codename: str | None = None
+    docker_image: str | None = None
+    depends_on: list[int] = []
+    approval_required: bool = False
+    priority: int = 0
+    input: dict | None = None
+    position: int = 0
+
+
+class TaskOut(BaseModel):
+    id: int
+    mission_id: int
+    title: str
+    description: str | None
+    status: str
+    agent_codename: str | None
+    docker_image: str | None
+    container_id: str | None
+    depends_on: list
+    approval_required: bool
+    priority: int
+    input: dict | None
+    result: dict | None
+    position: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ---------------------------------------------------------------------------
-# Endpoints
+# Mission endpoints
 # ---------------------------------------------------------------------------
 
 
@@ -86,13 +120,138 @@ async def get_mission(mission_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Task CRUD
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/v2/missions/{mission_id}/tasks", response_model=list[TaskOut])
+async def list_tasks(mission_id: int):
+    """List all tasks for a mission, ordered by position."""
+    if not db_available():
+        return []
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(Task)
+            .where(Task.mission_id == mission_id)
+            .order_by(Task.position)
+        )
+        return result.scalars().all()
+
+
+@router.post(
+    "/api/v2/missions/{mission_id}/tasks",
+    response_model=TaskOut,
+    status_code=201,
+)
+async def create_task(mission_id: int, payload: TaskCreate):
+    """Add a task to a mission's DAG."""
+    if not db_available():
+        raise HTTPException(status_code=503, detail="database not available")
+
+    async with async_session() as session:
+        mission = await session.get(Mission, mission_id)
+        if mission is None:
+            raise HTTPException(status_code=404, detail="mission not found")
+        if mission.status not in ("created", "planning"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"cannot add tasks to {mission.status} mission",
+            )
+
+        task = Task(mission_id=mission_id, **payload.model_dump())
+        session.add(task)
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+
+@router.get("/api/v2/tasks/{task_id}", response_model=TaskOut)
+async def get_task(task_id: int):
+    """Get a single task by ID."""
+    if not db_available():
+        raise HTTPException(status_code=503, detail="database not available")
+
+    async with async_session() as session:
+        task = await session.get(Task, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        return task
+
+
+@router.patch("/api/v2/tasks/{task_id}", response_model=TaskOut)
+async def update_task(task_id: int, payload: dict):
+    """Update task fields (status, description, priority, etc.)."""
+    if not db_available():
+        raise HTTPException(status_code=503, detail="database not available")
+
+    async with async_session() as session:
+        task = await session.get(Task, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+
+        allowed = {
+            "title", "description", "agent_codename", "docker_image",
+            "depends_on", "approval_required", "priority", "position",
+            "input", "status",
+        }
+        for key, value in payload.items():
+            if key in allowed:
+                setattr(task, key, value)
+
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+
+@router.delete("/api/v2/tasks/{task_id}", status_code=204)
+async def delete_task(task_id: int):
+    """Remove a task from the mission DAG."""
+    if not db_available():
+        raise HTTPException(status_code=503, detail="database not available")
+
+    async with async_session() as session:
+        task = await session.get(Task, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        await session.delete(task)
+        await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Approval gate
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/v2/tasks/{task_id}/approve")
+async def approve_task(task_id: int, payload: dict):
+    """Operator approves or denies a task waiting at an approval gate.
+
+    Body: {"approved": true/false}
+    """
+    approved = payload.get("approved", False)
+    if approval_gate.respond(task_id, approved):
+        return {"ok": True, "task_id": task_id, "approved": approved}
+    raise HTTPException(
+        status_code=404,
+        detail="no pending approval for this task",
+    )
+
+
+@router.get("/api/v2/approvals/pending")
+async def list_pending_approvals():
+    """List task IDs currently waiting for operator approval."""
+    return {"pending": approval_gate.pending_tasks}
+
+
+# ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
 
 
 @router.post("/api/v2/missions/{mission_id}/execute", status_code=202)
 async def execute_mission(mission_id: int, background_tasks: BackgroundTasks):
-    """Start executing a mission. Returns immediately, runs in background."""
+    """Start executing a mission via the DAG scheduler. Returns immediately."""
     if not db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
@@ -109,20 +268,27 @@ async def execute_mission(mission_id: int, background_tasks: BackgroundTasks):
         mission.status = "running"
         await session.commit()
 
-    # Run in background (Phase 2 will add proper DAG scheduler)
-    background_tasks.add_task(_run_mission_background, mission_id)
-
+    background_tasks.add_task(_run_mission_scheduler, mission_id)
     return {"status": "started", "mission_id": mission_id}
 
 
-async def _run_mission_background(mission_id: int):
-    """Background task: execute all tasks in a mission.
+async def _run_mission_scheduler(mission_id: int):
+    """Background: run the DAG scheduler for a mission."""
+    from src.agents.llm import LLMAdapter
 
-    Placeholder — Phase 2 implements the full DAG scheduler with parallel
-    task execution, container orchestration, and LLM integration.
-    """
-    async with async_session() as session:
-        mission = await session.get(Mission, mission_id)
-        if mission:
-            mission.status = "running"
-            await session.commit()
+    llm = LLMAdapter()
+    scheduler = MissionScheduler(llm=llm)
+    try:
+        await scheduler.execute(mission_id)
+    except Exception as exc:
+        logger.exception("mission %d scheduler crashed: %s", mission_id, exc)
+        async with async_session() as session:
+            mission = await session.get(Mission, mission_id)
+            if mission:
+                mission.status = "failed"
+                await session.commit()
+
+
+import logging
+
+logger = logging.getLogger(__name__)
