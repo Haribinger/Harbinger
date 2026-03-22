@@ -22,7 +22,13 @@ func main() {
 	excludeTests := flag.Bool("exclude-tests", false, "Exclude test files from scan")
 	runExternal := flag.Bool("external", false, "Also run external tools (bandit, gitleaks, eslint) if installed")
 	category := flag.String("category", "", "Filter by category: secrets, mock-data, ai-slop, vibe-code, security, stubs")
+	minConf := flag.Float64("min-confidence", 0.35, "Minimum confidence 0.0-1.0 (lower = more findings, more FPs)")
+	showNoise := flag.Bool("show-noise", false, "Show all findings including noise (confidence < 0.10)")
 	flag.Parse()
+
+	if *showNoise {
+		*minConf = 0.0
+	}
 
 	if *serve != "" {
 		startServer(*serve, *dir)
@@ -36,9 +42,10 @@ func main() {
 	}
 
 	scanner := NewScanner(ScanConfig{
-		Dir:          absDir,
-		MinSeverity:  parseSeverity(*severity),
-		ExcludeTests: *excludeTests,
+		Dir:           absDir,
+		MinSeverity:   parseSeverity(*severity),
+		MinConfidence: *minConf,
+		ExcludeTests:  *excludeTests,
 	})
 	report := scanner.Scan()
 

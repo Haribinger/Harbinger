@@ -45,15 +45,18 @@ func parseSeverity(s string) Severity {
 
 // Finding represents a single issue found by the scanner
 type Finding struct {
-	File     string   `json:"file"`
-	Line     int      `json:"line"`
-	Column   int      `json:"column,omitempty"`
-	Severity Severity `json:"severity"`
-	Category string   `json:"category"`
-	Rule     string   `json:"rule"`
-	Message  string   `json:"message"`
-	Snippet  string   `json:"snippet"`
-	Fix      string   `json:"fix,omitempty"`
+	File              string     `json:"file"`
+	Line              int        `json:"line"`
+	Column            int        `json:"column,omitempty"`
+	Severity          Severity   `json:"severity"`
+	Category          string     `json:"category"`
+	Rule              string     `json:"rule"`
+	Message           string     `json:"message"`
+	Snippet           string     `json:"snippet"`
+	Fix               string     `json:"fix,omitempty"`
+	Confidence        Confidence `json:"confidence"`
+	ConfidenceLabel   string     `json:"confidenceLabel"`
+	ConfidenceReasons []string   `json:"confidenceReasons,omitempty"`
 }
 
 // Rule defines a pattern to search for
@@ -71,11 +74,12 @@ type Rule struct {
 
 // ScanConfig controls scanner behavior
 type ScanConfig struct {
-	Dir          string
-	MinSeverity  Severity
-	ExcludeTests bool
-	Categories   []string // empty = all categories
-	MaxWorkers   int
+	Dir           string
+	MinSeverity   Severity
+	MinConfidence float64  // 0.0 to 1.0, findings below this are suppressed
+	ExcludeTests  bool
+	Categories    []string // empty = all categories
+	MaxWorkers    int
 }
 
 // Scanner orchestrates the scan
@@ -172,15 +176,16 @@ func (s *Scanner) scanFile(path string) []Finding {
 		relPath = path
 	}
 
+	// Read all lines for surrounding context during confidence scoring
+	var allLines []string
+	lineScanner := bufio.NewScanner(f)
+	lineScanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for lineScanner.Scan() {
+		allLines = append(allLines, lineScanner.Text())
+	}
+
 	var findings []Finding
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-	lineNum := 0
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-
+	for lineNum, line := range allLines {
 		for _, rule := range s.rules {
 			if !rule.LineMatch {
 				continue
@@ -200,20 +205,47 @@ func (s *Scanner) scanFile(path string) []Finding {
 				if len(snippet) > 200 {
 					snippet = snippet[:200] + "..."
 				}
-				findings = append(findings, Finding{
+
+				finding := Finding{
 					File:     relPath,
-					Line:     lineNum,
+					Line:     lineNum + 1, // 1-indexed
 					Severity: rule.Severity,
 					Category: rule.Category,
 					Rule:     rule.ID,
 					Message:  rule.Message,
 					Snippet:  snippet,
 					Fix:      rule.Fix,
-				})
+				}
+
+				// Gather surrounding lines for context (3 above, 3 below)
+				surrounding := gatherContext(allLines, lineNum, 3)
+
+				// Score confidence
+				conf, reasons := scoreFinding(&finding, relPath, line, lineNum+1, surrounding)
+				finding.Confidence = conf
+				finding.ConfidenceLabel = conf.Label()
+				finding.ConfidenceReasons = reasons
+
+				// Skip noise-level findings unless explicitly requested
+				if conf >= Confidence(s.config.MinConfidence) {
+					findings = append(findings, finding)
+				}
 			}
 		}
 	}
 	return findings
+}
+
+func gatherContext(lines []string, idx, radius int) []string {
+	start := idx - radius
+	if start < 0 {
+		start = 0
+	}
+	end := idx + radius + 1
+	if end > len(lines) {
+		end = len(lines)
+	}
+	return lines[start:end]
 }
 
 func isTestFile(path string) bool {

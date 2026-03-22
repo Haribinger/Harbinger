@@ -9,15 +9,26 @@ import (
 
 // Report aggregates all findings from a scan
 type Report struct {
-	FilesScanned  int       `json:"filesScanned"`
-	Findings      []Finding `json:"findings"`
-	CriticalCount int       `json:"criticalCount"`
-	HighCount     int       `json:"highCount"`
-	MediumCount   int       `json:"mediumCount"`
-	LowCount      int       `json:"lowCount"`
-	InfoCount     int       `json:"infoCount"`
-	TotalCount    int       `json:"totalCount"`
-	Categories    map[string]int `json:"categories"`
+	FilesScanned     int            `json:"filesScanned"`
+	Findings         []Finding      `json:"findings"`
+	CriticalCount    int            `json:"criticalCount"`
+	HighCount        int            `json:"highCount"`
+	MediumCount      int            `json:"mediumCount"`
+	LowCount         int            `json:"lowCount"`
+	InfoCount        int            `json:"infoCount"`
+	TotalCount       int            `json:"totalCount"`
+	Categories       map[string]int `json:"categories"`
+	ConfidenceStats  ConfStats      `json:"confidenceStats"`
+	SuppressedCount  int            `json:"suppressedCount"`
+}
+
+// ConfStats breaks down findings by confidence level
+type ConfStats struct {
+	Definite int `json:"definite"` // >= 0.85
+	High     int `json:"high"`     // 0.60 - 0.84
+	Medium   int `json:"medium"`   // 0.35 - 0.59
+	Low      int `json:"low"`      // 0.10 - 0.34
+	Noise    int `json:"noise"`    // < 0.10
 }
 
 // Finalize sorts findings, applies severity filter, and computes counts
@@ -42,8 +53,15 @@ func (r *Report) Finalize(minSev Severity) {
 		return r.Findings[i].Line < r.Findings[j].Line
 	})
 
-	// Count by severity
+	// Count by severity and confidence
 	r.Categories = make(map[string]int)
+	r.CriticalCount = 0
+	r.HighCount = 0
+	r.MediumCount = 0
+	r.LowCount = 0
+	r.InfoCount = 0
+	r.ConfidenceStats = ConfStats{}
+
 	for _, f := range r.Findings {
 		switch f.Severity {
 		case SevCritical:
@@ -58,6 +76,19 @@ func (r *Report) Finalize(minSev Severity) {
 			r.InfoCount++
 		}
 		r.Categories[f.Category]++
+
+		switch {
+		case f.Confidence >= 0.85:
+			r.ConfidenceStats.Definite++
+		case f.Confidence >= 0.60:
+			r.ConfidenceStats.High++
+		case f.Confidence >= 0.35:
+			r.ConfidenceStats.Medium++
+		case f.Confidence >= 0.10:
+			r.ConfidenceStats.Low++
+		default:
+			r.ConfidenceStats.Noise++
+		}
 	}
 	r.TotalCount = len(r.Findings)
 }
@@ -94,6 +125,19 @@ func sevColor(s Severity) string {
 		return blue
 	default:
 		return gray
+	}
+}
+
+func confBadgeColor(c Confidence) string {
+	switch {
+	case c >= 0.85:
+		return green + bold
+	case c >= 0.60:
+		return cyan
+	case c >= 0.35:
+		return yellow + dim
+	default:
+		return gray + dim
 	}
 }
 
@@ -157,6 +201,32 @@ func (r *Report) PrintText(w io.Writer) {
 	fmt.Fprintf(w, "  │  %sTOTAL: %d issues%s                        │\n", bold, r.TotalCount, reset)
 	fmt.Fprintf(w, "  └─────────────────────────────────────────┘\n\n")
 
+	// Confidence breakdown
+	fmt.Fprintf(w, "  ┌─────────────────────────────────────────┐\n")
+	fmt.Fprintf(w, "  │  %s%sCONFIDENCE BREAKDOWN%s                    │\n", bold, white, reset)
+	fmt.Fprintf(w, "  ├─────────────────────────────────────────┤\n")
+	cs := r.ConfidenceStats
+	if cs.Definite > 0 {
+		fmt.Fprintf(w, "  │  %s●%s DEFINITE  %-3d  %s%-20s%s  │\n", green+bold, reset, cs.Definite, green, bar(cs.Definite, r.TotalCount, green), reset)
+	}
+	if cs.High > 0 {
+		fmt.Fprintf(w, "  │  %s●%s HIGH      %-3d  %s%-20s%s  │\n", cyan, reset, cs.High, cyan, bar(cs.High, r.TotalCount, cyan), reset)
+	}
+	if cs.Medium > 0 {
+		fmt.Fprintf(w, "  │  %s●%s MEDIUM    %-3d  %s%-20s%s  │\n", yellow, reset, cs.Medium, yellow, bar(cs.Medium, r.TotalCount, yellow), reset)
+	}
+	if cs.Low > 0 {
+		fmt.Fprintf(w, "  │  %s●%s LOW       %-3d  %s%-20s%s  │\n", gray, reset, cs.Low, gray, bar(cs.Low, r.TotalCount, gray), reset)
+	}
+	if cs.Noise > 0 {
+		fmt.Fprintf(w, "  │  %s●%s NOISE     %-3d  %s(suppressed)%s        │\n", gray, reset, cs.Noise, dim, reset)
+	}
+	if r.SuppressedCount > 0 {
+		fmt.Fprintf(w, "  │                                         │\n")
+		fmt.Fprintf(w, "  │  %s%d suppressed (use --min-confidence 0)%s │\n", dim, r.SuppressedCount, reset)
+	}
+	fmt.Fprintf(w, "  └─────────────────────────────────────────┘\n\n")
+
 	// Category breakdown
 	fmt.Fprintf(w, "  %sBY CATEGORY:%s\n", bold, reset)
 	for cat, count := range r.Categories {
@@ -181,8 +251,10 @@ func (r *Report) PrintText(w io.Writer) {
 		}
 
 		sColor := sevColor(f.Severity)
-		fmt.Fprintf(w, "  %s %s %s %s[%s]%s L%d: %s\n",
+		confColor := confBadgeColor(f.Confidence)
+		fmt.Fprintf(w, "  %s %s %s %s%s%s %s[%s]%s L%d: %s\n",
 			sColor, f.Severity.Label(), reset,
+			confColor, f.ConfidenceLabel, reset,
 			gray, f.Rule, reset,
 			f.Line, f.Message)
 
@@ -191,6 +263,9 @@ func (r *Report) PrintText(w io.Writer) {
 		}
 		if f.Fix != "" {
 			fmt.Fprintf(w, "      %s│%s %s↳ Fix: %s%s\n", dim, reset, green, f.Fix, reset)
+		}
+		if len(f.ConfidenceReasons) > 0 && f.Confidence < 0.60 {
+			fmt.Fprintf(w, "      %s│%s %s↳ FP signals: %s%s\n", dim, reset, gray, strings.Join(f.ConfidenceReasons, ", "), reset)
 		}
 
 		if i < len(r.Findings)-1 && r.Findings[i+1].File == f.File {
