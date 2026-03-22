@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/Haribinger/Harbinger/backend/pkg/roar"
 )
 
 // Agent-to-agent message bus and cross-channel coordination
@@ -108,6 +111,39 @@ func handleAgentBroadcast(w http.ResponseWriter, r *http.Request) {
 		openclawEvents = openclawEvents[len(openclawEvents)-500:]
 	}
 	openclawMu.Unlock()
+
+	// Bridge to ROAR bus
+	if roarBus != nil {
+		from := roar.AgentIdentity{DID: "did:roar:agent:" + msg.FromAgent}
+		to := roar.AgentIdentity{DID: "did:roar:agent:" + msg.ToAgent}
+		intent := roar.IntentNotify
+		switch msg.Type {
+		case "handoff":
+			intent = roar.IntentDelegate
+		case "request":
+			intent = roar.IntentAsk
+		case "finding":
+			intent = roar.IntentUpdate
+		case "status":
+			intent = roar.IntentUpdate
+		case "context":
+			intent = roar.IntentNotify
+		}
+		roarMsg := roar.NewMessage(from, to, intent, map[string]any{
+			"content":     msg.Content,
+			"data":        msg.Data,
+			"channel":     msg.Channel,
+			"legacy_type": msg.Type,
+		})
+		// Sign with ROAR secret so the bus accepts the message
+		secret := os.Getenv("ROAR_SECRET")
+		if secret == "" {
+			secret = "harbinger-roar-default"
+		}
+		if err := roarMsg.Sign(secret); err == nil {
+			roarBus.Publish(roarMsg)
+		}
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": msg.ID})
 }
