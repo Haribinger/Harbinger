@@ -189,7 +189,7 @@ func handleValidateProviderKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, info, err := validateProviderKey(body.Provider, body.APIKey)
+	valid, info, err := validateProviderKey(body.Provider, body.APIKey, "")
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok":       false,
@@ -229,9 +229,10 @@ func handleValidateProviderKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// validateProviderKey tests an API key against the provider's API.
+// validateProviderKey tests an API key (or for ollama/lmstudio/gpt4all, baseURL) against the provider.
+// baseURL is optional; when non-empty it overrides env for ollama/lmstudio/gpt4all (used by "Test connection").
 // Returns (valid, info map, error).
-func validateProviderKey(provider, apiKey string) (bool, map[string]string, error) {
+func validateProviderKey(provider, apiKey, baseURL string) (bool, map[string]string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	switch provider {
@@ -325,8 +326,11 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 		return false, nil, fmt.Errorf("Google AI API returned %d", resp.StatusCode)
 
 	case "ollama":
-		baseURL := getEnv("OLLAMA_URL", "http://localhost:11434")
-		req, err := http.NewRequest("GET", baseURL+"/api/tags", nil)
+		ollamaBase := baseURL
+		if ollamaBase == "" {
+			ollamaBase = getEnv("OLLAMA_URL", "http://localhost:11434")
+		}
+		req, err := http.NewRequest("GET", ollamaBase+"/api/tags", nil)
 		if err != nil {
 			return false, nil, fmt.Errorf("create request: %v", err)
 		}
@@ -352,8 +356,11 @@ func validateProviderKey(provider, apiKey string) (bool, map[string]string, erro
 		return false, nil, fmt.Errorf("Ollama returned %d", resp.StatusCode)
 
 	case "lmstudio":
-		baseURL := getEnv("LMSTUDIO_URL", "http://localhost:1234/v1")
-		req, err := http.NewRequest("GET", baseURL+"/models", nil)
+		lmBase := baseURL
+		if lmBase == "" {
+			lmBase = getEnv("LMSTUDIO_URL", "http://localhost:1234/v1")
+		}
+		req, err := http.NewRequest("GET", lmBase+"/models", nil)
 		if err != nil {
 			return false, nil, fmt.Errorf("create request: %v", err)
 		}
@@ -384,7 +391,7 @@ func handleTestProviderConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	valid, info, err := validateProviderKey(body.Provider, body.APIKey)
+	valid, info, err := validateProviderKey(body.Provider, body.APIKey, body.BaseURL)
 	latency := time.Since(start).Milliseconds()
 
 	result := map[string]any{

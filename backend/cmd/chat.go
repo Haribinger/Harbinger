@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -387,58 +388,178 @@ func handleChatStream(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Response generation ──────────────────────────────────────────────────────
-// Produces context-aware agent responses. When a real LLM proxy (model router)
-// is wired up, replace this function body with the model call.
+// generateAgentResponse tries to call a real LLM via the configured provider
+// (Ollama by default, or any provider configured via model router).
+// Falls back to a capability summary if no LLM is reachable.
 
 func generateAgentResponse(agentName, userMessage string) string {
 	upper := strings.ToUpper(agentName)
-	msg := strings.ToLower(userMessage)
 
-	// Agent-specific responses based on personality
+	// Try real LLM call first
+	if resp, err := callLLM(agentName, userMessage); err == nil && resp != "" {
+		return fmt.Sprintf("[%s] %s", upper, resp)
+	}
+
+	// Fallback: return agent capability summary so the user knows what the agent can do
+	return agentFallbackResponse(upper, strings.ToLower(userMessage))
+}
+
+// callLLM attempts to generate a response via Ollama (local) or the configured provider.
+// Returns empty string and error if no LLM is available — caller should use fallback.
+func callLLM(agentName, userMessage string) (string, error) {
+	// Resolve model from router
+	modelRouter.RLock()
+	provider := modelRouter.config.DefaultProvider
+	model := "llama3"
+	for _, route := range modelRouter.routes {
+		if route.TaskType == "simple" {
+			provider = route.DefaultProvider
+			model = route.Model
+			break
+		}
+	}
+	modelRouter.RUnlock()
+
+	// Build system prompt from agent personality
+	systemPrompt := fmt.Sprintf("You are %s, a specialized security agent in the Harbinger offensive security platform. Respond concisely and technically. Stay in character.", agentName)
+
+	switch provider {
+	case "ollama":
+		ollamaURL := getEnv("OLLAMA_URL", "http://localhost:11434")
+		return callOllama(ollamaURL, model, systemPrompt, userMessage)
+	case "openai":
+		apiKey := getEnv("OPENAI_API_KEY", "")
+		if apiKey == "" {
+			return "", fmt.Errorf("OPENAI_API_KEY not set")
+		}
+		return callOpenAICompatible("https://api.openai.com/v1", apiKey, model, systemPrompt, userMessage)
+	case "anthropic":
+		apiKey := getEnv("ANTHROPIC_API_KEY", "")
+		if apiKey == "" {
+			return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
+		}
+		return callAnthropic(apiKey, model, systemPrompt, userMessage)
+	default:
+		return "", fmt.Errorf("provider %s not supported for chat", provider)
+	}
+}
+
+func callOllama(baseURL, model, systemPrompt, userMessage string) (string, error) {
+	reqBody, _ := json.Marshal(map[string]any{
+		"model":  model,
+		"stream": false,
+		"messages": []map[string]string{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userMessage},
+		},
+	})
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Post(baseURL+"/api/chat", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		return "", fmt.Errorf("ollama unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ollama returned %d", resp.StatusCode)
+	}
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode ollama response: %w", err)
+	}
+	return result.Message.Content, nil
+}
+
+func callOpenAICompatible(baseURL, apiKey, model, systemPrompt, userMessage string) (string, error) {
+	reqBody, _ := json.Marshal(map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userMessage},
+		},
+		"max_tokens": 1024,
+	})
+	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("openai unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("openai returned %d", resp.StatusCode)
+	}
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode openai response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+	return result.Choices[0].Message.Content, nil
+}
+
+func callAnthropic(apiKey, model, systemPrompt, userMessage string) (string, error) {
+	reqBody, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": 1024,
+		"system":     systemPrompt,
+		"messages": []map[string]string{
+			{"role": "user", "content": userMessage},
+		},
+	})
+	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("anthropic unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("anthropic returned %d", resp.StatusCode)
+	}
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode anthropic response: %w", err)
+	}
+	if len(result.Content) == 0 {
+		return "", fmt.Errorf("no content in response")
+	}
+	return result.Content[0].Text, nil
+}
+
+// agentFallbackResponse returns a capability summary when no LLM is available
+func agentFallbackResponse(upper, msg string) string {
 	switch {
 	case strings.Contains(upper, "PATHFINDER") || strings.Contains(upper, "RECON"):
-		if strings.Contains(msg, "scan") || strings.Contains(msg, "recon") {
-			return fmt.Sprintf("[PATHFINDER] Initiating reconnaissance pipeline for target. Running subfinder → dnsx → httpx → naabu → nuclei. Use the Scope Manager to define target boundaries before I begin. Results will populate the Dashboard.")
-		}
-		return fmt.Sprintf("[PATHFINDER] Ready for reconnaissance operations. I can enumerate subdomains, probe live hosts, scan ports, and run initial vulnerability detection. What target should I focus on?")
-
+		return fmt.Sprintf("[PATHFINDER] Ready for reconnaissance. I run subfinder, httpx, naabu, and nuclei. Configure an LLM provider in Settings for intelligent responses, or define a target in the Scope Manager to begin scanning.")
 	case strings.Contains(upper, "BREACH") || strings.Contains(upper, "WEB"):
-		if strings.Contains(msg, "vuln") || strings.Contains(msg, "exploit") || strings.Contains(msg, "xss") || strings.Contains(msg, "sql") {
-			return fmt.Sprintf("[BREACH] Analyzing attack vectors. I'll run nuclei (critical/high severity), check for XSS with dalfox, test SQL injection points with sqlmap, and fuzz directories with ffuf. Share the target URLs from PATHFINDER's recon output.")
-		}
-		return fmt.Sprintf("[BREACH] Web application hacking agent online. I specialize in nuclei scans, XSS detection, SQL injection, directory fuzzing, and API vulnerability assessment. What targets are ready for testing?")
-
+		return fmt.Sprintf("[BREACH] Web hacking agent online. I specialize in nuclei, dalfox, sqlmap, and ffuf. No LLM configured — set one in Settings > Model Router for intelligent analysis.")
 	case strings.Contains(upper, "PHANTOM") || strings.Contains(upper, "CLOUD"):
-		return fmt.Sprintf("[PHANTOM] Cloud infiltration agent standing by. I can audit AWS/GCP/Azure configurations using ScoutSuite and Prowler, test IAM policies with Pacu, and identify exposed cloud assets. Which cloud environment should I assess?")
-
-	case strings.Contains(upper, "SPECTER") || strings.Contains(upper, "OSINT"):
-		return fmt.Sprintf("[SPECTER] OSINT detective engaged. I can run theHarvester for email/domain enumeration, Sherlock for username profiling, and SpiderFoot for comprehensive intelligence gathering. What entity should I investigate?")
-
-	case strings.Contains(upper, "CIPHER") || strings.Contains(upper, "BINARY"):
-		return fmt.Sprintf("[CIPHER] Binary reverse engineering and crypto analysis ready. I can analyze binaries with Ghidra/radare2, audit TLS configurations with testssl.sh, and test JWT implementations. What artifact should I examine?")
-
+		return fmt.Sprintf("[PHANTOM] Cloud infiltration agent. I audit AWS/GCP/Azure with ScoutSuite and Prowler. Configure an LLM in Settings for intelligent cloud security analysis.")
 	case strings.Contains(upper, "SCRIBE") || strings.Contains(upper, "REPORT"):
-		return fmt.Sprintf("[SCRIBE] Report writer activated. I can generate vulnerability reports in Markdown or PDF, create executive summaries, and format findings for bug bounty platforms (HackerOne, Bugcrowd). What findings should I document?")
-
+		return fmt.Sprintf("[SCRIBE] Report writer. I generate vulnerability reports in Markdown/PDF. Configure an LLM in Settings for AI-powered report generation.")
 	case strings.Contains(upper, "SAM") || strings.Contains(upper, "CODING"):
-		return fmt.Sprintf("[SAM] Coding assistant ready. I can write exploits, create automation scripts, refactor security tooling, and help with code review. What code task do you need help with?")
-
-	case strings.Contains(upper, "BRIEF") || strings.Contains(upper, "MORNING"):
-		return fmt.Sprintf("[BRIEF] Morning briefing ready. I aggregate overnight scan results, new CVE disclosures, scope changes, and agent activity into a concise daily summary. Shall I generate today's brief?")
-
-	case strings.Contains(upper, "SAGE") || strings.Contains(upper, "LEARN"):
-		return fmt.Sprintf("[SAGE] Learning agent online. I can explain vulnerabilities, walk through exploitation techniques, provide training resources, and help you understand security concepts. What would you like to learn about?")
-
-	case strings.Contains(upper, "LENS") || strings.Contains(upper, "BROWSER"):
-		return fmt.Sprintf("[LENS] Browser automation agent ready. I control headless Chrome via CDP for authenticated testing, JavaScript execution, screenshot capture, and DOM interaction. What web target should I navigate to?")
-
-	case strings.Contains(upper, "MAINTAINER"):
-		return fmt.Sprintf("[MAINTAINER] DevOps and code health agent online. I monitor codebase health, run nightly maintenance, track dependency updates, and manage CI/CD pipelines. What maintenance task do you need?")
-
+		return fmt.Sprintf("[SAM] Coding assistant. Configure an LLM provider (Ollama is free and local) in Settings > Model Router to enable AI-powered code generation and analysis.")
 	default:
-		if strings.Contains(msg, "help") || strings.Contains(msg, "what can") {
-			return fmt.Sprintf("[%s] I'm part of the Harbinger agent swarm. You can ask me to scan targets, analyze vulnerabilities, generate reports, or automate security workflows. Use the Command Center for multi-agent orchestration.", upper)
-		}
-		return fmt.Sprintf("[%s] Acknowledged. Processing your request. Use the Command Center to coordinate with other agents or check the Dashboard for current operation status.", upper)
+		return fmt.Sprintf("[%s] Agent online. No LLM provider configured — set one in Settings > Model Router (Ollama is free and runs locally). I can still execute tools via the Command Center.", upper)
 	}
 }

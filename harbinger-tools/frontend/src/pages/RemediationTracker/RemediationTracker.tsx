@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Shield, Terminal, FileText, Mail, CheckCircle, ExternalLink, Copy, Zap } from 'lucide-react'
+import { vulnsApi, type Vulnerability } from '../../api/vulns'
 
 type Priority = 'P1' | 'P2' | 'P3'
 type VulnStatus = 'new' | 'triaged' | 'fix-pending' | 'resolved'
@@ -14,12 +15,18 @@ interface VulnCard {
   active?: boolean
 }
 
-const VULN_PIPELINE: VulnCard[] = [
-  { id: 'RC-8812', priority: 'P1', title: 'Pre-auth RCE via Serialized Object Injection', cveId: 'CVE-2023-4812', assignee: 'dev_alpha', status: 'new' },
-  { id: 'RC-8790', priority: 'P2', title: 'SQLi via Filter Parameter on /api/v2/search', cveId: 'CVE-2023-4551', assignee: 's_mccall', status: 'triaged' },
-  { id: 'RC-8701', priority: 'P1', title: 'Log4Shell Persistence in Legacy Gateway', cveId: 'CVE-2021-44228', assignee: 'engineering_lead', status: 'fix-pending', active: true },
-  { id: 'RC-8550', priority: 'P3', title: 'CORS Misconfiguration on Stage', cveId: 'CVE-2023-1102', assignee: '', status: 'resolved' },
-]
+function vulnToCard(v: Vulnerability): VulnCard {
+  const priorityMap: Record<string, Priority> = { critical: 'P1', high: 'P1', medium: 'P2', low: 'P3', info: 'P3' }
+  const statusMap: Record<string, VulnStatus> = { new: 'new', triaged: 'triaged', in_progress: 'fix-pending', remediated: 'resolved', verified: 'resolved', accepted_risk: 'resolved' }
+  return {
+    id: v.id,
+    priority: priorityMap[v.severity] || 'P3',
+    title: v.title,
+    cveId: v.cveId || v.category,
+    assignee: v.agentName || '',
+    status: statusMap[v.status] || 'new',
+  }
+}
 
 const COLUMNS: { status: VulnStatus; label: string; num: string }[] = [
   { status: 'new', label: 'New / Inbound', num: '01' },
@@ -44,17 +51,43 @@ function priorityLabel(p: Priority) {
   }
 }
 
-const CONSOLE_LINES = [
-  { time: '14:22:01', level: 'INFO', msg: 'Initializing Nuclei Engine v3.1.2...', color: '' },
-  { time: '14:22:02', level: 'INFO', msg: 'Loading template: cves/2021/CVE-2021-44228.yaml', color: '', link: true },
-  { time: '14:22:03', level: 'SCAN', msg: 'Testing target: https://gateway-prod-01.redclaw.io', color: '' },
-  { time: '14:22:05', level: 'RE-SCAN', msg: 'Testing CVE-2021-44228...', color: 'font-bold' },
-  { time: '14:22:07', level: 'FIXED', msg: 'Target no longer vulnerable to JNDI injection.', color: 'text-green-400 font-black' },
-]
-
 export default function RemediationTracker() {
-  const [selectedVuln] = useState(VULN_PIPELINE.find((v) => v.active) || VULN_PIPELINE[0])
+  const [pipeline, setPipeline] = useState<VulnCard[]>([])
+  const [selectedVuln, setSelectedVuln] = useState<VulnCard | null>(null)
   const [consoleInput, setConsoleInput] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  const fetchVulns = useCallback(async () => {
+    try {
+      const res = await vulnsApi.list()
+      const cards = (res.vulns || []).map(vulnToCard)
+      setPipeline(cards)
+      if (cards.length > 0 && !selectedVuln) setSelectedVuln(cards[0])
+    } catch { /* backend not available */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchVulns() }, [fetchVulns])
+
+  const handleStatusChange = async (vulnId: string, newStatus: string) => {
+    try {
+      await vulnsApi.update(vulnId, { status: newStatus as Vulnerability['status'] })
+      fetchVulns()
+    } catch { /* handled */ }
+  }
+
+  const now = new Date().toLocaleTimeString('en-US', { hour12: false })
+  const CONSOLE_LINES = loading
+    ? [{ time: now, level: 'SYS', msg: 'Loading vulnerability pipeline...', color: '' }]
+    : pipeline.length === 0
+      ? [{ time: now, level: 'SYS', msg: 'No vulnerabilities in pipeline. Findings from agents will appear here.', color: 'text-gold-400' }]
+      : [
+          { time: now, level: 'INFO', msg: `Loaded ${pipeline.length} vulnerabilities in remediation pipeline.`, color: '' },
+          ...pipeline.filter(v => v.status === 'new').map(v => ({ time: now, level: 'NEW', msg: `${v.id}: ${v.title} [${v.cveId}]`, color: 'text-red-400' })),
+          ...pipeline.filter(v => v.status === 'resolved').map(v => ({ time: now, level: 'FIXED', msg: `${v.id}: ${v.title} — remediated`, color: 'text-green-400 font-black' })),
+        ]
+
+  const VULN_PIPELINE = pipeline
 
   return (
     <div className="h-full flex flex-col bg-obsidian-900 text-white overflow-hidden">
@@ -142,10 +175,10 @@ export default function RemediationTracker() {
             <div className="flex justify-between items-end mb-4">
               <div>
                 <h2 className="text-3xl font-black uppercase italic tracking-tighter font-mono" style={{ textShadow: '0 0 5px rgba(240,192,64,0.4)' }}>
-                  {selectedVuln.cveId}
+                  {selectedVuln?.cveId || 'No Finding Selected'}
                 </h2>
                 <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-gold-400/60 font-mono">
-                  {selectedVuln.title} — SLA Track
+                  {selectedVuln?.title || 'Create vulnerabilities from agent scans'} — SLA Track
                 </p>
               </div>
               <div className="text-right">
@@ -243,11 +276,7 @@ location / {
                 <div key={i} className={`flex gap-2 ${line.color}`}>
                   <span className="opacity-30">{line.time}</span>
                   <span>[{line.level}]</span>
-                  {line.link ? (
-                    <span>{line.msg.split(':')[0]}: <span className="text-gold-400 underline">{line.msg.split(': ')[1]}</span></span>
-                  ) : (
-                    <span>{line.msg}</span>
-                  )}
+                  <span>{line.msg}</span>
                 </div>
               ))}
               <div className="flex gap-2 animate-pulse mt-2">

@@ -1,36 +1,6 @@
-import { useState } from 'react'
-import { Shield, ShieldOff, Search, Filter, History, Upload, Plus, Ban, Undo2, FileDown } from 'lucide-react'
-
-interface ScopeAsset {
-  id: string
-  pattern: string
-  type: 'Wildcard' | 'Web App' | 'CIDR' | 'API' | 'Mobile'
-  tags: string[]
-}
-
-interface ExclusionAsset {
-  id: string
-  pattern: string
-  reason: string
-  tags: string[]
-}
-
-const SAMPLE_IN_SCOPE: ScopeAsset[] = [
-  { id: '1', pattern: '*.falcon-api.io', type: 'Wildcard', tags: ['API', 'NodeJS'] },
-  { id: '2', pattern: 'app.falcon-platform.com', type: 'Web App', tags: ['Prod'] },
-  { id: '3', pattern: '10.0.4.0/24', type: 'CIDR', tags: ['Internal'] },
-  { id: '4', pattern: 'checkout.falcon.com', type: 'Web App', tags: ['PCI-DSS', 'Mobile'] },
-  { id: '5', pattern: '*.cdn.falcon.io', type: 'Wildcard', tags: ['CDN'] },
-  { id: '6', pattern: 'auth.falcon-platform.com', type: 'Web App', tags: ['Auth', 'Critical'] },
-  { id: '7', pattern: 'mobile-api.falcon.com', type: 'API', tags: ['Mobile', 'REST'] },
-  { id: '8', pattern: '172.16.0.0/16', type: 'CIDR', tags: ['Internal', 'VPN'] },
-]
-
-const SAMPLE_EXCLUSIONS: ExclusionAsset[] = [
-  { id: 'e1', pattern: 'dev.falcon-internal.com', reason: 'Third Party Managed', tags: ['Staging'] },
-  { id: 'e2', pattern: '*.legacy.falcon.io', reason: 'Deprecated Assets', tags: ['Legacy'] },
-  { id: 'e3', pattern: 'test-sandbox.falcon.com', reason: 'Non-production', tags: ['Test'] },
-]
+import { useState, useEffect, useCallback } from 'react'
+import { Shield, ShieldOff, Search, Filter, History, Upload, Plus, Ban, Undo2, FileDown, Trash2, Loader2 } from 'lucide-react'
+import { scopeApi, type ScopeAsset, type ScopeExclusion } from '../../api/scope'
 
 type AssetFilter = 'all' | 'cloud' | 'mobile'
 
@@ -39,8 +9,74 @@ export default function ScopeManager() {
   const [search, setSearch] = useState('')
   const [bulkText, setBulkText] = useState('')
   const [bulkTarget, setBulkTarget] = useState<'in-scope' | 'exclusion'>('in-scope')
-  const [inScope] = useState(SAMPLE_IN_SCOPE)
-  const [exclusions] = useState(SAMPLE_EXCLUSIONS)
+  const [inScope, setInScope] = useState<ScopeAsset[]>([])
+  const [exclusions, setExclusions] = useState<ScopeExclusion[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newPattern, setNewPattern] = useState('')
+
+  const fetchScope = useCallback(async () => {
+    try {
+      const [assetsRes, exclRes] = await Promise.all([
+        scopeApi.getAssets(),
+        scopeApi.getExclusions(),
+      ])
+      setInScope(assetsRes.assets || [])
+      setExclusions(exclRes.exclusions || [])
+    } catch {
+      // Backend not available — show empty state
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchScope() }, [fetchScope])
+
+  const handleAddAsset = async () => {
+    if (!newPattern.trim()) return
+    try {
+      await scopeApi.addAsset({ pattern: newPattern.trim() })
+      setNewPattern('')
+      fetchScope()
+    } catch { /* handled by empty state */ }
+  }
+
+  const handleDeleteAsset = async (id: string) => {
+    try {
+      await scopeApi.deleteAsset(id)
+      fetchScope()
+    } catch { /* handled by empty state */ }
+  }
+
+  const handleDeleteExclusion = async (id: string) => {
+    try {
+      await scopeApi.deleteExclusion(id)
+      fetchScope()
+    } catch { /* handled by empty state */ }
+  }
+
+  const handleBulkImport = async () => {
+    if (!bulkText.trim()) return
+    try {
+      const result = await scopeApi.bulkImport(bulkText, bulkTarget)
+      if (result.ok) {
+        setBulkText('')
+        fetchScope()
+      }
+    } catch { /* handled by empty state */ }
+  }
+
+  const handleExport = async () => {
+    try {
+      const data = await scopeApi.exportScope()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `harbinger-scope-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* handled by empty state */ }
+  }
 
   const filteredInScope = inScope.filter((a) => {
     if (search && !a.pattern.toLowerCase().includes(search.toLowerCase())) return false
@@ -49,13 +85,14 @@ export default function ScopeManager() {
     return true
   })
 
-  const logs = [
-    { time: '14:22:01', level: 'INF', msg: `Successfully parsed ${inScope.length} in-scope assets.`, color: 'text-green-400' },
-    { time: '14:22:05', level: 'LOG', msg: 'Validating regex patterns for wildcard domains...', color: 'text-gray-400' },
-    { time: '14:22:08', level: 'WRN', msg: 'Overlap detected between CIDR 10.0.4.0/24 and exclusion list.', color: 'text-gold-400' },
-    { time: '14:22:12', level: 'LOG', msg: 'Auto-tagging applied based on subdomain structure.', color: 'text-gray-400' },
-    { time: '14:22:45', level: 'SYS', msg: 'Awaiting bulk CSV upload...', color: 'text-gold-400' },
-  ]
+  const now = new Date().toLocaleTimeString('en-US', { hour12: false })
+  const logs = loading
+    ? [{ time: now, level: 'SYS', msg: 'Loading scope data from backend...', color: 'text-gold-400' }]
+    : [
+        { time: now, level: 'INF', msg: `Loaded ${inScope.length} in-scope assets, ${exclusions.length} exclusions.`, color: 'text-green-400' },
+        ...(inScope.length === 0 ? [{ time: now, level: 'SYS', msg: 'No assets in scope — add targets to begin.', color: 'text-gold-400' }] : []),
+        ...(exclusions.length > 0 ? [{ time: now, level: 'LOG', msg: `${exclusions.length} patterns excluded from scanning.`, color: 'text-gray-400' }] : []),
+      ]
 
   return (
     <div className="h-full flex flex-col bg-obsidian-900 text-white overflow-hidden">
@@ -74,14 +111,23 @@ export default function ScopeManager() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 border border-gold-400/40 text-gold-400 hover:bg-gold-400/10 text-xs font-bold uppercase tracking-wider flex items-center gap-2 font-mono">
+          <button onClick={handleExport} className="px-4 py-2 border border-gold-400/40 text-gold-400 hover:bg-gold-400/10 text-xs font-bold uppercase tracking-wider flex items-center gap-2 font-mono">
             <FileDown className="w-3.5 h-3.5" />
             Export Scope
           </button>
-          <button className="px-4 py-2 bg-gold-400 text-obsidian-900 hover:bg-gold-400/90 font-bold text-xs uppercase tracking-wider flex items-center gap-2 font-mono">
-            <Plus className="w-3.5 h-3.5" />
-            Add to Scope
-          </button>
+          <form onSubmit={(e) => { e.preventDefault(); handleAddAsset() }} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newPattern}
+              onChange={(e) => setNewPattern(e.target.value)}
+              placeholder="*.example.com or 10.0.0.0/24"
+              className="px-3 py-2 bg-obsidian-800 border border-gold-400/20 text-white text-xs font-mono w-56 placeholder:opacity-40"
+            />
+            <button type="submit" className="px-4 py-2 bg-gold-400 text-obsidian-900 hover:bg-gold-400/90 font-bold text-xs uppercase tracking-wider flex items-center gap-2 font-mono">
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </button>
+          </form>
         </div>
       </header>
 
@@ -161,8 +207,8 @@ export default function ScopeManager() {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <button className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400">
-                        <Ban className="w-3.5 h-3.5" />
+                      <button onClick={() => handleDeleteAsset(asset.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </td>
                   </tr>
@@ -207,8 +253,8 @@ export default function ScopeManager() {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <button className="opacity-0 group-hover:opacity-100 text-gold-400 hover:text-gold-400/80">
-                        <Undo2 className="w-3.5 h-3.5" />
+                      <button onClick={() => handleDeleteExclusion(asset.id)} className="opacity-0 group-hover:opacity-100 text-gold-400 hover:text-gold-400/80" title="Remove exclusion">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </td>
                   </tr>
@@ -275,11 +321,18 @@ export default function ScopeManager() {
               placeholder={'Paste assets here (one per line)...\n*.example.com\n192.168.1.0/24'}
             />
             <div className="absolute bottom-4 right-4 flex gap-2">
-              <button className="bg-surface-800 border border-gold-400/20 text-gray-300 px-3 py-1 text-[9px] font-bold uppercase hover:bg-surface-800/80 flex items-center gap-1 font-mono">
+              <label className="bg-surface-800 border border-gold-400/20 text-gray-300 px-3 py-1 text-[9px] font-bold uppercase hover:bg-surface-800/80 flex items-center gap-1 font-mono cursor-pointer">
                 <Upload className="w-3 h-3" />
                 CSV/TXT
-              </button>
-              <button className="bg-gold-400 text-obsidian-900 px-3 py-1 text-[9px] font-bold uppercase hover:brightness-110 font-mono">
+                <input type="file" accept=".csv,.txt" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = (ev) => setBulkText((ev.target?.result as string) || '')
+                  reader.readAsText(file)
+                }} />
+              </label>
+              <button onClick={handleBulkImport} className="bg-gold-400 text-obsidian-900 px-3 py-1 text-[9px] font-bold uppercase hover:brightness-110 font-mono">
                 Process List
               </button>
             </div>

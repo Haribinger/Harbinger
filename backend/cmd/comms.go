@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -135,12 +135,10 @@ func handleAgentBroadcast(w http.ResponseWriter, r *http.Request) {
 			"channel":     msg.Channel,
 			"legacy_type": msg.Type,
 		})
-		// Sign with ROAR secret so the bus accepts the message
-		secret := os.Getenv("ROAR_SECRET")
-		if secret == "" {
-			secret = "harbinger-roar-default"
-		}
-		if err := roarMsg.Sign(secret); err == nil {
+		// Sign with the resolved ROAR secret (set by initROAR)
+		if roarSecret == "" {
+			log.Println("[SECURITY] ROAR secret not initialized — skipping ROAR bus publish")
+		} else if err := roarMsg.Sign(roarSecret); err == nil {
 			roarBus.Publish(roarMsg)
 		}
 	}

@@ -111,9 +111,9 @@ func handleOpenClawStatus(w http.ResponseWriter, r *http.Request) {
 			"local_ai": map[string]any{
 				"description":   "Local-first AI — Ollama, LM Studio, GPT4All — all free, no API keys",
 				"providers":     []string{"ollama", "lmstudio", "gpt4all"},
-				"ollama_url":    "http://localhost:11434",
-				"lmstudio_url":  "http://localhost:1234/v1",
-				"gpt4all_url":   "http://localhost:4891/v1",
+				"ollama_url":    getEnv("OLLAMA_URL", "http://localhost:11434"),
+				"lmstudio_url":  getEnv("LMSTUDIO_URL", "http://localhost:1234/v1"),
+				"gpt4all_url":   getEnv("GPT4ALL_URL", "http://localhost:4891/v1"),
 			},
 			"mcp_plugins": map[string]any{
 				"hexstrike":  "/mcp/hexstrike",

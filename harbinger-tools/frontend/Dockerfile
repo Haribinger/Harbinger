@@ -38,11 +38,14 @@ FROM nginx:alpine
 LABEL maintainer="Harbinger Security Platform"
 LABEL description="Harbinger Frontend - React SPA static server"
 
-# Create non-root user and fix nginx dirs for non-root operation
+# wget required for HEALTHCHECK (nginx:alpine does not include it)
+RUN apk add --no-cache wget
+
+# Create non-root user and fix nginx dirs; pid file must be in writable dir (/run not writable as non-root)
 RUN addgroup -S harbinger && adduser -S harbinger -G harbinger \
     && mkdir -p /var/cache/nginx /var/run /tmp \
     && chown -R harbinger:harbinger /var/cache/nginx /var/run /tmp \
-    && sed -i 's|/var/run/nginx.pid|/tmp/nginx.pid|' /etc/nginx/nginx.conf
+    && sed -i -e 's|/var/run/nginx.pid|/tmp/nginx.pid|g' -e 's|/run/nginx.pid|/tmp/nginx.pid|g' /etc/nginx/nginx.conf
 
 COPY --from=builder --chown=harbinger:harbinger /build/harbinger-tools/frontend/dist /usr/share/nginx/html
 

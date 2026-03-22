@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Upload, Terminal, ExternalLink, AlertTriangle, Image, FileText, Copy } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Upload, Terminal, ExternalLink, AlertTriangle, Image, FileText, Copy, Loader2 } from 'lucide-react'
+import { vulnsApi, type Vulnerability, type VulnEvidence } from '../../api/vulns'
 
 type EvidenceType = 'POST' | '200' | 'IMG' | 'LOG'
 
@@ -20,28 +21,39 @@ interface TriageStep {
   completed: boolean
 }
 
-const EVIDENCE: EvidenceItem[] = [
-  { id: 'ev1', type: 'POST', label: '/api/v1/user/search', timestamp: '14:22:01', detail: 'POST', badges: ['RAW', 'PAYLOAD'] },
-  { id: 'ev2', type: '200', label: 'HTTP/1.1 JSON Response', timestamp: '14:22:02', detail: '200 OK' },
-  { id: 'ev3', type: 'IMG', label: 'error_dump_01.png', timestamp: '14:25:44', detail: 'Screenshot' },
-  { id: 'ev4', type: 'LOG', label: 'Server_Debug.log', timestamp: '14:26:10', detail: 'Debug Log' },
-]
+function evidenceToItems(evidence: VulnEvidence[]): EvidenceItem[] {
+  return evidence.map((e) => {
+    const typeMap: Record<string, EvidenceType> = { request: 'POST', response: '200', screenshot: 'IMG', log: 'LOG', poc: 'POST', code: 'LOG' }
+    return {
+      id: e.id,
+      type: typeMap[e.type] || 'LOG',
+      label: e.title,
+      timestamp: new Date(e.createdAt).toLocaleTimeString('en-US', { hour12: false }),
+      detail: e.type.toUpperCase(),
+      badges: e.type === 'poc' ? ['POC'] : undefined,
+    }
+  })
+}
 
-const TRIAGE_STEPS: TriageStep[] = [
-  { step: 1, label: 'DISCOVERED', detail: '2023-11-20 14:22', active: false, completed: true },
-  { step: 2, label: 'IN TRIAGE', detail: 'Assigned to: @security_lead', active: true, completed: false },
-  { step: 3, label: 'REMEDIATED', detail: '', active: false, completed: false },
-]
+function vulnToTriageSteps(vuln: Vulnerability | null): TriageStep[] {
+  if (!vuln) return [
+    { step: 1, label: 'DISCOVERED', detail: '', active: false, completed: false },
+    { step: 2, label: 'IN TRIAGE', detail: '', active: false, completed: false },
+    { step: 3, label: 'REMEDIATED', detail: '', active: false, completed: false },
+  ]
+  const statusOrder = ['new', 'triaged', 'in_progress', 'remediated', 'verified']
+  const idx = statusOrder.indexOf(vuln.status)
+  return [
+    { step: 1, label: 'DISCOVERED', detail: vuln.foundAt ? new Date(vuln.foundAt).toLocaleString() : '', active: idx === 0, completed: idx > 0 },
+    { step: 2, label: 'IN TRIAGE', detail: vuln.agentName ? `Agent: ${vuln.agentName}` : '', active: idx === 1 || idx === 2, completed: idx > 2 },
+    { step: 3, label: 'REMEDIATED', detail: vuln.slaDeadline ? `SLA: ${new Date(vuln.slaDeadline).toLocaleDateString()}` : '', active: idx >= 3, completed: idx >= 4 },
+  ]
+}
 
-const CODE_LINES = [
-  { num: '01', text: 'POST /api/v1/user/search HTTP/1.1', color: 'text-gray-400' },
-  { num: '02', text: 'Content-Type: application/json', color: 'text-gray-400' },
-  { num: '03', text: 'Host: prod-api-internal.v-platform.io', color: 'text-gray-400' },
-  { num: '04', text: '', color: '', special: true },
-  { num: '05', text: '[DATABASE_EXCEPTION]', color: 'text-red-400 italic uppercase' },
-  { num: '06', text: "Syntax error in SQL statement \"SELECT * FROM users WHERE id = '1' OR '1'='1[*]'\"", color: 'text-red-400' },
-  { num: '07', text: 'expected "identifier"; SQL statement:', color: 'text-red-400' },
-  { num: '08', text: '... stack trace: org.h2.jdbc.JdbcSQLException: Syntax error in SQL statement ...', color: 'text-gray-500 italic' },
+const CODE_LINES_EMPTY = [
+  { num: '01', text: '# No vulnerability selected', color: 'text-gray-500' },
+  { num: '02', text: '# Select a finding from the vulnerability list', color: 'text-gray-500' },
+  { num: '03', text: '# or create a new one from the agents.', color: 'text-gray-500' },
 ]
 
 function getEvidenceColor(type: EvidenceType) {
@@ -65,6 +77,58 @@ function getEvidenceIcon(type: EvidenceType) {
 export default function VulnDeepDive() {
   const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write')
   const [summary, setSummary] = useState('')
+  const [vulns, setVulns] = useState<Vulnerability[]>([])
+  const [selectedVuln, setSelectedVuln] = useState<Vulnerability | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchVulns = useCallback(async () => {
+    try {
+      const res = await vulnsApi.list()
+      setVulns(res.vulns || [])
+      if (res.vulns?.length > 0 && !selectedVuln) {
+        setSelectedVuln(res.vulns[0])
+      }
+    } catch { /* backend not available */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchVulns() }, [fetchVulns])
+
+  const EVIDENCE = selectedVuln ? evidenceToItems(selectedVuln.evidence || []) : []
+  const TRIAGE_STEPS = vulnToTriageSteps(selectedVuln)
+  const CODE_LINES = selectedVuln?.description
+    ? selectedVuln.description.split('\n').map((line, i) => ({
+        num: String(i + 1).padStart(2, '0'),
+        text: line,
+        color: line.includes('ERROR') || line.includes('Exception') ? 'text-red-400' : 'text-gray-400',
+      }))
+    : CODE_LINES_EMPTY
+
+  const handleUpdateStatus = async (status: string) => {
+    if (!selectedVuln) return
+    try {
+      const res = await vulnsApi.update(selectedVuln.id, { status: status as Vulnerability['status'] })
+      if (res.ok) {
+        setSelectedVuln(res.vuln)
+        fetchVulns()
+      }
+    } catch { /* handled */ }
+  }
+
+  const handleAddEvidence = async () => {
+    if (!selectedVuln) return
+    try {
+      await vulnsApi.addEvidence(selectedVuln.id, {
+        type: 'log',
+        title: `Evidence ${(selectedVuln.evidence?.length || 0) + 1}`,
+        content: summary || 'Manual evidence entry',
+      })
+      fetchVulns()
+      // Refresh selected vuln
+      const res = await vulnsApi.get(selectedVuln.id)
+      if (res.ok) setSelectedVuln(res.vuln)
+    } catch { /* handled */ }
+  }
 
   return (
     <div className="h-full flex flex-col bg-obsidian-900 text-white overflow-hidden">
@@ -124,9 +188,9 @@ export default function VulnDeepDive() {
             })}
           </div>
           <div className="p-4 border-t border-gold-400/20">
-            <button className="w-full border border-gold-400/50 text-gold-400 py-2 text-xs font-bold hover:bg-gold-400 hover:text-black transition-all font-mono flex items-center justify-center gap-2">
+            <button onClick={handleAddEvidence} disabled={!selectedVuln} className="w-full border border-gold-400/50 text-gold-400 py-2 text-xs font-bold hover:bg-gold-400 hover:text-black transition-all font-mono flex items-center justify-center gap-2 disabled:opacity-30">
               <Upload className="w-3.5 h-3.5" />
-              UPLOAD EVIDENCE
+              {selectedVuln ? 'ADD EVIDENCE' : 'NO VULN SELECTED'}
             </button>
           </div>
         </aside>
@@ -134,14 +198,14 @@ export default function VulnDeepDive() {
         {/* Center: Technical Analysis */}
         <section className="flex-1 flex flex-col bg-obsidian-900 overflow-y-auto">
           {/* Severity Banner */}
-          <div className="bg-red-600 text-white p-6 flex justify-between items-center relative overflow-hidden">
+          <div className={`${selectedVuln?.severity === 'critical' ? 'bg-red-600' : selectedVuln?.severity === 'high' ? 'bg-orange-600' : selectedVuln?.severity === 'medium' ? 'bg-yellow-600' : 'bg-blue-600'} text-white p-6 flex justify-between items-center relative overflow-hidden`}>
             <div className="absolute right-0 top-0 text-[120px] font-black opacity-10 select-none -mr-10 -mt-10 tracking-tighter leading-none">
-              CRITICAL
+              {(selectedVuln?.severity || 'N/A').toUpperCase()}
             </div>
             <div className="z-10">
-              <h1 className="text-4xl font-black tracking-tighter leading-none mb-1 font-mono">9.8 CRITICAL</h1>
+              <h1 className="text-4xl font-black tracking-tighter leading-none mb-1 font-mono">{selectedVuln?.cvss || '—'} {(selectedVuln?.severity || 'N/A').toUpperCase()}</h1>
               <p className="text-xs uppercase font-mono tracking-widest opacity-80">
-                CVSS v3.1 BASE SCORE / AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+                {selectedVuln?.title || 'No vulnerability selected — create findings via agents'}
               </p>
             </div>
             <div className="z-10 text-right">
@@ -167,17 +231,9 @@ export default function VulnDeepDive() {
               </div>
               <div className="p-4 font-mono text-sm overflow-x-auto leading-relaxed">
                 {CODE_LINES.map((line) => (
-                  <div key={line.num} className={`flex gap-4 ${line.num === '04' ? 'mt-2' : ''}`}>
+                  <div key={line.num} className="flex gap-4">
                     <span className="opacity-20 select-none w-6 text-right">{line.num}</span>
-                    {line.special ? (
-                      <span>
-                        <span className="text-white">{'{ "query": "'}</span>
-                        <span className="text-gold-400 font-bold">{"1' OR '1'='1"}</span>
-                        <span className="text-white">{'", "filters": {} }'}</span>
-                      </span>
-                    ) : (
-                      <span className={line.color}>{line.text}</span>
-                    )}
+                    <span className={line.color}>{line.text}</span>
                   </div>
                 ))}
               </div>

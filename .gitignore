@@ -104,3 +104,6 @@ docs/GITHUB_MANAGEMENT.md
 docs/OPENCLAW_MIGRATION_AND_DOCKER_ARCHITECTURE.md
 docs/SKILLS_INVENTORY.md
 docs/prompts/
+
+# Auto Claude data directory
+.auto-claude/

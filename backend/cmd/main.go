@@ -72,7 +72,7 @@ type APIKey struct {
 	ID        string `json:"id"`
 	UserID    string `json:"user_id"`
 	Name      string `json:"name"`
-	Key       string `json:"key"` // Hashed or encrypted in real scenarios
+	Key       string `json:"-"` // Excluded from JSON serialization — access via dedicated endpoints only
 	CreatedAt int64  `json:"created_at"`
 	LastUsed  int64  `json:"last_used"`
 }
@@ -87,13 +87,13 @@ type AuditLogEntry struct {
 
 type HostingerConfig struct {
 	UserID    string `json:"user_id"`
-	APIKey    string `json:"api_key"`
+	APIKey    string `json:"-"` // Never serialize API keys
 	Connected bool   `json:"connected"`
 }
 
 type CloudflareConfig struct {
 	UserID    string `json:"user_id"`
-	APIToken  string `json:"api_token"`
+	APIToken  string `json:"-"` // Never serialize API tokens
 	Connected bool   `json:"connected"`
 }
 
@@ -131,7 +131,7 @@ type Proxy struct {
 	Address  string `json:"address"`
 	Port     int    `json:"port"`
 	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
+	Password string `json:"-"` // Never serialize passwords
 	Health   string `json:"health"`
 }
 
@@ -150,7 +150,7 @@ type Playbook struct {
 	Steps        []string `json:"steps"`
 }
 
-// In-memory storage for demonstration purposes
+// In-memory storage — persists to PostgreSQL when available (see database.go)
 var vpsNodes = []VPSNode{}
 var c2Servers = []C2Server{}
 var implants = []Implant{}
@@ -316,14 +316,30 @@ func getEnv(key, fallback string) string {
 }
 
 // getEnvRequired returns the env value or fallback. Fatal in production if using a weak default.
+// In non-production, generates a random secret and warns loudly.
 func getEnvRequired(key, fallback string) string {
 	v := os.Getenv(key)
 	if v != "" {
 		return v
 	}
-	env := os.Getenv("APP_ENV")
-	if env == "production" && (fallback == "" || fallback == "change-me-in-production" || fallback == "change-me") {
-		log.Fatalf("[SECURITY] FATAL: %s is not set and has an insecure default. Set %s before running in production.", key, key)
+	weakDefaults := map[string]bool{
+		"":                        true,
+		"change-me-in-production": true,
+		"change-me":               true,
+	}
+	if weakDefaults[fallback] {
+		env := os.Getenv("APP_ENV")
+		if env == "production" {
+			log.Fatalf("[SECURITY] FATAL: %s is not set and has an insecure default. Set %s before running in production.", key, key)
+		}
+		// Generate a random secret for non-production use
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			log.Fatalf("[SECURITY] FATAL: failed to generate random %s: %v", key, err)
+		}
+		generated := hex.EncodeToString(b)
+		log.Printf("[SECURITY] WARNING: %s not set — using generated random value for this session. Set %s env var for persistence.", key, key)
+		return generated
 	}
 	return fallback
 }
@@ -1231,7 +1247,7 @@ func loadDotEnv(path string) {
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	githubOK := cfg.GitHubClientID != "" && cfg.GitHubClientSecret != ""
-	jwtOK := cfg.JWTSecret != "change-me-in-production"
+	jwtOK := cfg.JWTSecret != "" && len(cfg.JWTSecret) >= 32
 	// Setup is needed only if GitHub OAuth AND a GH_TOKEN are both missing — user has no way to log in
 	hasAnyAuth := githubOK || cfg.GitHubToken != ""
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -2059,6 +2075,156 @@ func main() {
 	mux.HandleFunc("GET /api/roar/events", authMiddleware(handleROARSubscribe))
 	mux.HandleFunc("GET /api/v1/roar/events", authMiddleware(handleROARSubscribe))
 
+	// ── Missing routes (frontend expects these) ────────────────────────
+	mux.HandleFunc("GET /api/auth/me", authMiddleware(handleAuthMe))
+	mux.HandleFunc("POST /api/auth/logout", authMiddleware(handleAuthLogout))
+	mux.HandleFunc("GET /api/v1/auth/me", authMiddleware(handleAuthMe))
+	mux.HandleFunc("POST /api/v1/auth/logout", authMiddleware(handleAuthLogout))
+
+	mux.HandleFunc("GET /api/providers", authMiddleware(handleListProviders))
+	mux.HandleFunc("GET /api/providers/{provider}", authMiddleware(handleGetProvider))
+	mux.HandleFunc("PUT /api/providers/{provider}", authMiddleware(handleUpdateProvider))
+	mux.HandleFunc("POST /api/providers/{provider}/test", authMiddleware(handleTestProvider))
+	mux.HandleFunc("GET /api/providers/{provider}/models", authMiddleware(handleGetProviderModels))
+	mux.HandleFunc("POST /api/providers/active", authMiddleware(handleSetActiveProvider))
+	mux.HandleFunc("GET /api/v1/providers", authMiddleware(handleListProviders))
+	mux.HandleFunc("GET /api/v1/providers/{provider}", authMiddleware(handleGetProvider))
+	mux.HandleFunc("PUT /api/v1/providers/{provider}", authMiddleware(handleUpdateProvider))
+	mux.HandleFunc("POST /api/v1/providers/{provider}/test", authMiddleware(handleTestProvider))
+	mux.HandleFunc("GET /api/v1/providers/{provider}/models", authMiddleware(handleGetProviderModels))
+	mux.HandleFunc("POST /api/v1/providers/active", authMiddleware(handleSetActiveProvider))
+
+	mux.HandleFunc("GET /api/bounty/programs", authMiddleware(handleListBountyPrograms))
+	mux.HandleFunc("GET /api/v1/bounty/programs", authMiddleware(handleListBountyPrograms))
+
+	mux.HandleFunc("POST /api/cve/agent-scan", authMiddleware(handleCVEAgentScan))
+	mux.HandleFunc("POST /api/cve/auto-triage", authMiddleware(handleCVEAutoTriage))
+	mux.HandleFunc("POST /api/v1/cve/agent-scan", authMiddleware(handleCVEAgentScan))
+	mux.HandleFunc("POST /api/v1/cve/auto-triage", authMiddleware(handleCVEAutoTriage))
+
+	mux.HandleFunc("GET /api/docker/networks", authMiddleware(handleDockerNetworks))
+	mux.HandleFunc("GET /api/docker/volumes", authMiddleware(handleDockerVolumes))
+	mux.HandleFunc("POST /api/docker/images/prune", authMiddleware(handleDockerPruneImages))
+	mux.HandleFunc("DELETE /api/docker/images/{id}", authMiddleware(handleDockerDeleteImage))
+	mux.HandleFunc("GET /api/v1/docker/networks", authMiddleware(handleDockerNetworks))
+	mux.HandleFunc("GET /api/v1/docker/volumes", authMiddleware(handleDockerVolumes))
+	mux.HandleFunc("POST /api/v1/docker/images/prune", authMiddleware(handleDockerPruneImages))
+	mux.HandleFunc("DELETE /api/v1/docker/images/{id}", authMiddleware(handleDockerDeleteImage))
+
+	mux.HandleFunc("GET /api/mcp/{id}", authMiddleware(handleGetMCPServer))
+	mux.HandleFunc("POST /api/mcp", authMiddleware(handleCreateMCPServer))
+	mux.HandleFunc("PATCH /api/mcp/{id}", authMiddleware(handleUpdateMCPServer))
+	mux.HandleFunc("DELETE /api/mcp/{id}", authMiddleware(handleDeleteMCPServer))
+	mux.HandleFunc("POST /api/mcp/{id}/connect", authMiddleware(handleMCPConnectByID))
+	mux.HandleFunc("POST /api/mcp/{id}/disconnect", authMiddleware(handleMCPDisconnectByID))
+	mux.HandleFunc("GET /api/mcp/{id}/tools", authMiddleware(handleMCPGetTools))
+	mux.HandleFunc("GET /api/mcp/{id}/resources", authMiddleware(handleMCPGetResources))
+	mux.HandleFunc("GET /api/mcp/{id}/prompts", authMiddleware(handleMCPGetPrompts))
+	mux.HandleFunc("POST /api/mcp/{id}/tools/{tool}", authMiddleware(handleMCPCallTool))
+	mux.HandleFunc("POST /api/mcp/test", authMiddleware(handleMCPTest))
+	mux.HandleFunc("GET /api/mcp/builtin/tools", authMiddleware(handleMCPBuiltinTools))
+	mux.HandleFunc("POST /api/mcp/builtin/tools/{tool}", authMiddleware(handleMCPExecBuiltinTool))
+	mux.HandleFunc("GET /api/v1/mcp/{id}", authMiddleware(handleGetMCPServer))
+	mux.HandleFunc("POST /api/v1/mcp", authMiddleware(handleCreateMCPServer))
+	mux.HandleFunc("PATCH /api/v1/mcp/{id}", authMiddleware(handleUpdateMCPServer))
+	mux.HandleFunc("DELETE /api/v1/mcp/{id}", authMiddleware(handleDeleteMCPServer))
+	mux.HandleFunc("POST /api/v1/mcp/{id}/connect", authMiddleware(handleMCPConnect))
+	mux.HandleFunc("POST /api/v1/mcp/{id}/disconnect", authMiddleware(handleMCPDisconnect))
+	mux.HandleFunc("GET /api/v1/mcp/{id}/tools", authMiddleware(handleMCPGetTools))
+	mux.HandleFunc("GET /api/v1/mcp/{id}/resources", authMiddleware(handleMCPGetResources))
+	mux.HandleFunc("GET /api/v1/mcp/{id}/prompts", authMiddleware(handleMCPGetPrompts))
+	mux.HandleFunc("POST /api/v1/mcp/{id}/tools/{tool}", authMiddleware(handleMCPCallTool))
+	mux.HandleFunc("POST /api/v1/mcp/test", authMiddleware(handleMCPTest))
+	mux.HandleFunc("GET /api/v1/mcp/builtin/tools", authMiddleware(handleMCPBuiltinTools))
+	mux.HandleFunc("POST /api/v1/mcp/builtin/tools/{tool}", authMiddleware(handleMCPExecBuiltinTool))
+
+	mux.HandleFunc("POST /api/pentest/crack", authMiddleware(handlePentestStartCrack))
+	mux.HandleFunc("GET /api/pentest/crack/jobs", authMiddleware(handlePentestCrackJobs))
+	mux.HandleFunc("POST /api/v1/pentest/crack", authMiddleware(handlePentestStartCrack))
+	mux.HandleFunc("GET /api/v1/pentest/crack/jobs", authMiddleware(handlePentestCrackJobs))
+
+	mux.HandleFunc("GET /api/agents/personalities", authMiddleware(handleGetAgentPersonalities))
+	mux.HandleFunc("POST /api/agents/personalities", authMiddleware(handleCreateAgentPersonality))
+	mux.HandleFunc("GET /api/v1/agents/personalities", authMiddleware(handleGetAgentPersonalities))
+	mux.HandleFunc("POST /api/v1/agents/personalities", authMiddleware(handleCreateAgentPersonality))
+
+	mux.HandleFunc("GET /api/dashboard/quick-actions", authMiddleware(handleDashboardQuickActions))
+	mux.HandleFunc("GET /api/v1/dashboard/quick-actions", authMiddleware(handleDashboardQuickActions))
+
+	mux.HandleFunc("POST /api/workflows/import", authMiddleware(handleImportWorkflow))
+	mux.HandleFunc("POST /api/v1/workflows/import", authMiddleware(handleImportWorkflow))
+	mux.HandleFunc("POST /api/workflows/{id}/run", authMiddleware(handleRunWorkflow))
+	mux.HandleFunc("GET /api/workflows/{id}/executions", authMiddleware(handleGetWorkflowExecutions))
+	mux.HandleFunc("POST /api/workflows/{id}/clone", authMiddleware(handleCloneWorkflow))
+	mux.HandleFunc("GET /api/workflows/{id}/export", authMiddleware(handleExportWorkflow))
+	mux.HandleFunc("POST /api/v1/workflows/{id}/run", authMiddleware(handleRunWorkflow))
+	mux.HandleFunc("GET /api/v1/workflows/{id}/executions", authMiddleware(handleGetWorkflowExecutions))
+	mux.HandleFunc("POST /api/v1/workflows/{id}/clone", authMiddleware(handleCloneWorkflow))
+	mux.HandleFunc("GET /api/v1/workflows/{id}/export", authMiddleware(handleExportWorkflow))
+
+	mux.HandleFunc("POST /api/tools/execute", authMiddleware(handleToolsExecute))
+	mux.HandleFunc("POST /api/v1/tools/execute", authMiddleware(handleToolsExecute))
+
+	// ── Scope Management ────────────────────────────────────────────────
+	mux.HandleFunc("GET /api/scope/assets", authMiddleware(handleListScopeAssets))
+	mux.HandleFunc("POST /api/scope/assets", authMiddleware(handleAddScopeAsset))
+	mux.HandleFunc("DELETE /api/scope/assets/{id}", authMiddleware(handleDeleteScopeAsset))
+	mux.HandleFunc("POST /api/scope/assets/bulk", authMiddleware(handleBulkImportScope))
+	mux.HandleFunc("GET /api/scope/exclusions", authMiddleware(handleListScopeExclusions))
+	mux.HandleFunc("POST /api/scope/exclusions", authMiddleware(handleAddScopeExclusion))
+	mux.HandleFunc("DELETE /api/scope/exclusions/{id}", authMiddleware(handleDeleteScopeExclusion))
+	mux.HandleFunc("GET /api/scope/export", authMiddleware(handleExportScope))
+	mux.HandleFunc("GET /api/v1/scope/assets", authMiddleware(handleListScopeAssets))
+	mux.HandleFunc("POST /api/v1/scope/assets", authMiddleware(handleAddScopeAsset))
+	mux.HandleFunc("DELETE /api/v1/scope/assets/{id}", authMiddleware(handleDeleteScopeAsset))
+	mux.HandleFunc("POST /api/v1/scope/assets/bulk", authMiddleware(handleBulkImportScope))
+	mux.HandleFunc("GET /api/v1/scope/exclusions", authMiddleware(handleListScopeExclusions))
+	mux.HandleFunc("POST /api/v1/scope/exclusions", authMiddleware(handleAddScopeExclusion))
+	mux.HandleFunc("DELETE /api/v1/scope/exclusions/{id}", authMiddleware(handleDeleteScopeExclusion))
+	mux.HandleFunc("GET /api/v1/scope/export", authMiddleware(handleExportScope))
+
+	// ── Autonomous Thinking Loop (handlers in autonomous.go) ─────────
+	mux.HandleFunc("POST /api/agents/thoughts", authMiddleware(handleCreateThought))
+	mux.HandleFunc("GET /api/agents/thoughts", authMiddleware(handleListThoughts))
+	mux.HandleFunc("GET /api/agents/thoughts/{id}", authMiddleware(handleGetThought))
+	mux.HandleFunc("PATCH /api/agents/thoughts/{id}", authMiddleware(handleUpdateThought))
+	mux.HandleFunc("DELETE /api/agents/thoughts/{id}", authMiddleware(handleDeleteThought))
+	mux.HandleFunc("GET /api/agents/swarm", authMiddleware(handleSwarmState))
+	mux.HandleFunc("GET /api/agents/autonomous/stats", authMiddleware(handleAutonomousStats))
+	mux.HandleFunc("POST /api/v1/agents/thoughts", authMiddleware(handleCreateThought))
+	mux.HandleFunc("GET /api/v1/agents/thoughts", authMiddleware(handleListThoughts))
+	mux.HandleFunc("GET /api/v1/agents/thoughts/{id}", authMiddleware(handleGetThought))
+	mux.HandleFunc("PATCH /api/v1/agents/thoughts/{id}", authMiddleware(handleUpdateThought))
+	mux.HandleFunc("DELETE /api/v1/agents/thoughts/{id}", authMiddleware(handleDeleteThought))
+	mux.HandleFunc("GET /api/v1/agents/swarm", authMiddleware(handleSwarmState))
+	mux.HandleFunc("GET /api/v1/agents/autonomous/stats", authMiddleware(handleAutonomousStats))
+
+	// ── Additional missing routes found in final audit ────────────────
+	mux.HandleFunc("GET /api/cve/matching", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("GET /api/v1/cve/matching", authMiddleware(handleCVEMatching))
+	mux.HandleFunc("PATCH /api/agents/{id}/status", authMiddleware(handleUpdateAgentByID))
+	mux.HandleFunc("PATCH /api/v1/agents/{id}/status", authMiddleware(handleUpdateAgentByID))
+	mux.HandleFunc("GET /api/workflows/{id}", authMiddleware(handleGetWorkflowByID))
+	mux.HandleFunc("GET /api/v1/workflows/{id}", authMiddleware(handleGetWorkflowByID))
+	mux.HandleFunc("POST /api/skills/{id}/execute", authMiddleware(handleExecuteSkill))
+	mux.HandleFunc("POST /api/v1/skills/{id}/execute", authMiddleware(handleExecuteSkill))
+	mux.HandleFunc("GET /api/agents/{id}/config", authMiddleware(handleGetAgentConfig))
+	mux.HandleFunc("GET /api/v1/agents/{id}/config", authMiddleware(handleGetAgentConfig))
+
+	// ── Vulnerability Database ───────────────────────────────────────────
+	mux.HandleFunc("GET /api/vulns", authMiddleware(handleListVulns))
+	mux.HandleFunc("POST /api/vulns", authMiddleware(handleCreateVuln))
+	mux.HandleFunc("GET /api/vulns/{id}", authMiddleware(handleGetVuln))
+	mux.HandleFunc("PATCH /api/vulns/{id}", authMiddleware(handleUpdateVuln))
+	mux.HandleFunc("DELETE /api/vulns/{id}", authMiddleware(handleDeleteVuln))
+	mux.HandleFunc("POST /api/vulns/{id}/evidence", authMiddleware(handleAddEvidence))
+	mux.HandleFunc("GET /api/v1/vulns", authMiddleware(handleListVulns))
+	mux.HandleFunc("POST /api/v1/vulns", authMiddleware(handleCreateVuln))
+	mux.HandleFunc("GET /api/v1/vulns/{id}", authMiddleware(handleGetVuln))
+	mux.HandleFunc("PATCH /api/v1/vulns/{id}", authMiddleware(handleUpdateVuln))
+	mux.HandleFunc("DELETE /api/v1/vulns/{id}", authMiddleware(handleDeleteVuln))
+	mux.HandleFunc("POST /api/v1/vulns/{id}/evidence", authMiddleware(handleAddEvidence))
+
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux
 	handler = maxBodyMiddleware(handler)
@@ -2422,12 +2588,11 @@ func handleListHostingerVps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := hostingerConfigs[userID]; ok && config.Connected {
-		// Simulate fetching VPS list from Hostinger API
-		vpsList := []HostingerVPS{
-			{ID: "hvps-1", Name: "Harbinger-Agent-1", Status: "running", IPAddress: "192.168.1.100", Plan: "VPS 1", Region: "Europe", Price: 5.99, CPU: 1, RAM: 1024, Disk: 20},
-			{ID: "hvps-2", Name: "Harbinger-Agent-2", Status: "stopped", IPAddress: "192.168.1.101", Plan: "VPS 2", Region: "North America", Price: 9.99, CPU: 2, RAM: 2048, Disk: 40},
+		// Return cached VPS list — real Hostinger API integration pending
+		vpsList := hostingerVpsList[userID]
+		if vpsList == nil {
+			vpsList = []HostingerVPS{}
 		}
-		hostingerVpsList[userID] = vpsList
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "vps_list": vpsList})
 		return
 	}
@@ -2455,18 +2620,14 @@ func handleCreateHostingerVps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := hostingerConfigs[userID]; ok && config.Connected {
-		// Simulate creating VPS via Hostinger API
+		// Store VPS creation request — real Hostinger API integration pending
 		newVPS := HostingerVPS{
 			ID:        generateRandomString(10),
 			Name:      reqBody.Name,
 			Status:    "provisioning",
-			IPAddress: "", // Will be assigned later
+			IPAddress: "",
 			Plan:      reqBody.Plan,
 			Region:    reqBody.Region,
-			Price:     12.99, // Dummy price
-			CPU:       2,
-			RAM:       2048,
-			Disk:      40,
 		}
 		currentVpsList := hostingerVpsList[userID]
 		hostingerVpsList[userID] = append(currentVpsList, newVPS)
@@ -2525,12 +2686,11 @@ func handleListCloudflareZones(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
-		// Simulate fetching zones from Cloudflare API
-		zones := []CloudflareZone{
-			{ID: "cfzone-1", Name: "example.com"},
-			{ID: "cfzone-2", Name: "harbinger.io"},
+		// Return cached zones — real Cloudflare API integration pending
+		zones := cloudflareZonesList[userID]
+		if zones == nil {
+			zones = []CloudflareZone{}
 		}
-		cloudflareZonesList[userID] = zones
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "zones": zones})
 		return
 	}
@@ -2557,7 +2717,7 @@ func handleCreateCloudflareTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
-		// Simulate creating Cloudflare Tunnel
+		// Record tunnel creation — real Cloudflare API integration pending
 		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Tunnel Created", Details: fmt.Sprintf("Zone ID: %s, Tunnel Name: %s", reqBody.ZoneID, reqBody.Name), Timestamp: time.Now().Unix()})
 		writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "message": "Cloudflare Tunnel created successfully"})
 		return
@@ -2585,7 +2745,7 @@ func handleConfigureCloudflareAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
-		// Simulate configuring Zero Trust Access
+		// Record Zero Trust config — real Cloudflare API integration pending
 		auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Cloudflare Zero Trust Configured", Details: fmt.Sprintf("Zone ID: %s, Policy: %s", reqBody.ZoneID, reqBody.Policy), Timestamp: time.Now().Unix()})
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Cloudflare Zero Trust Access configured successfully"})
 		return
@@ -2603,9 +2763,8 @@ func handleGetCloudflareWafRules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config, ok := cloudflareConfigs[userID]; ok && config.Connected {
-		// Simulate fetching WAF rules
-		wafRules := []string{"SQL Injection", "XSS Protection"}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "waf_rules": wafRules})
+		// Real Cloudflare WAF integration pending — return empty until connected
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "waf_rules": []string{}})
 		return
 	}
 
@@ -2657,7 +2816,7 @@ func handleTestProxyChain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate testing proxy chain
+	// Record proxy chain test request — real connectivity test pending
 	auditLog = append(auditLog, AuditLogEntry{ID: generateRandomString(10), UserID: userID, Action: "Proxy Chain Tested", Details: "", Timestamp: time.Now().Unix()})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Proxy chain test initiated"})
 }

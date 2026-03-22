@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,18 +18,24 @@ var (
 	roarBus        *roar.Bus
 	agentDirectory *roar.Directory
 	roarEventBus   *roar.EventBus
+	roarSecret     string // Resolved once by initROAR, used by comms bridge
 )
 
 // initROAR bootstraps the ROAR message bus, agent directory, and event bus.
 // Registers all 11 Harbinger agents into the directory on startup.
 func initROAR(c Config) {
-	secret := os.Getenv("ROAR_SECRET")
-	if secret == "" {
-		secret = "harbinger-roar-default"
+	roarSecret = os.Getenv("ROAR_SECRET")
+	if roarSecret == "" {
+		log.Println("[SECURITY] WARNING: ROAR_SECRET not set — generating random secret for this session. Set ROAR_SECRET env var for persistent inter-agent auth.")
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			log.Fatalf("[SECURITY] FATAL: failed to generate ROAR secret: %v", err)
+		}
+		roarSecret = hex.EncodeToString(b)
 	}
 
 	roarBus = roar.NewBus(roar.BusConfig{
-		Secret:     secret,
+		Secret:     roarSecret,
 		BufferSize: 200,
 	})
 

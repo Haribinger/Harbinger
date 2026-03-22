@@ -524,34 +524,38 @@ function C2Tab({ servers, sessions, setServers, setSessions }: { servers: C2Serv
   )
 }
 
-function SocksTasksTab({ sessions, tasks, setTasks }: { sessions: Session[]; tasks: SocksTask[]; setTasks: (t: SocksTask[]) => void }) {
+function SocksTasksTab({ sessions, tasks, setTasks }: { sessions: Session[]; tasks: SocksTask[]; setTasks: React.Dispatch<React.SetStateAction<SocksTask[]>> }) {
   const [showNew, setShowNew] = useState(false)
-  const [form, setForm] = useState({ name: '', command: '', sessionId: sessions[0]?.id ?? '', proxy: '127.0.0.1:1080' })
+  const [form, setForm] = useState({ name: '', command: '', sessionId: sessions[0]?.id ?? '', proxy: '' })
+  const { createTask } = useC2Store()
+  const [submitting, setSubmitting] = useState(false)
 
-  const addTask = () => {
-    const t: SocksTask = {
+  const addTask = async () => {
+    const localTask: SocksTask = {
       id: `task-${Date.now()}`,
       ...form,
       status: 'pending',
       output: '',
     }
-    setTasks([...tasks, t])
+    setTasks([...tasks, localTask])
     setShowNew(false)
+    setSubmitting(true)
 
-    // Simulate running
-    setTimeout(() => {
-      const runningTasks = tasks.map(x => x.id === t.id ? { ...x, status: 'running' as const, startedAt: new Date().toISOString() } : x)
-      setTasks(runningTasks)
-      setTimeout(() => {
-        const completedTasks = runningTasks.map(x => x.id === t.id ? {
-          ...x,
-          status: 'completed' as const,
-          completedAt: new Date().toISOString(),
-          output: `[*] Running ${t.name} via SOCKS proxy ${t.proxy}\n[+] Command executed successfully\n[+] Results captured`,
-        } : x)
-        setTasks(completedTasks)
-      }, 3000)
-    }, 500)
+    try {
+      // Submit to backend C2 task API
+      await createTask({
+        implantId: form.sessionId,
+        command: form.command,
+        args: JSON.stringify({ name: form.name, proxy: form.proxy }),
+      })
+      // Mark as running — backend handles actual execution
+      setTasks(prev => prev.map(x => x.id === localTask.id ? { ...x, status: 'running' as const, startedAt: new Date().toISOString() } : x))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit task'
+      setTasks(prev => prev.map(x => x.id === localTask.id ? { ...x, status: 'failed' as const, output: `[!] Error: ${msg}` } : x))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -697,9 +701,9 @@ function SocksTasksTab({ sessions, tasks, setTasks }: { sessions: Session[]; tas
                 <button onClick={() => setShowNew(false)} className="flex-1 py-2 bg-surface-light border border-border rounded-lg text-sm hover:bg-surface transition-colors">
                   Cancel
                 </button>
-                <button onClick={addTask} className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
+                <button onClick={addTask} disabled={submitting} className="flex-1 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
                   <Play className="w-4 h-4" />
-                  Run Task
+                  {submitting ? 'Submitting...' : 'Run Task'}
                 </button>
               </div>
             </motion.div>
