@@ -2,13 +2,65 @@ import { apiClient } from './client'
 
 // ── Realtime Types ────────────────────────────────────────────────────────────
 
+// v1 event types (Go backend native)
+export type V1EventType =
+  | 'agent_status' | 'command_output' | 'implant_callback'
+  | 'chain_progress' | 'operator_action' | 'system_alert' | 'finding'
+
+// v2 execution engine events (FastAPI sidecar → Go SSE hub)
+export type V2EventType =
+  | 'mission_update' | 'task_update' | 'subtask_update'
+  | 'action_update' | 'tool_output' | 'react_iteration'
+
+export type RealtimeEventType = V1EventType | V2EventType
+
 export interface RealtimeEvent {
   id: string
-  type: 'agent_status' | 'command_output' | 'implant_callback' | 'chain_progress' | 'operator_action' | 'system_alert'
+  type: RealtimeEventType
   source: string
   target: string
+  channel: string
   payload: Record<string, unknown>
   timestamp: string
+}
+
+// v2 typed payloads for Agent Watch filtering
+export interface MissionUpdatePayload {
+  missionId: number
+  status: string
+  title?: string
+}
+
+export interface TaskUpdatePayload {
+  taskId: number
+  missionId: number
+  agent: string
+  status: string
+  title?: string
+  error?: string
+  reason?: string
+}
+
+export interface ReactIterationPayload {
+  agent: string
+  missionId: number
+  iteration: number
+  thought: string
+  action?: string
+}
+
+export interface ToolOutputPayload {
+  agent: string
+  tool: string
+  missionId: number
+  chunk: string
+}
+
+export interface ActionUpdatePayload {
+  actionId: number
+  tool: string
+  agent: string
+  status: string
 }
 
 export interface AgentLiveStatus {

@@ -7,6 +7,14 @@ import { WORKFLOW_TEMPLATES } from '../core/workflows/templates';
 
 const MAX_UNDO_STACK = 50;
 
+function deepClone<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
 interface WorkflowEditorState {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
@@ -134,8 +142,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>()(
       pushSnapshot: () => {
         const { nodes, edges } = get();
         const snapshot: WorkflowSnapshot = {
-          nodes: JSON.parse(JSON.stringify(nodes)),
-          edges: JSON.parse(JSON.stringify(edges)),
+          nodes: deepClone(nodes),
+          edges: deepClone(edges),
           timestamp: Date.now(),
         };
         set((state) => ({
@@ -148,8 +156,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>()(
         if (undoStack.length === 0) return;
         const prev = undoStack[undoStack.length - 1];
         const current: WorkflowSnapshot = {
-          nodes: JSON.parse(JSON.stringify(nodes)),
-          edges: JSON.parse(JSON.stringify(edges)),
+          nodes: deepClone(nodes),
+          edges: deepClone(edges),
           timestamp: Date.now(),
         };
         set({
@@ -165,8 +173,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>()(
         if (redoStack.length === 0) return;
         const next = redoStack[redoStack.length - 1];
         const current: WorkflowSnapshot = {
-          nodes: JSON.parse(JSON.stringify(nodes)),
-          edges: JSON.parse(JSON.stringify(edges)),
+          nodes: deepClone(nodes),
+          edges: deepClone(edges),
           timestamp: Date.now(),
         };
         set({

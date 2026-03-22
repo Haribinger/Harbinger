@@ -31,6 +31,9 @@ const RemediationTracker = lazy(() => import('./pages/RemediationTracker/Remedia
 const Autonomous = lazy(() => import('./pages/Autonomous/Autonomous'))
 const PentestDashboard = lazy(() => import('./pages/PentestDashboard/PentestDashboard'))
 const CVEMonitor = lazy(() => import('./pages/CVEMonitor/CVEMonitor'))
+const FindingsFeed = lazy(() => import('./pages/FindingsFeed/FindingsFeed'))
+const AgentShell = lazy(() => import('./pages/AgentShell/AgentShell'))
+const MissionControl = lazy(() => import('./pages/MissionControl/MissionControl'))
 const Login = lazy(() => import('./pages/Login/Login'))
 const SetupWizard = lazy(() => import('./pages/Setup/SetupWizard'))
 
@@ -268,6 +271,9 @@ function AnimatedRoutes() {
           <Route path="autonomous" element={<Suspense fallback={<PageLoader />}><Autonomous /></Suspense>} />
           <Route path="pentest-dashboard" element={<Suspense fallback={<PageLoader />}><PentestDashboard /></Suspense>} />
           <Route path="cve-monitor" element={<Suspense fallback={<PageLoader />}><CVEMonitor /></Suspense>} />
+          <Route path="findings" element={<Suspense fallback={<PageLoader />}><FindingsFeed /></Suspense>} />
+          <Route path="agent-shell" element={<Suspense fallback={<PageLoader />}><AgentShell /></Suspense>} />
+          <Route path="mission-control" element={<Suspense fallback={<PageLoader />}><MissionControl /></Suspense>} />
           <Route path="sse" element={<SSERoute />} />
           <Route path="*" element={<div className="p-8 text-center font-mono text-gray-400">404 // Page not found</div>} />
         </Route>

@@ -35,6 +35,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: Zap },
+  { path: '/mission-control', label: 'Mission Control', icon: Target },
   { path: '/command-center', label: 'Command Center', icon: Monitor },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/agents', label: 'Agents', icon: Bot },
@@ -53,6 +54,7 @@ const navItems: NavItem[] = [
   { path: '/autonomous', label: 'Autonomous', icon: Brain },
   { path: '/pentest-dashboard', label: 'Pentest', icon: ShieldAlert },
   { path: '/cve-monitor', label: 'CVE Monitor', icon: Bug },
+  { path: '/agent-shell', label: 'Agent Shell', icon: Cpu },
 ]
 
 const bottomNavItems: NavItem[] = [

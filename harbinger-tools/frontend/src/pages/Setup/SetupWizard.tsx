@@ -687,7 +687,7 @@ function SetupWizard() {
           {currentStep === 5 && (
             <div className="space-y-6">
               <div>
-                <InputField label="Admin Email" value={adminEmail} onChange={setAdminEmail} placeholder="admin@example.com" type="email" />
+                <InputField label="Admin Email" value={adminEmail} onChange={setAdminEmail} placeholder="you@yourdomain.com" type="email" />
                 {adminEmail && !isEmailValid(adminEmail) && (
                   <p className="text-[10px] mt-1 font-mono" style={{ color: C.danger }}>Enter a valid email address</p>
                 )}

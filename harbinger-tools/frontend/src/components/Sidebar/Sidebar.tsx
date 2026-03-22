@@ -15,6 +15,7 @@ import {
   BookOpen,
   Target,
   Swords,
+  Radio,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/redteam', icon: Swords, label: 'Red Team' },
   { path: '/skills', icon: BookOpen, label: 'Skills Hub' },
   { path: '/bounty-hub', icon: Target, label: 'Bounty Hub' },
+  { path: '/findings', icon: Radio, label: 'Findings Feed' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 
