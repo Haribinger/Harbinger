@@ -233,6 +233,7 @@ type Config struct {
 	RedisPort         string
 	Neo4jHost         string
 	Neo4jPort         string
+	Neo4jPassword     string
 	JWTSecret         string
 	LogLevel          string
 	MCPEnabled        bool
@@ -287,6 +288,7 @@ func loadConfig() Config {
 		RedisPort:          getEnv("REDIS_PORT", "6379"),
 		Neo4jHost:          getEnv("NEO4J_HOST", "localhost"),
 		Neo4jPort:          getEnv("NEO4J_PORT", "7687"),
+		Neo4jPassword:      getEnv("NEO4J_PASSWORD", ""),
 		JWTSecret:          getEnvRequired("JWT_SECRET", "change-me-in-production"),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		MCPEnabled:         getEnv("MCP_ENABLED", "true") == "true",
@@ -1455,9 +1457,14 @@ func main() {
 	initExecutor(cfg)
 	initPipeline()
 	initVectorMem()
+	initNeo4j()
+	initMemoryLayers()
 
 	// Initialize ROAR protocol (agent-to-agent messaging bus + directory)
 	initROAR(cfg)
+
+	// Start the self-healing monitor (background goroutine, polls every 15s)
+	startHealingMonitor()
 
 	mux := http.NewServeMux()
 
@@ -1995,6 +2002,25 @@ func main() {
 	mux.HandleFunc("GET /api/v1/safety/approvals/pending/count", authMiddleware(handleGetPendingCount))
 	mux.HandleFunc("GET /api/v1/safety/dashboard", authMiddleware(handleSafetyDashboard))
 
+	// ── Self-Healing Monitor ────────────────────────────────────────────
+	mux.HandleFunc("GET /api/healing/events", authMiddleware(handleListHealingEvents))
+	mux.HandleFunc("GET /api/healing/events/{id}", authMiddleware(handleGetHealingEvent))
+	mux.HandleFunc("GET /api/healing/stats", authMiddleware(handleGetHealingStats))
+	mux.HandleFunc("GET /api/healing/status", authMiddleware(handleGetHealingStatus))
+	mux.HandleFunc("POST /api/healing/start", requireAdmin(handleStartHealingMonitor))
+	mux.HandleFunc("POST /api/healing/stop", requireAdmin(handleStopHealingMonitor))
+	mux.HandleFunc("GET /api/healing/config", authMiddleware(handleGetHealingConfig))
+	mux.HandleFunc("POST /api/healing/config", requireAdmin(handleUpdateHealingConfig))
+	// v1 aliases
+	mux.HandleFunc("GET /api/v1/healing/events", authMiddleware(handleListHealingEvents))
+	mux.HandleFunc("GET /api/v1/healing/events/{id}", authMiddleware(handleGetHealingEvent))
+	mux.HandleFunc("GET /api/v1/healing/stats", authMiddleware(handleGetHealingStats))
+	mux.HandleFunc("GET /api/v1/healing/status", authMiddleware(handleGetHealingStatus))
+	mux.HandleFunc("POST /api/v1/healing/start", requireAdmin(handleStartHealingMonitor))
+	mux.HandleFunc("POST /api/v1/healing/stop", requireAdmin(handleStopHealingMonitor))
+	mux.HandleFunc("GET /api/v1/healing/config", authMiddleware(handleGetHealingConfig))
+	mux.HandleFunc("POST /api/v1/healing/config", requireAdmin(handleUpdateHealingConfig))
+
 	// ── Chat Sessions & Messages ────────────────────────────────────────
 	mux.HandleFunc("GET /api/chat/sessions", authMiddleware(handleListChatSessions))
 	mux.HandleFunc("POST /api/chat/sessions", authMiddleware(handleCreateChatSession))
@@ -2022,6 +2048,23 @@ func main() {
 	mux.HandleFunc("POST /api/v1/cve/refresh", authMiddleware(handleCVERefresh))
 
 	// ── Execution Engine ─────────────────────────────────────────────────
+	// ── Agent Shell ─────────────────────────────────────────────────────
+	mux.HandleFunc("POST /api/shell/attach", authMiddleware(handleShellAttach))
+	mux.HandleFunc("POST /api/v1/shell/attach", authMiddleware(handleShellAttach))
+	mux.HandleFunc("POST /api/shell/{id}/exec", authMiddleware(handleShellExec))
+	mux.HandleFunc("POST /api/v1/shell/{id}/exec", authMiddleware(handleShellExec))
+	mux.HandleFunc("GET /api/shell/{id}/stream", authMiddleware(handleShellStream))
+	mux.HandleFunc("GET /api/v1/shell/{id}/stream", authMiddleware(handleShellStream))
+	mux.HandleFunc("GET /api/shell/sessions", authMiddleware(handleListShellSessions))
+	mux.HandleFunc("GET /api/v1/shell/sessions", authMiddleware(handleListShellSessions))
+	mux.HandleFunc("GET /api/shell/{id}", authMiddleware(handleGetShellSession))
+	mux.HandleFunc("GET /api/v1/shell/{id}", authMiddleware(handleGetShellSession))
+	mux.HandleFunc("DELETE /api/shell/{id}", authMiddleware(handleCloseShellSession))
+	mux.HandleFunc("DELETE /api/v1/shell/{id}", authMiddleware(handleCloseShellSession))
+	mux.HandleFunc("GET /api/shell/{id}/history", authMiddleware(handleShellHistory))
+	mux.HandleFunc("GET /api/v1/shell/{id}/history", authMiddleware(handleShellHistory))
+
+	// ── Execution Engine ────────────────────────────────────────────────
 	mux.HandleFunc("POST /api/exec/spawn", authMiddleware(handleSpawnExecution))
 	mux.HandleFunc("POST /api/v1/exec/spawn", authMiddleware(handleSpawnExecution))
 	mux.HandleFunc("POST /api/exec/{id}/run", authMiddleware(handleExecCommand))
@@ -2054,6 +2097,44 @@ func main() {
 	mux.HandleFunc("DELETE /api/v1/memory/{id}", authMiddleware(handleDeleteMemory))
 	mux.HandleFunc("GET /api/memory/agent/{agent_id}", authMiddleware(handleListAgentMemories))
 	mux.HandleFunc("GET /api/v1/memory/agent/{agent_id}", authMiddleware(handleListAgentMemories))
+
+	// ── Knowledge Graph ──────────────────────────────────────────────────
+	mux.HandleFunc("POST /api/graph/nodes", authMiddleware(handleCreateGraphNode))
+	mux.HandleFunc("POST /api/v1/graph/nodes", authMiddleware(handleCreateGraphNode))
+	mux.HandleFunc("GET /api/graph/nodes/{label}", authMiddleware(handleListGraphNodes))
+	mux.HandleFunc("GET /api/v1/graph/nodes/{label}", authMiddleware(handleListGraphNodes))
+	mux.HandleFunc("DELETE /api/graph/nodes/{label}", authMiddleware(handleDeleteGraphNode))
+	mux.HandleFunc("DELETE /api/v1/graph/nodes/{label}", authMiddleware(handleDeleteGraphNode))
+	mux.HandleFunc("POST /api/graph/relations", authMiddleware(handleCreateGraphRelation))
+	mux.HandleFunc("POST /api/v1/graph/relations", authMiddleware(handleCreateGraphRelation))
+	mux.HandleFunc("GET /api/graph/neighbors/{label}", authMiddleware(handleGetNeighbors))
+	mux.HandleFunc("GET /api/v1/graph/neighbors/{label}", authMiddleware(handleGetNeighbors))
+	mux.HandleFunc("GET /api/graph/search", authMiddleware(handleSearchGraph))
+	mux.HandleFunc("GET /api/v1/graph/search", authMiddleware(handleSearchGraph))
+	mux.HandleFunc("GET /api/graph/attack-path/{mission_id}", authMiddleware(handleGetAttackPath))
+	mux.HandleFunc("GET /api/v1/graph/attack-path/{mission_id}", authMiddleware(handleGetAttackPath))
+	mux.HandleFunc("GET /api/graph/stats", authMiddleware(handleGetGraphStats))
+	mux.HandleFunc("GET /api/v1/graph/stats", authMiddleware(handleGetGraphStats))
+	mux.HandleFunc("POST /api/graph/ingest", authMiddleware(handleBulkIngest))
+	mux.HandleFunc("POST /api/v1/graph/ingest", authMiddleware(handleBulkIngest))
+
+	// ── Memory Layers (L1 Working + Summarize + Dashboard + Unified) ────
+	mux.HandleFunc("POST /api/memory/working/set", authMiddleware(handleSetWorkingMemory))
+	mux.HandleFunc("POST /api/v1/memory/working/set", authMiddleware(handleSetWorkingMemory))
+	mux.HandleFunc("GET /api/memory/working/{mission_id}/{key}", authMiddleware(handleGetWorkingMemory))
+	mux.HandleFunc("GET /api/v1/memory/working/{mission_id}/{key}", authMiddleware(handleGetWorkingMemory))
+	mux.HandleFunc("GET /api/memory/working/{mission_id}", authMiddleware(handleGetAllWorkingMemory))
+	mux.HandleFunc("GET /api/v1/memory/working/{mission_id}", authMiddleware(handleGetAllWorkingMemory))
+	mux.HandleFunc("POST /api/memory/working/append", authMiddleware(handleAppendWorkingMemory))
+	mux.HandleFunc("POST /api/v1/memory/working/append", authMiddleware(handleAppendWorkingMemory))
+	mux.HandleFunc("DELETE /api/memory/working/{mission_id}", authMiddleware(handleClearWorkingMemory))
+	mux.HandleFunc("DELETE /api/v1/memory/working/{mission_id}", authMiddleware(handleClearWorkingMemory))
+	mux.HandleFunc("POST /api/memory/summarize", authMiddleware(handleSummarize))
+	mux.HandleFunc("POST /api/v1/memory/summarize", authMiddleware(handleSummarize))
+	mux.HandleFunc("GET /api/memory/dashboard", authMiddleware(handleMemoryDashboard))
+	mux.HandleFunc("GET /api/v1/memory/dashboard", authMiddleware(handleMemoryDashboard))
+	mux.HandleFunc("POST /api/memory/search-all", authMiddleware(handleUnifiedMemorySearch))
+	mux.HandleFunc("POST /api/v1/memory/search-all", authMiddleware(handleUnifiedMemorySearch))
 
 	// ── Observability (LLM Tracing) ──────────────────────────────────────
 	mux.HandleFunc("POST /api/observability/trace", authMiddleware(handleRecordTrace))
@@ -2225,6 +2306,28 @@ func main() {
 	mux.HandleFunc("PATCH /api/v1/vulns/{id}", authMiddleware(handleUpdateVuln))
 	mux.HandleFunc("DELETE /api/v1/vulns/{id}", authMiddleware(handleDeleteVuln))
 	mux.HandleFunc("POST /api/v1/vulns/{id}/evidence", authMiddleware(handleAddEvidence))
+
+	// ── Findings (T3 Findings Feed) ──────────────────────────────────────
+	mux.HandleFunc("GET /api/findings", authMiddleware(handleListFindings))
+	mux.HandleFunc("POST /api/findings", authMiddleware(handleCreateFinding))
+	mux.HandleFunc("GET /api/findings/stream", authMiddleware(handleFindingsStream))
+	mux.HandleFunc("GET /api/findings/export", authMiddleware(handleExportFindings))
+	mux.HandleFunc("GET /api/findings/summary", authMiddleware(handleFindingsSummary))
+	mux.HandleFunc("GET /api/findings/{id}", authMiddleware(handleGetFinding))
+	mux.HandleFunc("PATCH /api/findings/{id}", authMiddleware(handleUpdateFinding))
+	mux.HandleFunc("DELETE /api/findings/{id}", authMiddleware(handleDeleteFinding))
+	mux.HandleFunc("POST /api/findings/{id}/false-positive", authMiddleware(handleToggleFalsePositive))
+	mux.HandleFunc("POST /api/findings/{id}/evidence", authMiddleware(handleAddFindingEvidence))
+	mux.HandleFunc("GET /api/v1/findings", authMiddleware(handleListFindings))
+	mux.HandleFunc("POST /api/v1/findings", authMiddleware(handleCreateFinding))
+	mux.HandleFunc("GET /api/v1/findings/stream", authMiddleware(handleFindingsStream))
+	mux.HandleFunc("GET /api/v1/findings/export", authMiddleware(handleExportFindings))
+	mux.HandleFunc("GET /api/v1/findings/summary", authMiddleware(handleFindingsSummary))
+	mux.HandleFunc("GET /api/v1/findings/{id}", authMiddleware(handleGetFinding))
+	mux.HandleFunc("PATCH /api/v1/findings/{id}", authMiddleware(handleUpdateFinding))
+	mux.HandleFunc("DELETE /api/v1/findings/{id}", authMiddleware(handleDeleteFinding))
+	mux.HandleFunc("POST /api/v1/findings/{id}/false-positive", authMiddleware(handleToggleFalsePositive))
+	mux.HandleFunc("POST /api/v1/findings/{id}/evidence", authMiddleware(handleAddFindingEvidence))
 
 	// Chain middleware: security headers → CORS → rate limit → body size → mux
 	var handler http.Handler = mux

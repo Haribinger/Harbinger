@@ -405,6 +405,168 @@ func (e *Executor) pullImage(ctx context.Context, image string) {
 	resp.Body.Close()
 }
 
+// StreamChunk represents a single frame of output from a streaming exec.
+type StreamChunk struct {
+	Stream    string    `json:"stream"` // "stdout" or "stderr"
+	Data      string    `json:"data"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ExecStream creates a Docker exec, starts it attached, and returns a channel
+// that receives output chunks in real-time. The channel is closed when the
+// command finishes or the context is cancelled. The returned exec ID can be
+// used to inspect the exit code after the channel drains.
+func (e *Executor) ExecStream(ctx context.Context, containerID string, req ExecRequest) (<-chan StreamChunk, string, error) {
+	execCreate := map[string]any{
+		"AttachStdout": true,
+		"AttachStderr": true,
+		"AttachStdin":  false,
+		"Tty":          false,
+		"Cmd":          req.Command,
+	}
+	if req.WorkDir != "" {
+		execCreate["WorkingDir"] = req.WorkDir
+	}
+	if len(req.Env) > 0 {
+		execCreate["Env"] = req.Env
+	}
+
+	body, err := json.Marshal(execCreate)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal exec create: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		e.baseURL+"/v1.41/containers/"+containerID+"/exec", bytes.NewReader(body))
+	if err != nil {
+		return nil, "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := e.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("create exec: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, "", fmt.Errorf("create exec returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var execResp struct {
+		Id string `json:"Id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&execResp); err != nil {
+		return nil, "", fmt.Errorf("decode exec response: %w", err)
+	}
+
+	// Start exec attached — use a long-timeout client so we don't cut off long commands
+	streamClient := &http.Client{
+		Timeout: 20 * time.Minute,
+		Transport: e.httpClient.Transport,
+	}
+
+	startBody, _ := json.Marshal(map[string]any{"Detach": false, "Tty": false})
+	startReq, err := http.NewRequestWithContext(ctx, "POST",
+		e.baseURL+"/v1.41/exec/"+execResp.Id+"/start", bytes.NewReader(startBody))
+	if err != nil {
+		return nil, "", err
+	}
+	startReq.Header.Set("Content-Type", "application/json")
+
+	startResp, err := streamClient.Do(startReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("start exec: %w", err)
+	}
+
+	if startResp.StatusCode != http.StatusOK {
+		startResp.Body.Close()
+		return nil, "", fmt.Errorf("start exec returned %d", startResp.StatusCode)
+	}
+
+	chunks := make(chan StreamChunk, 64)
+
+	go func() {
+		defer close(chunks)
+		defer startResp.Body.Close()
+		demuxDockerStreamToChannel(startResp.Body, chunks, ctx)
+	}()
+
+	return chunks, execResp.Id, nil
+}
+
+// ExecInspect returns the exit code of a completed exec instance.
+func (e *Executor) ExecInspect(ctx context.Context, execID string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET",
+		e.baseURL+"/v1.41/exec/"+execID+"/json", nil)
+	if err != nil {
+		return -1, err
+	}
+
+	resp, err := e.httpClient.Do(req)
+	if err != nil {
+		return -1, fmt.Errorf("inspect exec: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ExitCode int  `json:"ExitCode"`
+		Running  bool `json:"Running"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return -1, fmt.Errorf("decode inspect: %w", err)
+	}
+
+	return result.ExitCode, nil
+}
+
+// demuxDockerStreamToChannel reads Docker's multiplexed stream and sends each
+// frame to the channel. Respects context cancellation for clean shutdown.
+func demuxDockerStreamToChannel(r io.Reader, out chan<- StreamChunk, ctx context.Context) {
+	header := make([]byte, 8)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		_, err := io.ReadFull(r, header)
+		if err != nil {
+			return
+		}
+
+		streamType := header[0]
+		size := binary.BigEndian.Uint32(header[4:8])
+		if size == 0 {
+			continue
+		}
+
+		payload := make([]byte, size)
+		_, err = io.ReadFull(r, payload)
+		if err != nil {
+			return
+		}
+
+		stream := "stdout"
+		if streamType == 2 {
+			stream = "stderr"
+		}
+
+		select {
+		case out <- StreamChunk{
+			Stream:    stream,
+			Data:      string(payload),
+			Timestamp: time.Now().UTC(),
+		}:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 // demuxDockerStream reads Docker's multiplexed stream format.
 // Each frame has an 8-byte header: [stream_type(1) padding(3) size(4)] followed by payload.
 // stream_type 1 = stdout, stream_type 2 = stderr.

@@ -37,6 +37,17 @@ const (
 	EventTypeChainProgress  = "chain_progress"
 	EventTypeOperatorAction = "operator_action"
 	EventTypeSystemAlert    = "system_alert"
+	EventTypeFinding        = "finding"
+
+	// v2 execution engine events — published by FastAPI sidecar, fanned out
+	// by Go SSE hub to all connected clients. These power the Agent Watch
+	// terminal (T2) and Mission Control (T1) dashboards.
+	EventTypeMissionUpdate  = "mission_update"   // mission lifecycle changes
+	EventTypeTaskUpdate     = "task_update"       // task status in DAG
+	EventTypeSubTaskUpdate  = "subtask_update"    // subtask within a task
+	EventTypeActionUpdate   = "action_update"     // individual tool call status
+	EventTypeToolOutput     = "tool_output"       // streaming stdout/stderr from Docker exec
+	EventTypeReactIteration = "react_iteration"   // ReAct loop step: thought + action
 )
 
 // RealtimeEvent is the canonical envelope for every SSE message in the platform.
@@ -235,17 +246,25 @@ func handleBroadcastEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validTypes := map[string]bool{
-		EventTypeAgentStatus:    true,
-		EventTypeCommandOutput:  true,
+		EventTypeAgentStatus:     true,
+		EventTypeCommandOutput:   true,
 		EventTypeImplantCallback: true,
-		EventTypeChainProgress:  true,
-		EventTypeOperatorAction: true,
-		EventTypeSystemAlert:    true,
+		EventTypeChainProgress:   true,
+		EventTypeOperatorAction:  true,
+		EventTypeSystemAlert:     true,
+		EventTypeFinding:         true,
+		// v2 execution engine events
+		EventTypeMissionUpdate:  true,
+		EventTypeTaskUpdate:     true,
+		EventTypeSubTaskUpdate:  true,
+		EventTypeActionUpdate:   true,
+		EventTypeToolOutput:     true,
+		EventTypeReactIteration: true,
 	}
 	if !validTypes[evt.Type] {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"ok":    false,
-			"error": "invalid event type — must be one of: agent_status, command_output, implant_callback, chain_progress, operator_action, system_alert",
+			"error": "invalid event type",
 		})
 		return
 	}
