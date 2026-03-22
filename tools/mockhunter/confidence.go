@@ -115,6 +115,28 @@ func scoreFinding(f *Finding, filePath string, line string, lineNum int, surroun
 		reasons = append(reasons, "obvious placeholder value")
 	}
 
+	// Line is a validation/check context (map of bad values, comparison)
+	allContext := trimmed
+	for _, sl := range surroundingLines {
+		allContext += " " + sl
+	}
+	if isValidationContext(allContext) && f.Category == "secrets" {
+		score -= 0.40
+		reasons = append(reasons, "validation/checking context, not actual secret")
+	}
+
+	// Streaming/SSE pacing delays are intentional, not simulation
+	if f.Rule == "STUB003" && isStreamingContext(surroundingLines) {
+		score -= 0.40
+		reasons = append(reasons, "SSE/streaming pacing delay (intentional)")
+	}
+
+	// SQL via Sprintf with Join (column names from code, not user input)
+	if f.Rule == "GO001" && isSafeSprintfSQL(trimmed) {
+		score -= 0.45
+		reasons = append(reasons, "Sprintf uses Join() for column names, not user input")
+	}
+
 	// ── BOOSTERS (increase confidence) ────────────────────────────────
 
 	// Actual token patterns with high entropy
@@ -257,6 +279,51 @@ func isImportLine(line string) bool {
 	return strings.HasPrefix(trimmed, "import ") || strings.HasPrefix(trimmed, "from ") ||
 		strings.HasPrefix(trimmed, "require(") || strings.HasPrefix(trimmed, "use ") ||
 		strings.HasPrefix(trimmed, "#include")
+}
+
+func isSafeSprintfSQL(line string) bool {
+	lower := strings.ToLower(line)
+	// strings.Join(setClauses, ...) is building column names from code, not user input
+	return strings.Contains(lower, "strings.join") ||
+		strings.Contains(lower, "setclauses") ||
+		strings.Contains(lower, "columns") ||
+		strings.Contains(lower, "fields") ||
+		// $%d is a parameterized placeholder index, not user input
+		strings.Contains(line, "$%d")
+}
+
+func isStreamingContext(surroundingLines []string) bool {
+	for _, l := range surroundingLines {
+		lower := strings.ToLower(l)
+		if strings.Contains(lower, "sse") || strings.Contains(lower, "stream") ||
+			strings.Contains(lower, "flush") || strings.Contains(lower, "event-stream") ||
+			strings.Contains(lower, "flusher") || strings.Contains(lower, "text/event") ||
+			strings.Contains(lower, "chunk") || strings.Contains(lower, "token") ||
+			strings.Contains(lower, "pacing") || strings.Contains(lower, "cadence") {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidationContext(line string) bool {
+	lower := strings.ToLower(line)
+	// Checking FOR weak values, not USING them
+	return strings.Contains(lower, "map[string]bool") ||
+		strings.Contains(lower, "weakdefaults") ||
+		strings.Contains(lower, "weak_") ||
+		strings.Contains(lower, "blacklist") ||
+		strings.Contains(lower, "blocklist") ||
+		strings.Contains(lower, "banned") ||
+		strings.Contains(lower, "invalid") ||
+		strings.Contains(lower, "forbidden") ||
+		strings.Contains(line, "!=") ||
+		strings.Contains(line, "==") ||
+		strings.Contains(lower, "if ") ||
+		strings.Contains(lower, "switch") ||
+		strings.Contains(lower, "case ") ||
+		strings.Contains(lower, "assert") ||
+		strings.Contains(lower, "expect(")
 }
 
 func isObviousPlaceholder(line string) bool {

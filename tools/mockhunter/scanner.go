@@ -78,6 +78,7 @@ type ScanConfig struct {
 	MinSeverity   Severity
 	MinConfidence float64  // 0.0 to 1.0, findings below this are suppressed
 	ExcludeTests  bool
+	GitDiffOnly   bool     // only scan files changed in git
 	Categories    []string // empty = all categories
 	MaxWorkers    int
 }
@@ -86,6 +87,7 @@ type ScanConfig struct {
 type Scanner struct {
 	config ScanConfig
 	rules  []Rule
+	ignore *IgnoreList
 }
 
 func NewScanner(config ScanConfig) *Scanner {
@@ -95,6 +97,7 @@ func NewScanner(config ScanConfig) *Scanner {
 	return &Scanner{
 		config: config,
 		rules:  allRules(),
+		ignore: loadIgnoreFile(config.Dir),
 	}
 }
 
@@ -102,6 +105,18 @@ func NewScanner(config ScanConfig) *Scanner {
 func (s *Scanner) Scan() *Report {
 	report := &Report{}
 	var files []string
+
+	// If git-diff mode, only scan changed files
+	var gitDiffSet map[string]bool
+	if s.config.GitDiffOnly {
+		diffFiles, err := getGitDiffFiles(s.config.Dir)
+		if err == nil && len(diffFiles) > 0 {
+			gitDiffSet = make(map[string]bool, len(diffFiles))
+			for _, f := range diffFiles {
+				gitDiffSet[f] = true
+			}
+		}
+	}
 
 	filepath.Walk(s.config.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -152,6 +167,15 @@ func (s *Scanner) Scan() *Report {
 			return nil
 		}
 		if s.config.ExcludeTests && isTestFile(path) {
+			return nil
+		}
+		relPath, _ := filepath.Rel(s.config.Dir, path)
+		// Check .mockhunterignore
+		if s.ignore.shouldIgnoreFile(relPath) {
+			return nil
+		}
+		// Check git-diff filter
+		if gitDiffSet != nil && !gitDiffSet[relPath] {
 			return nil
 		}
 		files = append(files, path)
@@ -221,6 +245,15 @@ func (s *Scanner) scanFile(path string) []Finding {
 				}
 			}
 			if rule.Pattern.MatchString(line) {
+				// Check inline ignore: // mockhunter:ignore or // nolint:mockhunter
+				if isLineIgnored(line, rule.ID) {
+					continue
+				}
+				// Check .mockhunterignore rule-specific suppression
+				if s.ignore.shouldIgnoreRule(relPath, rule.ID) {
+					continue
+				}
+
 				snippet := strings.TrimSpace(line)
 				if len(snippet) > 200 {
 					snippet = snippet[:200] + "..."

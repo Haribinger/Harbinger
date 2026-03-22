@@ -99,7 +99,8 @@ func vibeCoderRules() []Rule {
 		// ── DATA HANDLING (detection rules for dangerous patterns) ────
 		{
 			ID: "DATA002", Category: "security", Severity: SevMedium, LineMatch: true,
-			Pattern:     regexp.MustCompile(`(?i)(?:ioutil\.ReadAll|io\.ReadAll)\s*\(`),
+			// Only match ReadAll that is NOT wrapped in LimitReader
+			Pattern:     regexp.MustCompile(`(?:ioutil|io)\.ReadAll\s*\(\s*(?:r\b|req\.|request\.|resp\.Body|r\.Body|res\.Body|conn|f\b|file)`),
 			Message:     "ReadAll without size limit — memory exhaustion on large input",
 			Fix:         "Use io.LimitReader(r, maxBytes) before ReadAll",
 			FileGlob:    "*.go",
@@ -109,9 +110,10 @@ func vibeCoderRules() []Rule {
 		// ── GO-SPECIFIC ───────────────────────────────────────────────
 		{
 			ID: "GO001", Category: "security", Severity: SevHigh, LineMatch: true,
-			Pattern:     regexp.MustCompile(`fmt\.Sprintf\s*\(\s*"(?:SELECT|INSERT|UPDATE|DELETE)`),
-			Message:     "SQL via fmt.Sprintf — SQL injection risk",
-			Fix:         "Use db.Query with $1 params instead of string formatting",
+			// Only match Sprintf SQL where user input is interpolated (not $N params or SET clauses)
+			Pattern:     regexp.MustCompile(`fmt\.Sprintf\s*\(\s*"(?:SELECT|INSERT|UPDATE|DELETE)\s[^"]*%s`),
+			Message:     "SQL via fmt.Sprintf with %%s — SQL injection risk",
+			Fix:         "Use db.Query with $1 params instead of string formatting with %%s",
 			FileGlob:    "*.go",
 			ExcludeGlob: "*_test.*",
 		},

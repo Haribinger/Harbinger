@@ -63,6 +63,7 @@ func cmdScan(args []string) {
 	category := fs.String("category", "", "Filter by category")
 	minConf := fs.Float64("min-confidence", 0.35, "Minimum confidence 0.0-1.0")
 	showNoise := fs.Bool("show-noise", false, "Show all including noise")
+	gitDiff := fs.Bool("git-diff", false, "Only scan files changed in git (staged + unstaged + untracked)")
 	fs.Parse(args)
 
 	if *showNoise {
@@ -78,6 +79,7 @@ func cmdScan(args []string) {
 	scanner := NewScanner(ScanConfig{
 		Dir: absDir, MinSeverity: parseSeverity(*severity),
 		MinConfidence: *minConf, ExcludeTests: *excludeTests,
+		GitDiffOnly: *gitDiff,
 	})
 	report := scanner.Scan()
 
