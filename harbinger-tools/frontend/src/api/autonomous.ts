@@ -59,7 +59,7 @@ export interface AutonomousStats {
 export const autonomousApi = {
   createThought: async (thought: Partial<AgentThought>) => {
     return apiClient.post<{ ok: boolean; thought: AgentThought }>(
-      '/api/agents/thoughts',
+      '/api/autonomous/thoughts',
       thought
     )
   },
@@ -78,39 +78,39 @@ export const autonomousApi = {
     if (filters?.category) params.category = filters.category
     if (filters?.limit) params.limit = filters.limit
     return apiClient.get<{ ok: boolean; thoughts: AgentThought[]; count: number }>(
-      '/api/agents/thoughts',
+      '/api/autonomous/thoughts',
       params
     )
   },
 
   getThought: async (id: string) => {
     return apiClient.get<{ ok: boolean; thought: AgentThought }>(
-      `/api/agents/thoughts/${id}`
+      `/api/autonomous/thoughts/${id}`
     )
   },
 
   updateThought: async (id: string, status: AgentThought['status']) => {
     return apiClient.patch<{ ok: boolean; thought: AgentThought }>(
-      `/api/agents/thoughts/${id}`,
+      `/api/autonomous/thoughts/${id}`,
       { status }
     )
   },
 
   deleteThought: async (id: string) => {
     return apiClient.delete<{ ok: boolean }>(
-      `/api/agents/thoughts/${id}`
+      `/api/autonomous/thoughts/${id}`
     )
   },
 
   getSwarmState: async () => {
     return apiClient.get<{ ok: boolean; swarm: SwarmState }>(
-      '/api/agents/swarm'
+      '/api/autonomous/swarm'
     )
   },
 
   getStats: async () => {
     return apiClient.get<{ ok: boolean; stats: AutonomousStats }>(
-      '/api/agents/autonomous/stats'
+      '/api/autonomous/stats'
     )
   },
 }
