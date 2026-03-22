@@ -5,7 +5,7 @@ import os
 config = context.config
 config.set_main_option(
     "sqlalchemy.url",
-    os.getenv("DATABASE_URL", "postgresql://harbinger:harbinger@localhost/harbinger"),
+    os.getenv("DATABASE_URL", "postgresql://localhost/harbinger"),
 )
 
 def run_migrations_online():
