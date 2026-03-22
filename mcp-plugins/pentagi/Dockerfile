@@ -3,7 +3,8 @@ FROM node:20-alpine
 LABEL maintainer="Harbinger Team"
 LABEL description="PentAGI autonomous agent MCP server"
 
-RUN addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache wget \
+    && addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 

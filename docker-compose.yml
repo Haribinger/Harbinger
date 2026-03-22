@@ -129,8 +129,8 @@ services:
     networks:
       - harbinger-network
     healthcheck:
-      # Community edition: use cypher-shell (wget/curl and HTTP paths vary by version)
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$(echo $$NEO4J_AUTH | cut -d/ -f2)\" 'RETURN 1' || exit 1"]
+      # Use wget against Neo4j's HTTP API — simpler than cypher-shell auth
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -386,10 +386,12 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      # Check nginx is responding (not backend health — that has its own check)
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 10s
     read_only: true
     tmpfs:
       - /var/cache/nginx
