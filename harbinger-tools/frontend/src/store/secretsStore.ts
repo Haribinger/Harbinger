@@ -157,12 +157,34 @@ export const useSecretsStore = create<SecretsState>()(
       fetchOllamaModels: async () => {
         const url = get().ollamaUrl
         try {
+          // Try backend proxy first (works in Docker where browser can't reach Ollama directly)
+          const token = localStorage.getItem('harbinger-token')
+          const proxyRes = await fetch('/api/auth/provider/test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ provider: 'ollama', base_url: url }),
+            signal: AbortSignal.timeout(10000),
+          }).catch(() => null)
+
+          if (proxyRes?.ok) {
+            const proxyData = await proxyRes.json()
+            if (proxyData.reachable && proxyData.info?.models) {
+              const models: string[] = proxyData.info.models.split(',').filter(Boolean)
+              set({ ollamaModels: models, isOllamaConnected: true })
+              PROVIDER_MODELS.ollama = models
+              return
+            }
+          }
+
+          // Fallback: try direct browser fetch (works when Ollama is on same machine as browser)
           const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5000) })
           if (!res.ok) throw new Error('not ok')
           const data = await res.json()
           const models: string[] = data.models?.map((m: { name: string }) => m.name) ?? []
           set({ ollamaModels: models, isOllamaConnected: true })
-          // Update the ollama provider's available models in PROVIDER_MODELS
           PROVIDER_MODELS.ollama = models
         } catch {
           set({ ollamaModels: [], isOllamaConnected: false })
