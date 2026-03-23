@@ -333,6 +333,226 @@ def agent_attach(
             break
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ONBOARD / CONFIGURE / DOCTOR
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.command("doctor")
+def doctor(
+    json_out: bool = typer.Option(False, "--json", help="Output results as JSON"),
+):
+    """Run health checks on all Harbinger dependencies.
+
+    Checks Docker, PostgreSQL, Redis, Neo4j, Ollama, agent images, and LLM API keys.
+    Exit code 0 = all required checks pass. Exit code 1 = one or more failures.
+    """
+    from src.cli_onboard import run_doctor
+    from rich.table import Table as RichTable
+
+    checks = run_doctor()
+
+    if json_out:
+        import json as _json
+        console.print(_json.dumps([
+            {"name": c.name, "status": c.status, "message": c.message, "fix_hint": c.fix_hint}
+            for c in checks
+        ], indent=2))
+        failed = any(c.status == "fail" for c in checks)
+        raise typer.Exit(1 if failed else 0)
+
+    STATUS_ICONS = {"ok": "[green]✓[/green]", "warn": "[yellow]![/yellow]", "fail": "[red]✗[/red]"}
+    STATUS_STYLES = {"ok": "green", "warn": "yellow", "fail": "red"}
+
+    table = RichTable(title="[bold]Harbinger Doctor[/bold]", border_style="dim", show_header=True)
+    table.add_column("", width=3)
+    table.add_column("Component", style="white", min_width=16)
+    table.add_column("Status", width=8)
+    table.add_column("Message", style="dim")
+    table.add_column("Fix", style="dim", max_width=55)
+
+    failed = False
+    for check in checks:
+        if check.status == "fail":
+            failed = True
+        icon = STATUS_ICONS.get(check.status, "?")
+        style = STATUS_STYLES.get(check.status, "white")
+        table.add_row(
+            icon,
+            check.name,
+            f"[{style}]{check.status}[/{style}]",
+            check.message,
+            check.fix_hint or "",
+        )
+
+    console.print()
+    console.print(table)
+
+    ok_count = sum(1 for c in checks if c.status == "ok")
+    warn_count = sum(1 for c in checks if c.status == "warn")
+    fail_count = sum(1 for c in checks if c.status == "fail")
+    console.print(
+        f"\n  [green]{ok_count} passed[/green]  "
+        f"[yellow]{warn_count} warnings[/yellow]  "
+        f"[red]{fail_count} failed[/red]"
+    )
+
+    if failed:
+        raise typer.Exit(1)
+
+
+@app.command("onboard")
+def onboard():
+    """First-time setup wizard — shows what needs to be done to get Harbinger running.
+
+    Runs all dependency checks and presents a prioritised action plan.
+    """
+    from src.cli_onboard import get_onboard_steps, run_doctor
+
+    console.print(Panel(
+        "[bold]HARBINGER SETUP WIZARD[/bold]\n"
+        "[dim]Checking your environment...[/dim]",
+        border_style="yellow",
+    ))
+    console.print()
+
+    checks = run_doctor()
+    steps = get_onboard_steps()
+
+    ok_count = sum(1 for c in checks if c.status == "ok")
+    console.print(f"  [dim]Checked {len(checks)} components — [green]{ok_count} ready[/green][/dim]\n")
+
+    if len(steps) == 1 and steps[0]["status"] == "ok":
+        console.print(Panel(
+            "[green]All systems ready![/green]\n\n"
+            "  [dim]Try:[/dim]  harbinger mission start 'pentest example.com'\n"
+            "  [dim]Or:[/dim]   harbinger doctor",
+            border_style="green",
+        ))
+        return
+
+    required = [s for s in steps if s["priority"] == "required"]
+    recommended = [s for s in steps if s["priority"] == "recommended"]
+
+    if required:
+        console.print("[bold red]Required — fix these before starting:[/bold red]")
+        for step in required:
+            console.print(f"  [red]✗[/red]  [bold]{step['component']}[/bold]")
+            console.print(f"      {step['action']}")
+            console.print()
+
+    if recommended:
+        console.print("[bold yellow]Recommended — optional but improves experience:[/bold yellow]")
+        for step in recommended:
+            console.print(f"  [yellow]![/yellow]  [bold]{step['component']}[/bold]")
+            console.print(f"      {step['action']}")
+            console.print()
+
+    console.print("[dim]Run 'harbinger doctor' for detailed status. Run 'harbinger configure' to set API keys.[/dim]")
+
+
+@app.command("configure")
+def configure(
+    key: str = typer.Option(None, "--key", "-k", help="Set a specific key: anthropic, openai, google, db, redis, neo4j, harbor"),
+    show: bool = typer.Option(False, "--show", help="Show current configuration (masked)"),
+):
+    """Interactive configuration — set API keys and connection strings.
+
+    Writes to ~/.harbinger/.env which is auto-loaded by the engine on startup.
+    """
+    import pathlib
+
+    config_dir = pathlib.Path.home() / ".harbinger"
+    env_file = config_dir / ".env"
+
+    if show:
+        if not env_file.exists():
+            console.print("[dim]No configuration found at ~/.harbinger/.env[/dim]")
+            console.print("[dim]Run 'harbinger configure' to set up.[/dim]")
+            return
+
+        console.print(Panel(
+            f"[bold]Config file:[/bold] {env_file}",
+            title="[bold]Current Configuration[/bold]",
+            border_style="yellow",
+        ))
+        for line in env_file.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                # Mask secrets: show first 4 chars then ***
+                if any(secret in k.upper() for secret in ("KEY", "SECRET", "PASSWORD", "TOKEN")):
+                    masked = (v[:4] + "***") if len(v) > 4 else "***"
+                    console.print(f"  [cyan]{k}[/cyan]=[dim]{masked}[/dim]")
+                else:
+                    console.print(f"  [cyan]{k}[/cyan]=[dim]{v}[/dim]")
+            else:
+                console.print(f"  [dim]{line}[/dim]")
+        return
+
+    # Known configuration keys — maps shorthand to (env var name, prompt text).
+    KEY_MAP = {
+        "anthropic": ("ANTHROPIC_API_KEY", "Anthropic API key (sk-ant-...)"),
+        "openai":    ("OPENAI_API_KEY",    "OpenAI API key (sk-...)"),
+        "google":    ("GOOGLE_API_KEY",    "Google AI API key"),
+        "db":        ("DATABASE_URL",      "PostgreSQL URL (postgresql+asyncpg://user:pass@host/db)"),
+        "redis":     ("REDIS_URL",         "Redis URL (redis://localhost:6379/0)"),
+        "neo4j":     ("NEO4J_URI",         "Neo4j bolt URI (bolt://localhost:7687)"),
+        "harbor":    ("HARBINGER_API",     "Harbinger FastAPI base URL (default: http://localhost:8000)"),
+    }
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load existing values so we don't clobber unrelated keys.
+    existing: dict[str, str] = {}
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                existing[k.strip()] = v.strip()
+
+    if key:
+        if key.lower() not in KEY_MAP:
+            valid = ", ".join(KEY_MAP.keys())
+            console.print(f"[red]Unknown key '{key}'.[/red] Valid keys: {valid}")
+            raise typer.Exit(1)
+        env_var, prompt_text = KEY_MAP[key.lower()]
+        value = typer.prompt(prompt_text, hide_input=True)
+        existing[env_var] = value
+    else:
+        console.print(Panel(
+            "[bold]HARBINGER CONFIGURE[/bold]\n"
+            "[dim]Press Enter to keep existing value. Ctrl+C to abort.[/dim]",
+            border_style="yellow",
+        ))
+        console.print()
+
+        for short, (env_var, prompt_text) in KEY_MAP.items():
+            current = existing.get(env_var, "")
+            masked_current = (current[:4] + "***") if len(current) > 4 else "***" if current else ""
+            hint = f" [dim](current: {masked_current})[/dim]" if masked_current else " [dim](not set)[/dim]"
+            console.print(f"  [cyan]{env_var}[/cyan]{hint}")
+
+            try:
+                new_val = typer.prompt(
+                    f"  {prompt_text}",
+                    default="",
+                    show_default=False,
+                    hide_input=any(s in env_var.upper() for s in ("KEY", "SECRET", "PASSWORD")),
+                )
+            except typer.Abort:
+                console.print("\n[yellow]Aborted.[/yellow]")
+                raise typer.Exit(0)
+
+            if new_val.strip():
+                existing[env_var] = new_val.strip()
+            console.print()
+
+    lines = [f"{k}={v}" for k, v in existing.items()]
+    env_file.write_text("\n".join(lines) + "\n")
+
+    console.print(f"[green]✓[/green] Configuration saved to [bold]{env_file}[/bold]")
+    console.print("[dim]Run 'harbinger configure --show' to review. 'harbinger doctor' to verify.[/dim]")
+
+
 def main():
     app()
 
