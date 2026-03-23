@@ -65,6 +65,8 @@ func cmdScan(args []string) {
 	showNoise := fs.Bool("show-noise", false, "Show all including noise")
 	gitDiff := fs.Bool("git-diff", false, "Only scan files changed in git (staged + unstaged + untracked)")
 	dangerous := fs.Bool("dangerous", false, "Show exploit scenarios for high-risk findings (authorized testing only)")
+	excludeDirs := fs.String("exclude-dir", "", "Comma-separated directories to exclude (e.g. vendor,third_party)")
+	excludeVendor := fs.Bool("exclude-vendor", false, "Exclude vendored/third-party code")
 	fs.Parse(args)
 
 	if *showNoise {
@@ -81,6 +83,8 @@ func cmdScan(args []string) {
 		Dir: absDir, MinSeverity: parseSeverity(*severity),
 		MinConfidence: *minConf, ExcludeTests: *excludeTests,
 		GitDiffOnly: *gitDiff, DangerousMode: *dangerous,
+		ExcludeDirs: splitCSV(*excludeDirs),
+		ExcludeVendor: *excludeVendor,
 	})
 	report := scanner.Scan()
 
@@ -233,6 +237,17 @@ func runSemgrep(dir string) []Finding {
 			Category: "security", Rule: "SEMGREP-" + filepath.Base(r.CheckID), Message: r.Extra.Message})
 	}
 	return findings
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
 }
 
 func startServer(addr, dir string) {

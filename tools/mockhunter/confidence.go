@@ -69,10 +69,20 @@ func scoreFinding(f *Finding, filePath string, line string, lineNum int, surroun
 		reasons = append(reasons, "example/template config")
 	}
 
-	// Test files (even if not excluded by --exclude-tests)
+	// Test files — severity depends on what was found
 	if isTestFile(filePath) {
-		score -= 0.20
-		reasons = append(reasons, "test file")
+		if f.Category == "mock-data" || f.Rule == "MOCK001" || f.Rule == "MOCK004" {
+			// Mocks in test files are EXPECTED — strong FP signal
+			score -= 0.55
+			reasons = append(reasons, "test file (mocks expected here)")
+		} else if f.Category == "secrets" && isTestSecret(line) {
+			// Test secrets like TEST_SECRET = "test-jwt-secret" are expected
+			score -= 0.50
+			reasons = append(reasons, "test file (test-only secret)")
+		} else {
+			score -= 0.25
+			reasons = append(reasons, "test file")
+		}
 	}
 
 	// ── LINE CONTEXT SIGNALS ──────────────────────────────────────────
@@ -135,6 +145,14 @@ func scoreFinding(f *Finding, filePath string, line string, lineNum int, surroun
 	if f.Rule == "GO001" && isSafeSprintfSQL(trimmed) {
 		score -= 0.45
 		reasons = append(reasons, "Sprintf uses Join() for column names, not user input")
+	}
+
+	// Security tool code — payloads, templates, test vectors are expected
+	if isSecurityToolCode(filePath) {
+		if f.Rule == "VIBE005" || f.Category == "vibe-code" {
+			score -= 0.40
+			reasons = append(reasons, "security tool (payloads expected)")
+		}
 	}
 
 	// ── BOOSTERS (increase confidence) ────────────────────────────────
@@ -324,6 +342,36 @@ func isValidationContext(line string) bool {
 		strings.Contains(lower, "case ") ||
 		strings.Contains(lower, "assert") ||
 		strings.Contains(lower, "expect(")
+}
+
+func isTestSecret(line string) bool {
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "test_secret") ||
+		strings.Contains(lower, "test-secret") ||
+		strings.Contains(lower, "test_jwt") ||
+		strings.Contains(lower, "test-jwt") ||
+		strings.Contains(lower, "test_key") ||
+		strings.Contains(lower, "test-key") ||
+		strings.Contains(lower, "fake_") ||
+		strings.Contains(lower, "mock_") ||
+		strings.Contains(lower, "dummy_") ||
+		strings.Contains(lower, "\"test\"") ||
+		strings.Contains(lower, "for testing") ||
+		strings.Contains(lower, "# test") ||
+		strings.Contains(lower, "// test")
+}
+
+func isSecurityToolCode(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.Contains(lower, "payload") ||
+		strings.Contains(lower, "exploit") ||
+		strings.Contains(lower, "nuclei") ||
+		strings.Contains(lower, "scanner") ||
+		strings.Contains(lower, "security") ||
+		strings.Contains(lower, "pentest") ||
+		strings.Contains(lower, "train") ||
+		strings.Contains(lower, "knowledge") ||
+		strings.Contains(lower, "mockhunter")
 }
 
 func isObviousPlaceholder(line string) bool {

@@ -82,6 +82,8 @@ type ScanConfig struct {
 	DangerousMode bool     // show exploit scenarios
 	Categories    []string // empty = all categories
 	MaxWorkers    int
+	ExcludeDirs   []string // additional directories to skip
+	ExcludeVendor bool     // skip all vendored/third-party code
 }
 
 // Scanner orchestrates the scan
@@ -137,6 +139,16 @@ func (s *Scanner) Scan() *Report {
 				".auto-claude": true, ".worktrees": true,
 			}
 			if skipDirs[base] {
+				return filepath.SkipDir
+			}
+			// User-specified exclude dirs
+			for _, d := range s.config.ExcludeDirs {
+				if base == d {
+					return filepath.SkipDir
+				}
+			}
+			// Vendor exclusion
+			if s.config.ExcludeVendor && isVendoredDir(base) {
 				return filepath.SkipDir
 			}
 			// Skip virtual environment directories
@@ -304,14 +316,46 @@ func gatherContext(lines []string, idx, radius int) []string {
 
 func isTestFile(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
-	return strings.HasSuffix(base, "_test.go") ||
+	dir := strings.ToLower(filepath.Dir(path))
+
+	// File name patterns
+	if strings.HasSuffix(base, "_test.go") ||
 		strings.HasSuffix(base, ".test.ts") ||
 		strings.HasSuffix(base, ".test.tsx") ||
 		strings.HasSuffix(base, ".test.js") ||
+		strings.HasSuffix(base, ".test.jsx") ||
 		strings.HasSuffix(base, ".spec.ts") ||
 		strings.HasSuffix(base, ".spec.tsx") ||
 		strings.HasSuffix(base, ".spec.js") ||
-		strings.HasSuffix(base, "test_") ||
-		strings.Contains(base, "__tests__") ||
-		strings.HasPrefix(base, "test_")
+		strings.HasPrefix(base, "test_") ||
+		base == "conftest.py" ||
+		base == "fixtures.py" ||
+		base == "factories.py" ||
+		base == "testutils.go" ||
+		base == "testhelpers.go" ||
+		base == "setup.ts" {
+		return true
+	}
+
+	// Directory patterns
+	if strings.Contains(dir, "__tests__") ||
+		strings.Contains(dir, "/tests/") ||
+		strings.Contains(dir, "/test/") ||
+		strings.Contains(dir, "/spec/") ||
+		strings.Contains(dir, "/fixtures/") ||
+		strings.Contains(dir, "/testdata/") ||
+		strings.Contains(dir, "/mocks/") ||
+		strings.Contains(dir, "/__mocks__/") {
+		return true
+	}
+
+	return false
+}
+
+func isVendoredDir(name string) bool {
+	vendorDirs := map[string]bool{
+		"vendor": true, "third_party": true, "external": true,
+		"deps": true, "lib": true, "packages": true,
+	}
+	return vendorDirs[name] || strings.HasSuffix(name, "-env") || strings.HasSuffix(name, "_env")
 }
