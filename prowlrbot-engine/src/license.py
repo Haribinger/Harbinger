@@ -39,14 +39,14 @@ TIERS = {
         "agents": 12, "missions_per_day": -1, "tools": 68,
         "competitive_mode": True, "continuous_missions": True,
         "description": "Professional — unlimited missions, all tools",
-        "price": "$29/month",
+        "price": "$9/month",
     },
     "TEAM": {
         "agents": 12, "missions_per_day": -1, "tools": 68,
         "competitive_mode": True, "continuous_missions": True,
         "multi_operator": True, "max_operators": 10,
         "description": "Team — multi-operator, shared missions (Prowlr Studio)",
-        "price": "$99/month per seat",
+        "price": "$29/month per seat",
     },
     "ENTERPRISE": {
         "agents": 12, "missions_per_day": -1, "tools": 68,
