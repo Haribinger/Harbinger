@@ -31,4 +31,17 @@ def test_free_tier_limits():
 
 
 def test_all_tiers_exist():
-    assert set(TIERS.keys()) == {"FREE", "PRO", "TEAM", "ENTERPRISE"}
+    assert set(TIERS.keys()) == {"FREE", "TRIAL", "PRO", "TEAM", "ENTERPRISE"}
+
+
+def test_trial_key_valid_when_fresh():
+    key = generate_key("test@example.com", "TRIAL")
+    result = validate_key(key)
+    assert result.valid
+    assert result.tier == "TRIAL"
+    assert result.limits.get("trial_days") == 14
+
+
+def test_free_tier_is_limited():
+    assert TIERS["FREE"]["competitive_mode"] is False
+    assert TIERS["PRO"]["competitive_mode"] is True

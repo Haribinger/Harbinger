@@ -22,10 +22,40 @@ LICENSE_FILE = Path.home() / ".harbinger" / ".license"
 LICENSE_SECRET = os.getenv("HARBINGER_LICENSE_SECRET", "harbinger-v2-default-secret")
 
 TIERS = {
-    "FREE": {"agents": 3, "missions_per_day": 5, "tools": 10, "description": "Community"},
-    "PRO": {"agents": 12, "missions_per_day": 100, "tools": 68, "description": "Professional"},
-    "TEAM": {"agents": 12, "missions_per_day": -1, "tools": 68, "description": "Team (unlimited)"},
-    "ENTERPRISE": {"agents": 12, "missions_per_day": -1, "tools": 68, "description": "Enterprise (unlimited + support)"},
+    "FREE": {
+        "agents": 3, "missions_per_day": 5, "tools": 10,
+        "competitive_mode": False, "continuous_missions": False,
+        "description": "Community — open source, 3 agents",
+        "price": "$0/forever",
+    },
+    "TRIAL": {
+        "agents": 12, "missions_per_day": 50, "tools": 68,
+        "competitive_mode": True, "continuous_missions": True,
+        "description": "14-day Pro trial — all features unlocked",
+        "price": "$0 for 14 days",
+        "trial_days": 14,
+    },
+    "PRO": {
+        "agents": 12, "missions_per_day": -1, "tools": 68,
+        "competitive_mode": True, "continuous_missions": True,
+        "description": "Professional — unlimited missions, all tools",
+        "price": "$29/month",
+    },
+    "TEAM": {
+        "agents": 12, "missions_per_day": -1, "tools": 68,
+        "competitive_mode": True, "continuous_missions": True,
+        "multi_operator": True, "max_operators": 10,
+        "description": "Team — multi-operator, shared missions (Prowlr Studio)",
+        "price": "$99/month per seat",
+    },
+    "ENTERPRISE": {
+        "agents": 12, "missions_per_day": -1, "tools": 68,
+        "competitive_mode": True, "continuous_missions": True,
+        "multi_operator": True, "max_operators": -1,
+        "sso": True, "audit_export": True, "priority_support": True,
+        "description": "Enterprise — self-hosted, SSO, SLA, unlimited",
+        "price": "Custom",
+    },
 }
 
 
@@ -83,13 +113,20 @@ def validate_key(key: str, secret: str = "") -> License:
         # we accept any key where the format is correct and tier is valid.
         # For strict validation, the webhook stores email->key mapping.
 
-        # Keys older than 2 years are expired
         age_days = (time.time() - ts) / 86400
-        if age_days > 730:
-            return License(key=key, tier=tier, email="", created_at=ts, valid=False, limits=TIERS.get(tier, {}))
+        tier_info = TIERS.get(tier, TIERS["FREE"])
 
-        limits = TIERS.get(tier, TIERS["FREE"])
-        return License(key=key, tier=tier, email="", created_at=ts, valid=True, limits=limits)
+        # Trial keys expire after trial_days (default 14)
+        trial_days = tier_info.get("trial_days", 0)
+        if trial_days > 0 and age_days > trial_days:
+            return License(key=key, tier=tier, email="", created_at=ts, valid=False,
+                           limits={**tier_info, "_expired": True, "_message": f"Trial expired after {trial_days} days. Upgrade at harbinger.dev"})
+
+        # Paid keys expire after 2 years (require renewal)
+        if age_days > 730:
+            return License(key=key, tier=tier, email="", created_at=ts, valid=False, limits=tier_info)
+
+        return License(key=key, tier=tier, email="", created_at=ts, valid=True, limits=tier_info)
 
     except Exception as e:
         logger.warning("License validation failed: %s", e)
