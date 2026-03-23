@@ -21,7 +21,8 @@ class BrowserTool:
             return "Error: url is required"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            # Scraper is internal Docker service — self-signed cert is expected
+            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:  # noqa: S501 internal service
                 if action == "navigate":
                     resp = await client.post(f"{self.scraper_url}/navigate", json={"url": url})
                     return resp.text[:16384] if resp.status_code == 200 else f"Navigate failed: {resp.status_code}"
