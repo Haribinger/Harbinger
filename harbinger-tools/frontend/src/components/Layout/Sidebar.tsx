@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
   { path: '/redteam', label: 'Red Team', icon: Swords },
   { path: '/skills', label: 'Skills Hub', icon: BookOpen },
   { path: '/bounty-hub', label: 'Bounty Hub', icon: Target },
-  { path: '/openclaw', label: 'OpenClaw', icon: Radio },
+  { path: '/agent-hub', label: 'Agent Hub', icon: Radio },
   { path: '/code-health', label: 'Code Health', icon: Activity },
   { path: '/scope-manager', label: 'Scope Manager', icon: ShieldCheck },
   { path: '/vuln-deep-dive', label: 'Vuln Deep Dive', icon: Crosshair },

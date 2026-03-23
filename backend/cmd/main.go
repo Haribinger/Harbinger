@@ -2169,6 +2169,10 @@ func main() {
 	mux.HandleFunc("GET /api/v1/roar/search", authMiddleware(handleROARSearch))
 	mux.HandleFunc("GET /api/roar/events", authMiddleware(handleROARSubscribe))
 	mux.HandleFunc("GET /api/v1/roar/events", authMiddleware(handleROARSubscribe))
+	mux.HandleFunc("POST /api/roar/register", authMiddleware(handleROARRegister))
+	mux.HandleFunc("POST /api/v1/roar/register", authMiddleware(handleROARRegister))
+	mux.HandleFunc("DELETE /api/roar/agents/{did}", authMiddleware(handleROARUnregister))
+	mux.HandleFunc("DELETE /api/v1/roar/agents/{did}", authMiddleware(handleROARUnregister))
 
 	// ── Missing routes (frontend expects these) ────────────────────────
 	mux.HandleFunc("GET /api/auth/me", authMiddleware(handleAuthMe))

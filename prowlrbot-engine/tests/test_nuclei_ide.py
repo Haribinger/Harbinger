@@ -1,6 +1,15 @@
+import os
+import time
+import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 from src.main import create_app
+
+_SECRET = os.environ.get("JWT_SECRET", "test-jwt-secret-for-harbinger-engine")
+
+def _auth_headers():
+    token = jwt.encode({"sub": "test", "exp": int(time.time()) + 3600}, _SECRET, algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
 
 @pytest.fixture
 async def client():
@@ -28,13 +37,13 @@ http:
 
 @pytest.mark.asyncio
 async def test_validate_valid(client):
-    resp = await client.post("/api/v2/nuclei-ide/validate", json={"yaml_content": VALID_TEMPLATE})
+    resp = await client.post("/api/v2/nuclei-ide/validate", json={"yaml_content": VALID_TEMPLATE}, headers=_auth_headers())
     assert resp.status_code == 200
     assert resp.json()["valid"] is True
 
 @pytest.mark.asyncio
 async def test_validate_missing_id(client):
-    resp = await client.post("/api/v2/nuclei-ide/validate", json={"yaml_content": "info:\n  name: test"})
+    resp = await client.post("/api/v2/nuclei-ide/validate", json={"yaml_content": "info:\n  name: test"}, headers=_auth_headers())
     assert resp.status_code == 200
     assert resp.json()["valid"] is False
 
@@ -45,7 +54,7 @@ async def test_create_template(client):
         "severity": "high",
         "yaml_content": VALID_TEMPLATE,
         "tags": ["test"],
-    })
+    }, headers=_auth_headers())
     assert resp.status_code == 201
     assert "id" in resp.json()
 

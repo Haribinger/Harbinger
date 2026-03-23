@@ -36,6 +36,7 @@ const AgentShell = lazy(() => import('./pages/AgentShell/AgentShell'))
 const MissionControl = lazy(() => import('./pages/MissionControl/MissionControl'))
 const WarRoom = lazy(() => import('./pages/WarRoom/WarRoom'))
 const KnowledgeGraph = lazy(() => import('./pages/KnowledgeGraph/KnowledgeGraph'))
+const AgentHub = lazy(() => import('./pages/AgentHub/AgentHub'))
 const Login = lazy(() => import('./pages/Login/Login'))
 const SetupWizard = lazy(() => import('./pages/Setup/SetupWizard'))
 
@@ -278,6 +279,7 @@ function AnimatedRoutes() {
           <Route path="mission-control" element={<Suspense fallback={<PageLoader />}><MissionControl /></Suspense>} />
           <Route path="war-room" element={<Suspense fallback={<PageLoader />}><WarRoom /></Suspense>} />
           <Route path="knowledge-graph" element={<Suspense fallback={<PageLoader />}><KnowledgeGraph /></Suspense>} />
+          <Route path="agent-hub" element={<Suspense fallback={<PageLoader />}><AgentHub /></Suspense>} />
           <Route path="sse" element={<SSERoute />} />
           <Route path="*" element={<div className="p-8 text-center font-mono text-gray-400">404 // Page not found</div>} />
         </Route>

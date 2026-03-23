@@ -28,6 +28,13 @@ class AgentDefinition:
     enabled: bool = True
     created_by: str = "system"
     updated_at: float = 0
+    trust_level: str = "builtin"           # builtin, verified, community, unknown, restricted
+    integration_type: str = "roar"         # roar, mcp, hybrid
+    roar_did: str | None = None            # DID assigned during ROAR registration
+    roar_endpoint: str | None = None       # URL for ROAR messages (external agents)
+    successful_tasks: int = 0              # Performance tracking
+    failed_tasks: int = 0
+    timed_out_tasks: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +49,13 @@ class AgentDefinition:
             "tags": self.tags,
             "enabled": self.enabled,
             "created_by": self.created_by,
+            "trust_level": self.trust_level,
+            "integration_type": self.integration_type,
+            "roar_did": self.roar_did,
+            "roar_endpoint": self.roar_endpoint,
+            "successful_tasks": self.successful_tasks,
+            "failed_tasks": self.failed_tasks,
+            "timed_out_tasks": self.timed_out_tasks,
         }
 
 
@@ -202,6 +216,8 @@ class AgentRegistry:
             "docker_image": agent.docker_image,
             "max_iterations": agent.max_iterations,
             "model": agent.model,
+            "trust_level": agent.trust_level,
+            "integration_type": agent.integration_type,
         }
 
 

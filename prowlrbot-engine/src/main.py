@@ -24,6 +24,8 @@ from src.routers.workflows import router as workflows_router
 from src.routers.hub import router as hub_router
 from src.routers.license import router as license_router
 from src.channels.setup import setup_channel_bridge
+from src.middleware.auth_guard import AuthGuardMiddleware
+from src.middleware.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -76,6 +78,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Auth guard: reject unauthenticated mutations on /api/v2/*
+    app.add_middleware(AuthGuardMiddleware)
+
+    # Rate limiter: 100 requests per 60 seconds per IP on /api/v2/*
+    app.add_middleware(RateLimitMiddleware, window=60, max_requests=100)
 
     app.include_router(barriers_router)
     app.include_router(channels_router)

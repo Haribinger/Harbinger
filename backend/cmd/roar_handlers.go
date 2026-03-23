@@ -177,6 +177,122 @@ func handleROARSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agents": entries})
 }
 
+// handleROARRegister registers an external agent in the ROAR directory.
+// POST /api/roar/register
+// Body: {"codename":"PENTAGI","display_name":"PentAGI","description":"...",
+//        "capabilities":["web_exploitation","recon"],"endpoint":"http://pentagi:8080/roar",
+//        "agent_type":"external"}
+func handleROARRegister(w http.ResponseWriter, r *http.Request) {
+	if agentDirectory == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
+		return
+	}
+
+	var req struct {
+		Codename     string         `json:"codename"`
+		DisplayName  string         `json:"display_name"`
+		Description  string         `json:"description"`
+		Capabilities []string       `json:"capabilities"`
+		Endpoint     string         `json:"endpoint"`
+		AgentType    string         `json:"agent_type"`
+		Metadata     map[string]any `json:"metadata"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+
+	if req.Codename == "" && req.DisplayName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "codename or display_name required"})
+		return
+	}
+
+	displayName := req.DisplayName
+	if displayName == "" {
+		displayName = req.Codename
+	}
+	agentType := req.AgentType
+	if agentType == "" {
+		agentType = "external"
+	}
+
+	identity := roar.AgentIdentity{
+		DisplayName:  displayName,
+		AgentType:    agentType,
+		Capabilities: req.Capabilities,
+		Version:      "1.0.0",
+	}
+	roar.GenerateDID(&identity)
+
+	endpoints := make(map[string]string)
+	if req.Endpoint != "" {
+		endpoints["roar"] = req.Endpoint
+	}
+
+	card := roar.AgentCard{
+		Identity:    identity,
+		Description: req.Description,
+		Skills:      req.Capabilities,
+		Channels:    []string{"roar"},
+		Endpoints:   endpoints,
+		Metadata:    req.Metadata,
+	}
+
+	entry := agentDirectory.Register(card)
+
+	if roarEventBus != nil {
+		roarEventBus.Emit(roar.StreamEvent{
+			Type:   roar.EventAgentStatus,
+			Source: identity.DID,
+			Data: map[string]any{
+				"action":     "registered",
+				"codename":   req.Codename,
+				"agent_type": agentType,
+			},
+		})
+	}
+
+	log.Printf("[ROAR] external agent registered: %s (DID=%s)", displayName, identity.DID)
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"ok":       true,
+		"did":      identity.DID,
+		"identity": identity,
+		"entry":    entry,
+	})
+}
+
+// handleROARUnregister removes an agent from the ROAR directory.
+// DELETE /api/roar/agents/{did}
+func handleROARUnregister(w http.ResponseWriter, r *http.Request) {
+	if agentDirectory == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "reason": "not_configured"})
+		return
+	}
+
+	did := r.PathValue("did")
+	if did == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "did path parameter required"})
+		return
+	}
+
+	if !agentDirectory.Unregister(did) {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "agent not found"})
+		return
+	}
+
+	if roarEventBus != nil {
+		roarEventBus.Emit(roar.StreamEvent{
+			Type:   roar.EventAgentStatus,
+			Source: did,
+			Data:   map[string]any{"action": "unregistered"},
+		})
+	}
+
+	log.Printf("[ROAR] agent unregistered: %s", did)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "did": did})
+}
+
 // handleROARSubscribe streams ROAR events over SSE.
 // GET /api/roar/events?type=message&source=did:roar:agent:...
 func handleROARSubscribe(w http.ResponseWriter, r *http.Request) {

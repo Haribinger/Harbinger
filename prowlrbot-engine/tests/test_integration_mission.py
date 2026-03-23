@@ -40,14 +40,14 @@ async def test_health_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_create_mission(client):
+async def test_create_mission(client, auth_headers):
     """POST /api/v2/missions creates a mission and returns an ID."""
     resp = await client.post("/api/v2/missions", json={
         "title": "Test pentest example.com",
         "target": "example.com",
         "mission_type": "full_pentest",
         "autonomy_level": "supervised",
-    })
+    }, headers=auth_headers)
     # Accept 200 or 201 — depends on whether DB is available.
     assert resp.status_code in (200, 201, 422)
 
@@ -128,12 +128,12 @@ async def test_warroom_state(client):
 
 
 @pytest.mark.asyncio
-async def test_warroom_inject(client):
+async def test_warroom_inject(client, auth_headers):
     """POST /api/v2/warroom/{mission_id}/inject sends a command to an agent."""
     resp = await client.post("/api/v2/warroom/1/inject", json={
         "agent": "PATHFINDER",
         "command": "run subfinder -d test.com",
-    })
+    }, headers=auth_headers)
     assert resp.status_code in (200, 404, 422)
 
 

@@ -1,4 +1,12 @@
+import os
+import time
+import jwt
 import pytest
+
+_SECRET = os.environ.get("JWT_SECRET", "test-jwt-secret-for-harbinger-engine")
+def _auth():
+    token = jwt.encode({"sub": "test", "exp": int(time.time()) + 3600}, _SECRET, algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -43,7 +51,7 @@ async def test_review_workflow(client):
         "verdict": "approve",
         "comment": "Looks good",
         "security_check": True,
-    })
+    }, headers=_auth())
     assert r1.status_code == 200
     assert r1.json()["status"] == "pending"
 
@@ -53,7 +61,7 @@ async def test_review_workflow(client):
         "verdict": "approve",
         "comment": "LGTM",
         "security_check": True,
-    })
+    }, headers=_auth())
     assert r2.status_code == 200
     assert r2.json()["status"] == "approved"
 
@@ -105,7 +113,7 @@ async def test_withdraw_submission(client):
     })
     sub_id = sub.json()["id"]
 
-    resp = await client.delete(f"/api/v2/community/submissions/{sub_id}")
+    resp = await client.delete(f"/api/v2/community/submissions/{sub_id}", headers=_auth())
     assert resp.status_code == 200
     assert resp.json()["status"] == "withdrawn"
 
@@ -139,7 +147,7 @@ async def test_review_needs_changes(client):
         "verdict": "needs_changes",
         "comment": "Missing documentation",
         "security_check": False,
-    })
+    }, headers=_auth())
     assert r.status_code == 200
     assert r.json()["status"] == "needs_changes"
 
@@ -162,7 +170,7 @@ async def test_update_submission(client):
         "author": "tester",
         "content": {"name": "orig-tool", "version": "1.1"},
         "tags": ["updated"],
-    })
+    }, headers=_auth())
     assert resp.status_code == 200
     assert resp.json()["title"] == "Updated Title"
     assert resp.json()["status"] == "pending"
