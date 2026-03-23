@@ -231,6 +231,11 @@ class MemoryTool:
                     content, collection="code",
                     metadata={"language": lang, "description": desc},
                 )
+            elif self.tool_name == "graphiti_search":
+                return await self._graphiti_search(
+                    query=args.get("query", ""),
+                    search_type=args.get("search_type", "general"),
+                )
             return f"Unknown memory tool: {self.tool_name}"
         except Exception as exc:
             logger.error("memory tool %s failed: %s", self.tool_name, exc)
@@ -267,6 +272,29 @@ class MemoryTool:
                     lines.append(f"[{meta_str}]")
             lines.append("")
 
+        return "\n".join(lines)
+
+    async def _graphiti_search(self, query: str, search_type: str = "general") -> str:
+        """Search the Neo4j knowledge graph via graph.search_graph()."""
+        if not query:
+            return "No query provided."
+        try:
+            from src.memory.graph import search_graph
+            results = await search_graph(query=query, search_type=search_type)
+        except ImportError:
+            return "Knowledge graph not available — neo4j package not installed."
+        except Exception as exc:
+            return f"Graph search failed: {exc}"
+
+        if not results:
+            return "No results found in the knowledge graph."
+
+        import json
+        lines = [f"Found {len(results)} result(s) in knowledge graph ({search_type}):\n"]
+        for i, r in enumerate(results, 1):
+            lines.append(f"--- Result {i} ---")
+            lines.append(json.dumps(r, default=str, indent=2))
+            lines.append("")
         return "\n".join(lines)
 
     async def _store(

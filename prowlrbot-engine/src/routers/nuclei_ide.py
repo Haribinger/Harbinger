@@ -158,36 +158,22 @@ async def test_template(body: TemplateTest):
     if not validation["valid"]:
         return {"status": "validation_failed", "errors": validation["errors"]}
 
-    # Run via Docker if available
-    try:
-        from src.docker.client import DockerClient
-        docker = DockerClient()
+    # Execution requires a running agent container with nuclei installed.
+    # We cannot mount host temp files into Docker containers without privileged access,
+    # so return an honest "not_implemented" with the validated template and a CLI hint.
+    result = {
+        "status": "not_implemented",
+        "message": (
+            "Template passed validation but live execution is not yet available from the IDE. "
+            "Use an agent container with nuclei installed to run the template."
+        ),
+        "validation": validation,
+        "target": body.target,
+        "hint": f"To test manually: nuclei -t template.yaml -u {body.target} -jsonl",
+    }
 
-        if not await docker.ping():
-            return {"status": "docker_unavailable", "message": "Docker not reachable — cannot test template"}
-
-        # Write template to temp file, run nuclei
-        import tempfile, os
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(body.yaml_content)
-            template_path = f.name
-
-        # For now, return a simulated result since we can't mount host files into containers easily
-        result = {
-            "status": "validated",
-            "message": "Template is syntactically valid. Full execution requires a running agent container.",
-            "validation": validation,
-            "target": body.target,
-            "hint": f"To test: nuclei -t template.yaml -u {body.target} -jsonl",
-        }
-
-        os.unlink(template_path)
-
-        _test_results.append({**result, "timestamp": time.time()})
-        return result
-
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    _test_results.append({**result, "timestamp": time.time()})
+    return result
 
 
 # === Scaffold ===

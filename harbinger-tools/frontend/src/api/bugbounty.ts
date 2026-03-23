@@ -50,17 +50,29 @@ function sourceBaseUrl(source: DataSource): string {
 }
 
 // Fetch raw data from a specific platform with timeout and size guard
+interface RawScopeTarget {
+  target?: string
+  asset_identifier?: string  // HackerOne
+  endpoint?: string          // Intigriti
+}
+
 interface RawPlatformEntry {
   name?: string
   url?: string
   handle?: string
-  targets?: { in_scope?: Array<{ target: string }> }
+  targets?: { in_scope?: RawScopeTarget[] }
   domains?: Array<{ name: string } | string>
   wildcards?: string[]
   max_reward?: string
   response_time?: string | number
   launch_date?: string
   start_date?: string
+}
+
+// Extract the actual target string from a scope entry — different platforms
+// use different field names (target, asset_identifier, endpoint).
+function extractTarget(entry: RawScopeTarget): string {
+  return entry.target || entry.asset_identifier || entry.endpoint || ''
 }
 
 async function fetchPlatformData(platform: string, baseUrl = DEFAULT_DATA_SOURCE): Promise<RawPlatformEntry[]> {
@@ -113,56 +125,77 @@ async function fetchWildcards(baseUrl = DEFAULT_DATA_SOURCE): Promise<string[]> 
 
 // Parse Bugcrowd data
 function parseBugcrowdData(data: RawPlatformEntry[]): BugBountyProgram[] {
-  return data.map((item) => ({
-    name: item.name || 'Unknown',
-    url: item.url || '',
-    platform: 'bugcrowd' as const,
-    domains: item.targets?.in_scope?.map((t) => t.target).filter((t) => !t.includes('*')) || [],
-    wildcards: item.targets?.in_scope?.map((t) => t.target).filter((t) => t.includes('*')) || [],
-    targets: item.targets?.in_scope?.map((t) => t.target) || [],
-    maxBounty: item.max_reward,
-    responseTime: item.response_time?.toString(),
-    launchDate: item.launch_date,
-  }))
+  return data.map((item) => {
+    const scopeTargets = (item.targets?.in_scope || []).map(extractTarget).filter(Boolean)
+    return {
+      name: item.name || 'Unknown',
+      url: item.url || '',
+      platform: 'bugcrowd' as const,
+      domains: scopeTargets.filter((t) => !t.includes('*')),
+      wildcards: scopeTargets.filter((t) => t.includes('*')),
+      targets: scopeTargets,
+      maxBounty: item.max_reward,
+      responseTime: item.response_time?.toString(),
+      launchDate: item.launch_date,
+    }
+  })
 }
 
 // Parse HackerOne data
 function parseHackerOneData(data: RawPlatformEntry[]): BugBountyProgram[] {
-  return data.map((item) => ({
-    name: item.name || 'Unknown',
-    url: `https://hackerone.com/${item.handle}`,
-    platform: 'hackerone' as const,
-    domains: item.targets?.in_scope?.map((t) => t.target).filter((t) => !t.includes('*')) || [],
-    wildcards: item.targets?.in_scope?.map((t) => t.target).filter((t) => t.includes('*')) || [],
-    targets: item.targets?.in_scope?.map((t) => t.target) || [],
-    responseTime: item.response_time?.toString(),
-    launchDate: item.start_date,
-  }))
+  return data.map((item) => {
+    const scopeTargets = (item.targets?.in_scope || []).map(extractTarget).filter(Boolean)
+    return {
+      name: item.name || 'Unknown',
+      url: item.url ? item.url : `https://hackerone.com/${item.handle}`,
+      platform: 'hackerone' as const,
+      domains: scopeTargets.filter((t) => !t.includes('*')),
+      wildcards: scopeTargets.filter((t) => t.includes('*')),
+      targets: scopeTargets,
+      responseTime: item.response_time?.toString(),
+      launchDate: item.start_date,
+    }
+  })
 }
 
-// Parse Intigriti data
+// Parse Intigriti data — uses targets.in_scope (like others) or top-level domains
 function parseIntigritiData(data: RawPlatformEntry[]): BugBountyProgram[] {
-  return data.map((item) => ({
-    name: item.name || 'Unknown',
-    url: item.url || '',
-    platform: 'intigriti' as const,
-    domains: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name).filter((d) => !d.includes('*')) || [],
-    wildcards: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name).filter((d) => d.includes('*')) || [],
-    targets: (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name) || [],
-  }))
+  return data.map((item) => {
+    // Intigriti may have targets.in_scope (with endpoint field) or top-level domains
+    let scopeTargets: string[]
+    if (item.targets?.in_scope?.length) {
+      scopeTargets = item.targets.in_scope.map(extractTarget).filter(Boolean)
+    } else {
+      scopeTargets = (item.domains as Array<{ name: string }> | undefined)?.map((d) => d.name).filter(Boolean) || []
+    }
+    return {
+      name: item.name || 'Unknown',
+      url: item.url || '',
+      platform: 'intigriti' as const,
+      domains: scopeTargets.filter((d) => !d.includes('*')),
+      wildcards: scopeTargets.filter((d) => d.includes('*')),
+      targets: scopeTargets,
+    }
+  })
 }
 
 // Parse other platform data (Federacy, YesWeHack)
 function parseGenericData(data: RawPlatformEntry[], platform: BugBountyProgram['platform']): BugBountyProgram[] {
   return data.map((item) => {
-    const rawDomains = (item.domains || []).map((d) => typeof d === 'string' ? d : d.name)
+    // Try targets.in_scope first, fall back to top-level domains
+    let rawTargets: string[]
+    if (item.targets?.in_scope?.length) {
+      rawTargets = item.targets.in_scope.map(extractTarget).filter(Boolean)
+    } else {
+      rawTargets = (item.domains || []).map((d) => typeof d === 'string' ? d : d.name).filter(Boolean)
+    }
     return {
       name: item.name || 'Unknown',
       url: item.url || '',
       platform,
-      domains: rawDomains.filter((d) => !d.includes('*')),
-      wildcards: rawDomains.filter((d) => d.includes('*')),
-      targets: rawDomains,
+      domains: rawTargets.filter((d) => !d.includes('*')),
+      wildcards: rawTargets.filter((d) => d.includes('*')),
+      targets: rawTargets,
     }
   })
 }

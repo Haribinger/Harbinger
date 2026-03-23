@@ -1442,6 +1442,13 @@ func main() {
 		ensureC2Tables()
 		ensureVectorMemoryTable()
 		ensureExecutionTables()
+		ensureFindingsTable()
+		ensureVulnsTable()
+		ensureScopeTable()
+		// Load persisted data into read caches
+		loadFindingsFromDB()
+		loadVulnsFromDB()
+		loadScopeFromDB()
 	}
 
 	// Initialize channel configs from env

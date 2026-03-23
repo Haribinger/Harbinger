@@ -1991,6 +1991,45 @@ function ChannelsSection() {
   )
 }
 
+// ─── Model Select Dropdown ────────────────────────────────────────────────
+
+function ModelSelect({
+  value,
+  provider,
+  getModels,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  provider: string
+  getModels: (id: Provider) => string[]
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  const models = getModels(provider as Provider)
+  // If current value isn't in the list (custom entry or not yet fetched), keep it as an option
+  const hasCurrentValue = value && !models.includes(value)
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {hasCurrentValue && <option value={value}>{value}</option>}
+      {models.map((m) => (
+        <option key={m} value={m}>{m}</option>
+      ))}
+      {models.length === 0 && !hasCurrentValue && (
+        <option value={value} disabled>
+          {value || '(no models detected)'}
+        </option>
+      )}
+    </select>
+  )
+}
+
 // ─── Model Router Section ─────────────────────────────────────────────────
 
 const _COMPLEXITY_TIERS = ['trivial', 'simple', 'moderate', 'complex', 'massive'] as const
@@ -2016,8 +2055,11 @@ function ModelRouterSection() {
     toggleLocalMode,
   } = useModelRouterStore()
 
+  const { getModelsForProvider, fetchAllProviderModels } = useSecretsStore()
+
   useEffect(() => {
     fetchRoutes()
+    fetchAllProviderModels()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -2133,17 +2175,19 @@ function ModelRouterSection() {
                 ))}
               </select>
 
-              <input
+              <ModelSelect
                 value={route.model}
-                onChange={(e) => updateRoute(idx, { model: e.target.value })}
-                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
+                provider={route.default_provider}
+                getModels={getModelsForProvider}
+                onChange={(v) => updateRoute(idx, { model: v })}
               />
 
-              <input
+              <ModelSelect
                 value={route.fallback_model || ''}
-                onChange={(e) => updateRoute(idx, { fallback_model: e.target.value, fallback_provider: e.target.value ? 'anthropic' : '' })}
+                provider={route.fallback_provider || 'anthropic'}
+                getModels={getModelsForProvider}
+                onChange={(v) => updateRoute(idx, { fallback_model: v, fallback_provider: v ? 'anthropic' : '' })}
                 placeholder="none"
-                className="bg-surface-light border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary font-mono"
               />
 
               <input
@@ -2349,9 +2393,9 @@ function ChannelMarketplaceSection() {
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30">INSTALLED</span>
               )}
               {ch.status === 'available' && (
-                <button className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30 hover:bg-[#f0c040]/20 transition-colors">
-                  INSTALL
-                </button>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e] cursor-not-allowed" title="Channel installation not implemented yet">
+                  NOT AVAILABLE
+                </span>
               )}
               {ch.status === 'coming' && (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e]">COMING SOON</span>
@@ -2436,9 +2480,9 @@ function PluginMarketplaceSection() {
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30">INSTALLED</span>
               )}
               {plugin.status === 'available' && (
-                <button className="text-[10px] font-mono px-3 py-1 rounded bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30 hover:bg-[#f0c040]/20 transition-colors">
-                  INSTALL
-                </button>
+                <span className="text-[10px] font-mono px-3 py-1 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e] cursor-not-allowed" title="Plugin installation not implemented yet">
+                  NOT AVAILABLE
+                </span>
               )}
               {plugin.status === 'coming' && (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e]">COMING SOON</span>

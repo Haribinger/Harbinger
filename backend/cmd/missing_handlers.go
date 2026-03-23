@@ -152,10 +152,42 @@ func handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 
 func handleTestProvider(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
-	// Use the existing handleTestProviderConnection logic via auth module
+
+	providerConfigsMu.RLock()
+	pc, configured := providerConfigs[provider]
+	providerConfigsMu.RUnlock()
+
+	if !configured || !pc.Enabled {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"message": fmt.Sprintf("Provider %s is not configured or not enabled", provider),
+		})
+		return
+	}
+
+	// For providers with a base URL (ollama, lmstudio), probe the endpoint
+	if pc.BaseURL != "" {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(pc.BaseURL)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"success": false,
+				"message": fmt.Sprintf("Provider %s unreachable at %s: %v", provider, pc.BaseURL, err),
+			})
+			return
+		}
+		resp.Body.Close()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"message": fmt.Sprintf("Provider %s reachable at %s (HTTP %d)", provider, pc.BaseURL, resp.StatusCode),
+		})
+		return
+	}
+
+	// Cloud providers (openai, anthropic, etc.) need API keys — we can't test without them
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"message": fmt.Sprintf("Provider %s connection test passed", provider),
+		"success": false,
+		"message": fmt.Sprintf("Provider %s has no base URL configured — cloud provider connectivity requires an API key test which is not implemented", provider),
 	})
 }
 
@@ -373,15 +405,58 @@ func handleMCPDisconnectByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMCPGetTools(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := r.PathValue("id")
+	mcpServersMu.RLock()
+	s, ok := mcpServers[id]
+	mcpServersMu.RUnlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_connected", "error": "MCP server not found"})
+		return
+	}
+	status, _ := s["status"].(string)
+	if status != "connected" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "tools": []any{}})
+		return
+	}
+	// When actually connected, would call MCP tools/list — for now return honest empty
+	writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "tools": []any{}})
 }
 
 func handleMCPGetResources(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := r.PathValue("id")
+	mcpServersMu.RLock()
+	s, ok := mcpServers[id]
+	mcpServersMu.RUnlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_connected", "error": "MCP server not found"})
+		return
+	}
+	status, _ := s["status"].(string)
+	if status != "connected" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "resources": []any{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "resources": []any{}})
 }
 
 func handleMCPGetPrompts(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := r.PathValue("id")
+	mcpServersMu.RLock()
+	s, ok := mcpServers[id]
+	mcpServersMu.RUnlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_connected", "error": "MCP server not found"})
+		return
+	}
+	status, _ := s["status"].(string)
+	if status != "connected" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "prompts": []any{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": false, "reason": "not_connected", "prompts": []any{}})
 }
 
 func handleMCPCallTool(w http.ResponseWriter, r *http.Request) {
@@ -401,9 +476,22 @@ func handleMCPTest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "url required"})
 		return
 	}
+
+	// Actually probe the MCP server URL
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(body.URL)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"message": fmt.Sprintf("MCP server at %s unreachable: %v", body.URL, err),
+		})
+		return
+	}
+	resp.Body.Close()
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"message": fmt.Sprintf("MCP server at %s reachable (%s transport)", body.URL, body.Type),
+		"message": fmt.Sprintf("MCP server at %s reachable (HTTP %d, %s transport)", body.URL, resp.StatusCode, body.Type),
 	})
 }
 
@@ -423,28 +511,11 @@ var (
 )
 
 func handlePentestStartCrack(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Hashes []string `json:"hashes"`
-		Tool   string   `json:"tool"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid body"})
-		return
-	}
-	jobID := fmt.Sprintf("crack-%d", time.Now().UnixMilli())
-	job := map[string]any{
-		"id":           jobID,
-		"tool":         body.Tool,
-		"status":       "queued",
-		"hashCount":    len(body.Hashes),
-		"crackedCount": 0,
-		"progress":     0,
-		"startedAt":    time.Now().Format(time.RFC3339),
-	}
-	crackJobsMu.Lock()
-	crackJobs = append(crackJobs, job)
-	crackJobsMu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jobId": jobID})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     false,
+		"reason": "not_implemented",
+		"error":  "Hash cracking requires hashcat/john containers — not yet wired to Docker execution engine",
+	})
 }
 
 func handlePentestCrackJobs(w http.ResponseWriter, r *http.Request) {
@@ -513,15 +584,10 @@ func handleImportWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	execID := fmt.Sprintf("exec-%d", time.Now().UnixMilli())
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         execID,
-		"workflowId": id,
-		"status":     "pending",
-		"startedAt":  time.Now().Format(time.RFC3339),
-		"results":    map[string]any{},
-		"logs":       []any{},
+		"ok":     false,
+		"reason": "not_implemented",
+		"error":  "Workflow execution engine not yet connected — use n8n or prowlrbot-engine scheduler",
 	})
 }
 
@@ -534,7 +600,11 @@ func handleCloneWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleExportWorkflow(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"yaml": ""})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     false,
+		"reason": "not_implemented",
+		"yaml":   "",
+	})
 }
 
 // ── Workflows: GET /api/workflows/{id} ───────────────────────────────────
@@ -571,12 +641,12 @@ func handleExecuteSkill(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid body"})
 		return
 	}
-	taskID := fmt.Sprintf("skill-exec-%d", time.Now().UnixMilli())
+	_ = id
+	_ = body
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"taskId":  taskID,
-		"skillId": id,
-		"status":  "queued",
+		"ok":     false,
+		"reason": "not_implemented",
+		"error":  "Skill execution engine not connected — use prowlrbot-engine /api/v2/execute or agent runtime",
 	})
 }
 
@@ -584,10 +654,43 @@ func handleExecuteSkill(w http.ResponseWriter, r *http.Request) {
 
 func handleGetAgentConfig(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
+	if !dbAvailable() {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"reason": "not_configured",
+		})
+		return
+	}
+
+	agent, err := dbGetAgent(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "agent not found"})
+		return
+	}
+
+	// Read SOUL.md for the agent's personality/config
+	soul, soulErr := readAgentSoul(agent.Type)
+	config := map[string]any{
+		"agent_type":  agent.Type,
+		"agent_name":  agent.Name,
+		"status":      agent.Status,
+		"description": agent.Description,
+	}
+	if soulErr == nil {
+		config["soul"] = soul
+	}
+
+	// Read CONFIG.yaml if it exists
+	configYaml, configErr := readAgentProfileFile(agent.Type, "CONFIG.yaml")
+	if configErr == nil {
+		config["config_yaml"] = configYaml
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":       true,
 		"agent_id": id,
-		"config":   map[string]any{},
+		"config":   config,
 	})
 }
 

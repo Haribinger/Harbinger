@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useAgentStore } from '../../store/agentStore'
 import { useSettingsStore } from '../../store/settingsStore'
+import { useSecretsStore } from '../../store/secretsStore'
 import { chatApi } from '../../api/chat'
 import type { Message, ChatSession, Agent } from '../../types'
 import toast from 'react-hot-toast'
@@ -94,7 +95,8 @@ function Chat() {
     chats,
     removeChat,
   } = useAgentStore()
-  const { rightPanelVisible, toggleRightPanel, modelDefaults } = useSettingsStore()
+  const { rightPanelVisible, toggleRightPanel, modelDefaults, updateSettings } = useSettingsStore()
+  const { activeProvider, getModelsForProvider } = useSecretsStore()
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
   const scrollToBottom = useCallback(() => {
@@ -821,7 +823,12 @@ function Chat() {
               <div>
                 <SectionHeader label="CONFIGURATION" />
                 <div className="space-y-2 mt-2">
-                  <ConfigRow label="Model" value={activeAgent?.config.model || modelDefaults.model} />
+                  <ChatModelSelector
+                    currentModel={activeAgent?.config.model || modelDefaults.model}
+                    activeProvider={activeProvider}
+                    getModelsForProvider={getModelsForProvider}
+                    onChange={(model) => updateSettings({ modelDefaults: { ...modelDefaults, model } })}
+                  />
                   <ConfigRow label="Temperature" value={String(activeAgent?.config.temperature || 0.7)} />
                   <ConfigRow label="Max Tokens" value={String(activeAgent?.config.maxTokens || 4096)} />
                   <ConfigRow label="Channel" value="WebChat" />
@@ -1014,6 +1021,68 @@ function ConfigRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between text-[10px] px-1">
       <span style={{ color: C.dim }}>{label}</span>
       <span className="font-medium" style={{ color: C.muted }}>{value}</span>
+    </div>
+  )
+}
+
+// ── Chat Model Selector ────────────────────────────────────────────────────
+import type { Provider } from '../../store/secretsStore'
+import { PROVIDER_MODELS } from '../../store/secretsStore'
+
+const ALL_CHAT_PROVIDERS: Provider[] = ['ollama', 'anthropic', 'openai', 'groq', 'google', 'gemini', 'mistral', 'lmstudio', 'gpt4all']
+
+function ChatModelSelector({
+  currentModel,
+  activeProvider,
+  getModelsForProvider,
+  onChange,
+}: {
+  currentModel: string
+  activeProvider: Provider
+  getModelsForProvider: (id: Provider) => string[]
+  onChange: (model: string) => void
+}) {
+  // Build grouped model list: active provider first, then others with models
+  const groups: Array<{ provider: Provider; models: string[] }> = []
+
+  // Active provider first
+  const activeModels = getModelsForProvider(activeProvider)
+  if (activeModels.length > 0) {
+    groups.push({ provider: activeProvider, models: activeModels })
+  }
+
+  // Other providers
+  for (const pid of ALL_CHAT_PROVIDERS) {
+    if (pid === activeProvider) continue
+    const models = getModelsForProvider(pid)
+    if (models.length > 0) groups.push({ provider: pid, models })
+  }
+
+  // If current model isn't in any group, show it as a standalone option
+  const allModels = groups.flatMap((g) => g.models)
+  const hasCurrentModel = allModels.includes(currentModel)
+
+  return (
+    <div className="flex items-center justify-between text-[10px] px-1">
+      <span style={{ color: C.dim }}>Model</span>
+      <select
+        value={currentModel}
+        onChange={(e) => onChange(e.target.value)}
+        className="font-mono font-medium text-[10px] bg-transparent border-none outline-none cursor-pointer text-right"
+        style={{ color: C.gold, maxWidth: 180 }}
+      >
+        {!hasCurrentModel && <option value={currentModel}>{currentModel}</option>}
+        {groups.map((g) => (
+          <optgroup key={g.provider} label={g.provider.toUpperCase()}>
+            {g.models.map((m) => (
+              <option key={`${g.provider}-${m}`} value={m}>{m}</option>
+            ))}
+          </optgroup>
+        ))}
+        {groups.length === 0 && (
+          <option value={currentModel}>{currentModel}</option>
+        )}
+      </select>
     </div>
   )
 }

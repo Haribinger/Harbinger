@@ -153,33 +153,42 @@ async def _store_entities_in_graph(
     nodes_created = 0
 
     try:
-        # Store hosts
+        # Store hosts — signature: store_host(ip, hostname="", mission_id=None)
         for ip in entities["hosts"]:
-            await graph_store.store_host(ip, source=chunk.metadata.get("tool", "ingest"))
+            await graph_store.store_host(ip)
             nodes_created += 1
 
         # Store domains as hosts
         for domain in entities["domains"]:
-            await graph_store.store_host(domain, hostname=domain, source=chunk.metadata.get("tool", "ingest"))
+            await graph_store.store_host(domain, hostname=domain)
             nodes_created += 1
 
         # Store CVEs as vulnerabilities
+        # signature: store_vulnerability(host_ip, port, vuln_id, severity, title, evidence="")
+        # We don't have host/port context here, use first host or placeholder
         for cve in entities["cves"]:
             severity = entities["severities"][0] if entities["severities"] else "unknown"
+            host_ip = entities["hosts"][0] if entities["hosts"] else "unknown"
             await graph_store.store_vulnerability(
-                cve_id=cve,
+                host_ip=host_ip,
+                port=0,
+                vuln_id=cve,
                 severity=severity,
                 title=cve,
                 evidence=chunk.content[:500],
             )
             nodes_created += 1
 
-        # Link techniques to tools
+        # Link techniques to vulnerabilities
+        # signature: store_technique(vuln_id, tool, args="", success=True)
         for technique in entities["techniques"]:
             tool_name = entities["tools"][0] if entities["tools"] else "unknown"
+            # Use first CVE as the vuln_id link, or a synthetic ID from the technique name
+            vuln_id = entities["cves"][0] if entities["cves"] else f"technique:{technique}"
             await graph_store.store_technique(
+                vuln_id=vuln_id,
                 tool=tool_name,
-                technique=technique,
+                args=technique,
                 success=True,
             )
             nodes_created += 1

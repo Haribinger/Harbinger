@@ -1,20 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useAgentShellStore, type OutputLine } from '../../store/agentShellStore'
-
-// Agent codenames for the selector dropdown
-const AGENTS = [
-  { codename: 'PATHFINDER', role: 'Recon Scout', dir: 'recon-scout' },
-  { codename: 'BREACH', role: 'Web Hacker', dir: 'web-hacker' },
-  { codename: 'PHANTOM', role: 'Cloud Infiltrator', dir: 'cloud-infiltrator' },
-  { codename: 'SPECTER', role: 'OSINT Detective', dir: 'osint-detective' },
-  { codename: 'CIPHER', role: 'Binary RE', dir: 'binary-reverser' },
-  { codename: 'SCRIBE', role: 'Report Writer', dir: 'report-writer' },
-  { codename: 'SAM', role: 'Coding Assistant', dir: 'coding-assistant' },
-  { codename: 'BRIEF', role: 'Morning Reporter', dir: 'morning-brief' },
-  { codename: 'SAGE', role: 'Learning Agent', dir: 'learning-agent' },
-  { codename: 'LENS', role: 'Browser Agent', dir: 'browser-agent' },
-  { codename: 'MAINTAINER', role: 'DevOps/Health', dir: 'maintainer' },
-]
+import { useAgentStore } from '../../store/agentStore'
 
 // ── Stream color map ────────────────────────────────────────────────────────
 
@@ -71,8 +57,28 @@ export default function AgentShell() {
     clearOutput,
   } = useAgentShellStore()
 
+  const { agents, fetchAgents } = useAgentStore()
+
+  // Fetch agents from backend on mount
+  useEffect(() => {
+    fetchAgents()
+  }, [fetchAgents])
+
+  // Derive agent list from store — fall back to empty if no agents loaded
+  const agentList = useMemo(() =>
+    agents.map(a => ({ codename: a.codename || a.name, role: a.type || '' })),
+    [agents]
+  )
+
   const [commandInput, setCommandInput] = useState('')
-  const [selectedAgent, setSelectedAgent] = useState(AGENTS[0].codename)
+  const [selectedAgent, setSelectedAgent] = useState('')
+
+  // Set default selection when agents load
+  useEffect(() => {
+    if (agentList.length > 0 && !selectedAgent) {
+      setSelectedAgent(agentList[0].codename)
+    }
+  }, [agentList, selectedAgent])
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
 
@@ -161,9 +167,12 @@ export default function AgentShell() {
             className="bg-[#0d0d15] border border-[#1a1a2e] text-gray-300 text-sm font-mono
                        rounded px-2 py-1.5 focus:outline-none focus:border-[#f0c040]"
           >
-            {AGENTS.map((a) => (
+            {agentList.length === 0 && (
+              <option value="">No agents loaded</option>
+            )}
+            {agentList.map((a) => (
               <option key={a.codename} value={a.codename}>
-                {a.codename} — {a.role}
+                {a.codename}{a.role ? ` — ${a.role}` : ''}
               </option>
             ))}
           </select>

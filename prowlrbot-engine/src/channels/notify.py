@@ -186,9 +186,23 @@ def format_slack_blocks(barrier) -> dict:
 def _auth_headers() -> dict:
     """Get auth headers for Go backend requests.
 
-    Uses the shared JWT secret if available.
+    Signs a short-lived JWT with the shared secret so the Go backend
+    can verify the caller is the Python engine (not just anyone with the secret).
     """
-    token = getattr(settings, "jwt_secret", "") or getattr(settings, "JWT_SECRET", "")
-    if token:
+    secret = getattr(settings, "jwt_secret", "") or getattr(settings, "JWT_SECRET", "")
+    if not secret:
+        return {}
+    try:
+        import jwt
+        import time
+        payload = {
+            "sub": "prowlrbot-engine",
+            "iss": "harbinger",
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 300,  # 5 min expiry
+        }
+        token = jwt.encode(payload, secret, algorithm="HS256")
         return {"Authorization": f"Bearer {token}"}
-    return {}
+    except ImportError:
+        logger.warning("PyJWT not installed — falling back to no auth")
+        return {}

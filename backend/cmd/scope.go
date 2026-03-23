@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -41,6 +42,79 @@ func init() {
 	scopeExclusions = make([]ScopeExclusion, 0)
 }
 
+// loadScopeFromDB populates scope cache from Postgres on startup.
+func loadScopeFromDB() {
+	if !dbAvailable() {
+		return
+	}
+
+	// Load assets
+	rows, err := db.Query(`SELECT id, pattern, COALESCE(type,'wildcard'), COALESCE(tags,'[]'), COALESCE(added_by,''), created_at FROM scope_assets ORDER BY created_at`)
+	if err != nil {
+		log.Printf("[DB] Failed to load scope assets: %v", err)
+	} else {
+		defer rows.Close()
+		var assets []ScopeAsset
+		for rows.Next() {
+			var a ScopeAsset
+			var tagsJSON string
+			var createdAt time.Time
+			if err := rows.Scan(&a.ID, &a.Pattern, &a.Type, &tagsJSON, &a.AddedBy, &createdAt); err != nil {
+				continue
+			}
+			json.Unmarshal([]byte(tagsJSON), &a.Tags)
+			if a.Tags == nil { a.Tags = []string{} }
+			a.CreatedAt = createdAt.Format(time.RFC3339)
+			assets = append(assets, a)
+		}
+		scopeMu.Lock()
+		scopeAssets = assets
+		scopeMu.Unlock()
+		log.Printf("[DB] Loaded %d scope assets from database", len(assets))
+	}
+
+	// Load exclusions
+	rows2, err := db.Query(`SELECT id, pattern, COALESCE(reason,''), COALESCE(tags,'[]'), COALESCE(added_by,''), created_at FROM scope_exclusions ORDER BY created_at`)
+	if err != nil {
+		log.Printf("[DB] Failed to load scope exclusions: %v", err)
+		return
+	}
+	defer rows2.Close()
+	var exclusions []ScopeExclusion
+	for rows2.Next() {
+		var e ScopeExclusion
+		var tagsJSON string
+		var createdAt time.Time
+		if err := rows2.Scan(&e.ID, &e.Pattern, &e.Reason, &tagsJSON, &e.AddedBy, &createdAt); err != nil {
+			continue
+		}
+		json.Unmarshal([]byte(tagsJSON), &e.Tags)
+		if e.Tags == nil { e.Tags = []string{} }
+		e.CreatedAt = createdAt.Format(time.RFC3339)
+		exclusions = append(exclusions, e)
+	}
+	scopeMu.Lock()
+	scopeExclusions = exclusions
+	scopeMu.Unlock()
+	log.Printf("[DB] Loaded %d scope exclusions from database", len(exclusions))
+}
+
+func dbInsertScopeAsset(a *ScopeAsset) error {
+	if !dbAvailable() { return fmt.Errorf("database not available") }
+	tagsJSON, _ := json.Marshal(a.Tags)
+	_, err := db.Exec(`INSERT INTO scope_assets (id, pattern, type, tags, added_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+		a.ID, a.Pattern, a.Type, string(tagsJSON), a.AddedBy, a.CreatedAt)
+	return err
+}
+
+func dbInsertScopeExclusion(e *ScopeExclusion) error {
+	if !dbAvailable() { return fmt.Errorf("database not available") }
+	tagsJSON, _ := json.Marshal(e.Tags)
+	_, err := db.Exec(`INSERT INTO scope_exclusions (id, pattern, reason, tags, added_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+		e.ID, e.Pattern, e.Reason, string(tagsJSON), e.AddedBy, e.CreatedAt)
+	return err
+}
+
 // GET /api/scope/assets — list all in-scope assets
 func handleListScopeAssets(w http.ResponseWriter, r *http.Request) {
 	scopeMu.RLock()
@@ -74,6 +148,9 @@ func handleAddScopeAsset(w http.ResponseWriter, r *http.Request) {
 		Tags:      body.Tags,
 		AddedBy:   userID,
 		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+	if err := dbInsertScopeAsset(&asset); err != nil {
+		log.Printf("[SCOPE] DB insert failed: %v", err)
 	}
 	scopeMu.Lock()
 	scopeAssets = append(scopeAssets, asset)
@@ -172,6 +249,9 @@ func handleAddScopeExclusion(w http.ResponseWriter, r *http.Request) {
 		Tags:      body.Tags,
 		AddedBy:   userID,
 		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+	if err := dbInsertScopeExclusion(&excl); err != nil {
+		log.Printf("[SCOPE] DB insert exclusion failed: %v", err)
 	}
 	scopeMu.Lock()
 	scopeExclusions = append(scopeExclusions, excl)

@@ -198,17 +198,22 @@ func handleBrowserScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return cached screenshot data if available — upgrade to CDP Page.captureScreenshot for live capture
-	data := session.Screenshot
-	if data == "" {
-		data = "" // Empty — frontend handles the empty state
+	// If a cached screenshot exists (set by a real CDP capture), return it
+	if session.Screenshot != "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"data":      session.Screenshot,
+			"timestamp": time.Now().Format(time.RFC3339),
+			"sessionId": id,
+		})
+		return
 	}
 
+	// No CDP connection — cannot capture screenshots
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":        true,
-		"data":      data,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"sessionId": id,
+		"ok":     false,
+		"reason": "cdp_not_connected",
+		"data":   "",
 	})
 }
 
@@ -245,9 +250,20 @@ func handleBrowserExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Returns nil result — upgrade to CDP Runtime.evaluate for actual JS execution
+	// No CDP connection — cannot execute JavaScript in page context
+	if session.CDP == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"reason": "cdp_not_connected",
+			"result": nil,
+		})
+		return
+	}
+
+	// CDP Runtime.evaluate would go here when CDP is wired up
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":     true,
+		"ok":     false,
+		"reason": "cdp_not_connected",
 		"result": nil,
 	})
 }
@@ -264,19 +280,29 @@ func handleBrowserClick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	browserSessionsMu.Lock()
+	browserSessionsMu.RLock()
 	session, ok := browserSessions[id]
-	if ok {
-		session.LastAction = fmt.Sprintf("clicked %s", body.Selector)
-	}
-	browserSessionsMu.Unlock()
+	browserSessionsMu.RUnlock()
 
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "session not found"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "selector": body.Selector})
+	// No CDP connection — cannot interact with DOM elements
+	if session.CDP == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"reason": "cdp_not_connected",
+		})
+		return
+	}
+
+	// CDP DOM.querySelector + Input.dispatchMouseEvent would go here
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     false,
+		"reason": "cdp_not_connected",
+	})
 }
 
 // POST /api/browser/sessions/{id}/type — type text into element
@@ -292,19 +318,29 @@ func handleBrowserType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	browserSessionsMu.Lock()
+	browserSessionsMu.RLock()
 	session, ok := browserSessions[id]
-	if ok {
-		session.LastAction = fmt.Sprintf("typed into %s", body.Selector)
-	}
-	browserSessionsMu.Unlock()
+	browserSessionsMu.RUnlock()
 
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "session not found"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	// No CDP connection — cannot type into DOM elements
+	if session.CDP == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"reason": "cdp_not_connected",
+		})
+		return
+	}
+
+	// CDP Input.dispatchKeyEvent would go here
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     false,
+		"reason": "cdp_not_connected",
+	})
 }
 
 // GET /api/browser/sessions/{id}/console — get console logs
@@ -356,8 +392,33 @@ func handleBrowserClear(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/browser/sessions/{id}/elements — list page elements
 func handleBrowserElements(w http.ResponseWriter, r *http.Request) {
-	// Returns empty list — upgrade to CDP DOM.getDocument + DOM.querySelectorAll for live element inspection
-	writeJSON(w, http.StatusOK, []map[string]string{})
+	id := r.PathValue("id")
+
+	browserSessionsMu.RLock()
+	session, ok := browserSessions[id]
+	browserSessionsMu.RUnlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "session not found"})
+		return
+	}
+
+	// No CDP connection — cannot inspect DOM elements
+	if session.CDP == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       false,
+			"reason":   "cdp_not_connected",
+			"elements": []any{},
+		})
+		return
+	}
+
+	// CDP DOM.getDocument + DOM.querySelectorAll would go here
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       false,
+		"reason":   "cdp_not_connected",
+		"elements": []any{},
+	})
 }
 
 // GET /api/browser/sessions/{id}/source — get page HTML source
@@ -369,14 +430,25 @@ func handleBrowserSource(w http.ResponseWriter, r *http.Request) {
 	browserSessionsMu.RUnlock()
 
 	if !ok {
-		writeJSON(w, http.StatusOK, map[string]string{"html": ""})
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "session not found"})
 		return
 	}
 
-	// Returns minimal placeholder HTML — upgrade to CDP DOM.getOuterHTML for full page source
+	// No CDP connection — cannot retrieve page source
+	if session.CDP == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"reason": "cdp_not_connected",
+			"html":   "",
+		})
+		return
+	}
+
+	// CDP DOM.getOuterHTML would go here
 	writeJSON(w, http.StatusOK, map[string]any{
-		"html":      fmt.Sprintf("<!-- Page source for %s -->", session.URL),
-		"sessionId": id,
+		"ok":     false,
+		"reason": "cdp_not_connected",
+		"html":   "",
 	})
 }
 
@@ -427,8 +499,8 @@ func handleBrowserStats(w http.ResponseWriter, r *http.Request) {
 		"activeSessions":  active,
 		"agentSessions":   withAgent,
 		"manualSessions":  total - withAgent,
-		"cdpAvailable":    true,
-		"screenshotReady": true,
+		"cdpAvailable":    false,
+		"screenshotReady": false,
 	})
 }
 

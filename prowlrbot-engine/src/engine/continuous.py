@@ -39,9 +39,7 @@ class ContinuousMission:
                 self.last_cycle = datetime.utcnow()
                 logger.info("Continuous mission %d — cycle %d", self.mission_id, self.cycle_count)
 
-                # Each cycle creates fresh tasks from the template
-                # The scheduler handles execution
-                # TODO: Wire to actual scheduler when integrated
+                await self._run_cycle()
 
                 await asyncio.sleep(self.scan_interval)
             except asyncio.CancelledError:
@@ -49,6 +47,60 @@ class ContinuousMission:
             except Exception as e:
                 logger.error("Continuous mission %d cycle failed: %s", self.mission_id, e)
                 await asyncio.sleep(60)  # Back off on error
+
+    async def _run_cycle(self):
+        """Create fresh tasks from the mission's template and execute via scheduler."""
+        import src.db as db
+        from src.models.mission import Mission
+        from src.models.task import Task
+
+        session_factory = db.get_session()
+        if session_factory is None:
+            logger.warning("Continuous mission %d: DB not available, skipping cycle", self.mission_id)
+            return
+
+        try:
+            from sqlalchemy import select
+            async with session_factory() as session:
+                mission = await session.get(Mission, self.mission_id)
+                if not mission:
+                    logger.error("Continuous mission %d: mission not found in DB", self.mission_id)
+                    self._running = False
+                    return
+
+                # Get the template to regenerate tasks
+                template_id = getattr(mission, "template_id", None)
+                if template_id:
+                    from src.registry.templates import template_registry
+                    template = template_registry.get(template_id)
+                    if template and template.tasks:
+                        for i, task_spec in enumerate(template.tasks):
+                            task = Task(
+                                mission_id=self.mission_id,
+                                title=task_spec.get("title", f"Cycle {self.cycle_count} Task {i}"),
+                                description=task_spec.get("description", ""),
+                                agent_codename=task_spec.get("agent_codename"),
+                                docker_image=task_spec.get("docker_image"),
+                                depends_on=task_spec.get("depends_on", []),
+                                priority=task_spec.get("priority", 0),
+                                input=task_spec.get("input"),
+                                status="created",
+                                position=i,
+                            )
+                            session.add(task)
+                        await session.commit()
+                        logger.info(
+                            "Continuous mission %d cycle %d: created %d tasks from template %s",
+                            self.mission_id, self.cycle_count, len(template.tasks), template_id,
+                        )
+
+            # Execute via scheduler
+            from src.engine.scheduler import MissionScheduler
+            scheduler = MissionScheduler()
+            await scheduler.execute(self.mission_id)
+
+        except Exception as exc:
+            logger.error("Continuous mission %d cycle execution failed: %s", self.mission_id, exc)
 
     @property
     def status(self) -> dict:

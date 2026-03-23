@@ -96,7 +96,22 @@ async def sync_registries() -> dict:
 
 
 def _auth_headers() -> dict:
-    token = getattr(settings, "jwt_secret", "")
-    if token:
+    """Sign a short-lived JWT for Go backend auth."""
+    secret = getattr(settings, "jwt_secret", "")
+    if not secret:
+        return {}
+    try:
+        import jwt
+        import time
+        payload = {
+            "sub": "prowlrbot-engine",
+            "iss": "harbinger",
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 300,
+        }
+        token = jwt.encode(payload, secret, algorithm="HS256")
         return {"Authorization": f"Bearer {token}"}
-    return {}
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).warning("PyJWT not installed — falling back to no auth")
+        return {}

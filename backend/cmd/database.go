@@ -1148,6 +1148,121 @@ func ensureVectorMemoryTable() {
 }
 
 // ============================================================================
+// FINDINGS, VULNS, SCOPE TABLES — Core platform data, MUST persist
+// ============================================================================
+
+func ensureFindingsTable() {
+	if db == nil {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS findings (
+			id             TEXT PRIMARY KEY,
+			mission_id     TEXT,
+			task_id        TEXT,
+			agent_codename TEXT,
+			severity       TEXT NOT NULL DEFAULT 'medium',
+			title          TEXT NOT NULL,
+			host           TEXT NOT NULL,
+			port           INTEGER DEFAULT 0,
+			endpoint       TEXT,
+			category       TEXT,
+			description    TEXT,
+			evidence       JSONB DEFAULT '[]',
+			tool           TEXT,
+			tool_output    TEXT,
+			cve_id         TEXT,
+			cvss           REAL DEFAULT 0,
+			confidence     TEXT DEFAULT 'possible',
+			false_positive BOOLEAN DEFAULT FALSE,
+			fp_reason      TEXT,
+			status         TEXT NOT NULL DEFAULT 'new',
+			vuln_id        TEXT,
+			tags           JSONB DEFAULT '[]',
+			metadata       JSONB DEFAULT '{}',
+			found_at       TIMESTAMPTZ DEFAULT NOW(),
+			updated_at     TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] findings table: %v", err)
+		return
+	}
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_findings_host ON findings(host)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_findings_mission ON findings(mission_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)`)
+}
+
+func ensureVulnsTable() {
+	if db == nil {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS vulnerabilities (
+			id          TEXT PRIMARY KEY,
+			title       TEXT NOT NULL,
+			severity    TEXT NOT NULL DEFAULT 'medium',
+			status      TEXT NOT NULL DEFAULT 'new',
+			cve_id      TEXT,
+			cvss        REAL DEFAULT 0,
+			target      TEXT,
+			endpoint    TEXT,
+			category    TEXT,
+			description TEXT,
+			impact      TEXT,
+			remediation TEXT,
+			evidence    JSONB DEFAULT '[]',
+			agent_id    TEXT,
+			agent_name  TEXT,
+			tags        JSONB DEFAULT '[]',
+			metadata    JSONB DEFAULT '{}',
+			found_at    TIMESTAMPTZ DEFAULT NOW(),
+			updated_at  TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] vulnerabilities table: %v", err)
+		return
+	}
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vulns_severity ON vulnerabilities(severity)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vulns_status ON vulnerabilities(status)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_vulns_target ON vulnerabilities(target)`)
+}
+
+func ensureScopeTable() {
+	if db == nil {
+		return
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS scope_assets (
+			id         TEXT PRIMARY KEY,
+			pattern    TEXT NOT NULL,
+			type       TEXT DEFAULT 'wildcard',
+			tags       JSONB DEFAULT '[]',
+			added_by   TEXT,
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Printf("[DB] scope_assets table: %v", err)
+		return
+	}
+	_, _ = db.Exec(`
+		CREATE TABLE IF NOT EXISTS scope_exclusions (
+			id         TEXT PRIMARY KEY,
+			pattern    TEXT NOT NULL,
+			reason     TEXT,
+			tags       JSONB DEFAULT '[]',
+			added_by   TEXT,
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_scope_assets_pattern ON scope_assets(pattern)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_scope_exclusions_pattern ON scope_exclusions(pattern)`)
+}
+
+// ============================================================================
 // EXECUTION / PIPELINE TABLES
 // ============================================================================
 

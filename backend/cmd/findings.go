@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -73,12 +74,97 @@ type FindingsSummary struct {
 }
 
 var (
-	findingStore   []Finding
-	findingStoreMu sync.RWMutex
+	findingCache   []Finding // Read cache — populated from DB on startup, updated on writes
+	findingCacheMu sync.RWMutex
 )
 
 func init() {
-	findingStore = make([]Finding, 0)
+	findingCache = make([]Finding, 0)
+}
+
+// loadFindingsFromDB populates the in-memory cache from Postgres.
+// Called on startup so the UI shows data immediately.
+func loadFindingsFromDB() {
+	if !dbAvailable() {
+		return
+	}
+	rows, err := db.Query(`
+		SELECT id, COALESCE(mission_id,''), COALESCE(task_id,''), COALESCE(agent_codename,''),
+		       severity, title, host, COALESCE(port,0), COALESCE(endpoint,''),
+		       COALESCE(category,''), COALESCE(description,''),
+		       COALESCE(evidence,'[]'), COALESCE(tool,''), COALESCE(tool_output,''),
+		       COALESCE(cve_id,''), COALESCE(cvss,0), COALESCE(confidence,'possible'),
+		       COALESCE(false_positive,false), COALESCE(fp_reason,''),
+		       COALESCE(status,'new'), COALESCE(vuln_id,''),
+		       COALESCE(tags,'[]'), COALESCE(metadata,'{}'),
+		       COALESCE(found_at, NOW()), COALESCE(updated_at, NOW())
+		FROM findings ORDER BY found_at DESC
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to load findings: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var loaded []Finding
+	for rows.Next() {
+		var f Finding
+		var evidenceJSON, tagsJSON, metadataJSON string
+		var foundAt, updatedAt time.Time
+
+		err := rows.Scan(
+			&f.ID, &f.MissionID, &f.TaskID, &f.AgentCodename,
+			&f.Severity, &f.Title, &f.Host, &f.Port, &f.Endpoint,
+			&f.Category, &f.Description,
+			&evidenceJSON, &f.Tool, &f.ToolOutput,
+			&f.CVEID, &f.CVSS, &f.Confidence,
+			&f.FalsePositive, &f.FPReason,
+			&f.Status, &f.VulnID,
+			&tagsJSON, &metadataJSON,
+			&foundAt, &updatedAt,
+		)
+		if err != nil {
+			log.Printf("[DB] Finding scan error: %v", err)
+			continue
+		}
+		json.Unmarshal([]byte(evidenceJSON), &f.Evidence)
+		json.Unmarshal([]byte(tagsJSON), &f.Tags)
+		json.Unmarshal([]byte(metadataJSON), &f.Metadata)
+		if f.Evidence == nil {
+			f.Evidence = []FindingEvidence{}
+		}
+		f.FoundAt = foundAt.Format(time.RFC3339)
+		f.UpdatedAt = updatedAt.Format(time.RFC3339)
+		loaded = append(loaded, f)
+	}
+
+	findingCacheMu.Lock()
+	findingCache = loaded
+	findingCacheMu.Unlock()
+	log.Printf("[DB] Loaded %d findings from database", len(loaded))
+}
+
+// dbInsertFinding persists a finding to Postgres. Returns error if DB unavailable.
+func dbInsertFinding(f *Finding) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	evidenceJSON, _ := json.Marshal(f.Evidence)
+	tagsJSON, _ := json.Marshal(f.Tags)
+	metadataJSON, _ := json.Marshal(f.Metadata)
+
+	_, err := db.Exec(`
+		INSERT INTO findings (id, mission_id, task_id, agent_codename, severity, title, host, port,
+		    endpoint, category, description, evidence, tool, tool_output, cve_id, cvss,
+		    confidence, false_positive, fp_reason, status, vuln_id, tags, metadata, found_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+	`,
+		f.ID, f.MissionID, f.TaskID, f.AgentCodename, f.Severity, f.Title, f.Host, f.Port,
+		f.Endpoint, f.Category, f.Description, string(evidenceJSON), f.Tool, f.ToolOutput,
+		f.CVEID, f.CVSS, f.Confidence, f.FalsePositive, f.FPReason, f.Status, f.VulnID,
+		string(tagsJSON), string(metadataJSON), f.FoundAt, f.UpdatedAt,
+	)
+	return err
 }
 
 // buildFindingsSummary computes counts across severity, category, and agent.
@@ -106,8 +192,8 @@ func buildFindingsSummary(findings []Finding) FindingsSummary {
 
 // GET /api/findings — list findings with optional filters
 func handleListFindings(w http.ResponseWriter, r *http.Request) {
-	findingStoreMu.RLock()
-	defer findingStoreMu.RUnlock()
+	findingCacheMu.RLock()
+	defer findingCacheMu.RUnlock()
 
 	severity := r.URL.Query().Get("severity")
 	missionID := r.URL.Query().Get("missionId")
@@ -117,7 +203,7 @@ func handleListFindings(w http.ResponseWriter, r *http.Request) {
 	hideFP := r.URL.Query().Get("hideFalsePositives") == "true"
 
 	filtered := make([]Finding, 0)
-	for _, f := range findingStore {
+	for _, f := range findingCache {
 		if severity != "" && f.Severity != severity {
 			continue
 		}
@@ -143,7 +229,7 @@ func handleListFindings(w http.ResponseWriter, r *http.Request) {
 		"ok":       true,
 		"findings": filtered,
 		"count":    len(filtered),
-		"total":    len(findingStore),
+		"total":    len(findingCache),
 		"summary":  buildFindingsSummary(filtered),
 	})
 }
@@ -174,9 +260,14 @@ func handleCreateFinding(w http.ResponseWriter, r *http.Request) {
 		body.Evidence = []FindingEvidence{}
 	}
 
-	findingStoreMu.Lock()
-	findingStore = append(findingStore, body)
-	findingStoreMu.Unlock()
+	// Persist to Postgres first — cache is secondary
+	if err := dbInsertFinding(&body); err != nil {
+		log.Printf("[FINDINGS] DB insert failed (caching in-memory only): %v", err)
+	}
+
+	findingCacheMu.Lock()
+	findingCache = append(findingCache, body)
+	findingCacheMu.Unlock()
 
 	// Publish to realtime SSE bus so T3 terminals see it live
 	publishEvent(RealtimeEvent{
@@ -204,9 +295,9 @@ func handleCreateFinding(w http.ResponseWriter, r *http.Request) {
 // GET /api/findings/{id} — get a single finding
 func handleGetFinding(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	findingStoreMu.RLock()
-	defer findingStoreMu.RUnlock()
-	for _, f := range findingStore {
+	findingCacheMu.RLock()
+	defer findingCacheMu.RUnlock()
+	for _, f := range findingCache {
 		if f.ID == id {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "finding": f})
 			return
@@ -224,31 +315,31 @@ func handleUpdateFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findingStoreMu.Lock()
-	defer findingStoreMu.Unlock()
-	for i, f := range findingStore {
+	findingCacheMu.Lock()
+	defer findingCacheMu.Unlock()
+	for i, f := range findingCache {
 		if f.ID == id {
 			if v, ok := body["status"].(string); ok {
-				findingStore[i].Status = v
+				findingCache[i].Status = v
 			}
 			if v, ok := body["severity"].(string); ok {
-				findingStore[i].Severity = v
+				findingCache[i].Severity = v
 			}
 			if v, ok := body["confidence"].(string); ok {
-				findingStore[i].Confidence = v
+				findingCache[i].Confidence = v
 			}
 			if v, ok := body["description"].(string); ok {
-				findingStore[i].Description = v
+				findingCache[i].Description = v
 			}
 			if v, ok := body["category"].(string); ok {
-				findingStore[i].Category = v
+				findingCache[i].Category = v
 			}
 			if v, ok := body["vulnId"].(string); ok {
-				findingStore[i].VulnID = v
-				findingStore[i].Status = "promoted"
+				findingCache[i].VulnID = v
+				findingCache[i].Status = "promoted"
 			}
-			findingStore[i].UpdatedAt = time.Now().Format(time.RFC3339)
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "finding": findingStore[i]})
+			findingCache[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "finding": findingCache[i]})
 			return
 		}
 	}
@@ -258,11 +349,11 @@ func handleUpdateFinding(w http.ResponseWriter, r *http.Request) {
 // DELETE /api/findings/{id} — delete a finding
 func handleDeleteFinding(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	findingStoreMu.Lock()
-	defer findingStoreMu.Unlock()
-	for i, f := range findingStore {
+	findingCacheMu.Lock()
+	defer findingCacheMu.Unlock()
+	for i, f := range findingCache {
 		if f.ID == id {
-			findingStore = append(findingStore[:i], findingStore[i+1:]...)
+			findingCache = append(findingCache[:i], findingCache[i+1:]...)
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 			return
 		}
@@ -282,23 +373,23 @@ func handleToggleFalsePositive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findingStoreMu.Lock()
-	defer findingStoreMu.Unlock()
-	for i, f := range findingStore {
+	findingCacheMu.Lock()
+	defer findingCacheMu.Unlock()
+	for i, f := range findingCache {
 		if f.ID == id {
-			findingStore[i].FalsePositive = body.FalsePositive
-			findingStore[i].FPReason = body.Reason
+			findingCache[i].FalsePositive = body.FalsePositive
+			findingCache[i].FPReason = body.Reason
 			if body.FalsePositive {
-				findingStore[i].Status = "dismissed"
-				findingStore[i].Confidence = "fp"
+				findingCache[i].Status = "dismissed"
+				findingCache[i].Confidence = "fp"
 			} else {
 				// Un-marking FP restores to triaged
-				findingStore[i].Status = "triaged"
-				if findingStore[i].Confidence == "fp" {
-					findingStore[i].Confidence = "possible"
+				findingCache[i].Status = "triaged"
+				if findingCache[i].Confidence == "fp" {
+					findingCache[i].Confidence = "possible"
 				}
 			}
-			findingStore[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			findingCache[i].UpdatedAt = time.Now().Format(time.RFC3339)
 
 			publishEvent(RealtimeEvent{
 				ID:      genRTID("fp"),
@@ -315,7 +406,7 @@ func handleToggleFalsePositive(w http.ResponseWriter, r *http.Request) {
 				Timestamp: time.Now().Format(time.RFC3339),
 			})
 
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "finding": findingStore[i]})
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "finding": findingCache[i]})
 			return
 		}
 	}
@@ -333,12 +424,12 @@ func handleAddFindingEvidence(w http.ResponseWriter, r *http.Request) {
 	body.ID = fmt.Sprintf("fev-%d", time.Now().UnixMilli())
 	body.CreatedAt = time.Now().Format(time.RFC3339)
 
-	findingStoreMu.Lock()
-	defer findingStoreMu.Unlock()
-	for i, f := range findingStore {
+	findingCacheMu.Lock()
+	defer findingCacheMu.Unlock()
+	for i, f := range findingCache {
 		if f.ID == id {
-			findingStore[i].Evidence = append(findingStore[i].Evidence, body)
-			findingStore[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			findingCache[i].Evidence = append(findingCache[i].Evidence, body)
+			findingCache[i].UpdatedAt = time.Now().Format(time.RFC3339)
 			writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "evidence": body})
 			return
 		}
@@ -348,15 +439,15 @@ func handleAddFindingEvidence(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/findings/export — export findings for report generation
 func handleExportFindings(w http.ResponseWriter, r *http.Request) {
-	findingStoreMu.RLock()
-	defer findingStoreMu.RUnlock()
+	findingCacheMu.RLock()
+	defer findingCacheMu.RUnlock()
 
 	missionID := r.URL.Query().Get("missionId")
 	format := r.URL.Query().Get("format") // json (default) or csv
 	hideFP := r.URL.Query().Get("hideFalsePositives") == "true"
 
 	filtered := make([]Finding, 0)
-	for _, f := range findingStore {
+	for _, f := range findingCache {
 		if missionID != "" && f.MissionID != missionID {
 			continue
 		}
@@ -456,15 +547,15 @@ func handleFindingsStream(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/findings/summary — quick severity/category summary
 func handleFindingsSummary(w http.ResponseWriter, r *http.Request) {
-	findingStoreMu.RLock()
-	defer findingStoreMu.RUnlock()
+	findingCacheMu.RLock()
+	defer findingCacheMu.RUnlock()
 
 	missionID := r.URL.Query().Get("missionId")
 
-	filtered := findingStore
+	filtered := findingCache
 	if missionID != "" {
 		filtered = make([]Finding, 0)
-		for _, f := range findingStore {
+		for _, f := range findingCache {
 			if f.MissionID == missionID {
 				filtered = append(filtered, f)
 			}

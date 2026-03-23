@@ -38,16 +38,53 @@ async def install_from_catalog(catalog_id: str) -> dict:
 async def _safety_check(docker_image: str) -> dict:
     """Run safety gates on a Docker image before installation.
 
-    Checks:
-    - No --privileged flag (check Dockerfile if available)
+    Checks via Docker image inspect:
+    - No --privileged hints in Config
     - Image size warning if > 5GB
 
     Returns {"ok": True} or {"ok": False, "reason": "..."}
     """
-    # Full implementation requires Docker inspect — log and pass for now.
-    # A real check would call /v1.41/images/<image>/json and inspect Config.
-    logger.info("Safety check passed for %s (basic check)", docker_image)
-    return {"ok": True}
+    try:
+        docker = DockerClient()
+        try:
+            if not await docker.ping():
+                # Docker not reachable — can't inspect, pass with warning
+                logger.warning("Docker not reachable for safety check on %s — skipping", docker_image)
+                return {"ok": True, "warning": "docker_unavailable"}
+
+            # Inspect the image via Docker API
+            resp = await docker._http.get(f"/v1.41/images/{docker_image}/json")
+            if resp.status_code == 404:
+                # Image not pulled yet — can't inspect, allow (will be pulled later)
+                logger.info("Image %s not found locally — safety check deferred to post-pull", docker_image)
+                return {"ok": True, "warning": "image_not_local"}
+
+            if resp.status_code != 200:
+                logger.warning("Docker image inspect failed for %s: %d", docker_image, resp.status_code)
+                return {"ok": True, "warning": "inspect_failed"}
+
+            image_info = resp.json()
+
+            # Check image size (> 5GB is suspicious)
+            size_bytes = image_info.get("Size", 0)
+            size_gb = size_bytes / (1024 ** 3)
+            if size_gb > 5:
+                return {"ok": False, "reason": f"Image is {size_gb:.1f}GB — exceeds 5GB safety limit"}
+
+            # Check for privileged config hints
+            config = image_info.get("Config", {})
+            labels = config.get("Labels", {}) or {}
+            for key, val in labels.items():
+                if "privileged" in str(val).lower():
+                    return {"ok": False, "reason": f"Image label '{key}' references privileged mode"}
+
+            logger.info("Safety check passed for %s (size: %.1fGB)", docker_image, size_gb)
+            return {"ok": True}
+        finally:
+            await docker.close()
+    except Exception as exc:
+        logger.warning("Safety check error for %s: %s — allowing with warning", docker_image, exc)
+        return {"ok": True, "warning": f"check_error: {exc}"}
 
 
 async def _health_check(roar_endpoint: str | None) -> bool:
@@ -210,7 +247,21 @@ async def _register_in_roar(
 
 
 def _auth_headers() -> dict:
-    token = getattr(settings, "jwt_secret", "")
-    if token:
+    """Sign a short-lived JWT for Go backend auth."""
+    secret = getattr(settings, "jwt_secret", "")
+    if not secret:
+        return {}
+    try:
+        import jwt
+        import time
+        payload = {
+            "sub": "prowlrbot-engine",
+            "iss": "harbinger",
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 300,
+        }
+        token = jwt.encode(payload, secret, algorithm="HS256")
         return {"Authorization": f"Bearer {token}"}
-    return {}
+    except ImportError:
+        logger.warning("PyJWT not installed — falling back to no auth")
+        return {}

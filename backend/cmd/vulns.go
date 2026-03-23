@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -44,25 +45,98 @@ type VulnEvidence struct {
 }
 
 var (
-	vulnStore   []Vulnerability
-	vulnStoreMu sync.RWMutex
+	vulnCache   []Vulnerability
+	vulnCacheMu sync.RWMutex
 )
 
 func init() {
-	vulnStore = make([]Vulnerability, 0)
+	vulnCache = make([]Vulnerability, 0)
+}
+
+// loadVulnsFromDB populates the in-memory cache from Postgres on startup.
+func loadVulnsFromDB() {
+	if !dbAvailable() {
+		return
+	}
+	rows, err := db.Query(`
+		SELECT id, title, severity, status, COALESCE(cve_id,''), COALESCE(cvss,0),
+		       COALESCE(target,''), COALESCE(endpoint,''), COALESCE(category,''),
+		       COALESCE(description,''), COALESCE(impact,''), COALESCE(remediation,''),
+		       COALESCE(evidence,'[]'), COALESCE(agent_id,''), COALESCE(agent_name,''),
+		       COALESCE(tags,'[]'), COALESCE(metadata,'{}'),
+		       COALESCE(found_at, NOW()), COALESCE(updated_at, NOW())
+		FROM vulnerabilities ORDER BY found_at DESC
+	`)
+	if err != nil {
+		log.Printf("[DB] Failed to load vulns: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var loaded []Vulnerability
+	for rows.Next() {
+		var v Vulnerability
+		var evidenceJSON, tagsJSON, metadataJSON string
+		var foundAt, updatedAt time.Time
+		err := rows.Scan(
+			&v.ID, &v.Title, &v.Severity, &v.Status, &v.CVEID, &v.CVSS,
+			&v.Target, &v.Endpoint, &v.Category, &v.Description, &v.Impact, &v.Remediation,
+			&evidenceJSON, &v.AgentID, &v.AgentName,
+			&tagsJSON, &metadataJSON, &foundAt, &updatedAt,
+		)
+		if err != nil {
+			log.Printf("[DB] Vuln scan error: %v", err)
+			continue
+		}
+		json.Unmarshal([]byte(evidenceJSON), &v.Evidence)
+		json.Unmarshal([]byte(tagsJSON), &v.Tags)
+		json.Unmarshal([]byte(metadataJSON), &v.Metadata)
+		if v.Evidence == nil {
+			v.Evidence = []VulnEvidence{}
+		}
+		v.FoundAt = foundAt.Format(time.RFC3339)
+		v.UpdatedAt = updatedAt.Format(time.RFC3339)
+		loaded = append(loaded, v)
+	}
+
+	vulnCacheMu.Lock()
+	vulnCache = loaded
+	vulnCacheMu.Unlock()
+	log.Printf("[DB] Loaded %d vulnerabilities from database", len(loaded))
+}
+
+func dbInsertVuln(v *Vulnerability) error {
+	if !dbAvailable() {
+		return fmt.Errorf("database not available")
+	}
+	evidenceJSON, _ := json.Marshal(v.Evidence)
+	tagsJSON, _ := json.Marshal(v.Tags)
+	metadataJSON, _ := json.Marshal(v.Metadata)
+
+	_, err := db.Exec(`
+		INSERT INTO vulnerabilities (id, title, severity, status, cve_id, cvss, target, endpoint,
+		    category, description, impact, remediation, evidence, agent_id, agent_name,
+		    tags, metadata, found_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+	`,
+		v.ID, v.Title, v.Severity, v.Status, v.CVEID, v.CVSS, v.Target, v.Endpoint,
+		v.Category, v.Description, v.Impact, v.Remediation, string(evidenceJSON),
+		v.AgentID, v.AgentName, string(tagsJSON), string(metadataJSON), v.FoundAt, v.UpdatedAt,
+	)
+	return err
 }
 
 // GET /api/vulns — list all vulnerabilities
 func handleListVulns(w http.ResponseWriter, r *http.Request) {
-	vulnStoreMu.RLock()
-	defer vulnStoreMu.RUnlock()
+	vulnCacheMu.RLock()
+	defer vulnCacheMu.RUnlock()
 
 	// Filter by severity, status, category if query params present
 	severity := r.URL.Query().Get("severity")
 	status := r.URL.Query().Get("status")
 
 	filtered := make([]Vulnerability, 0)
-	for _, v := range vulnStore {
+	for _, v := range vulnCache {
 		if severity != "" && v.Severity != severity {
 			continue
 		}
@@ -74,7 +148,7 @@ func handleListVulns(w http.ResponseWriter, r *http.Request) {
 
 	// Build severity summary
 	summary := map[string]int{"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-	for _, v := range vulnStore {
+	for _, v := range vulnCache {
 		summary[v.Severity]++
 	}
 
@@ -82,7 +156,7 @@ func handleListVulns(w http.ResponseWriter, r *http.Request) {
 		"ok":      true,
 		"vulns":   filtered,
 		"count":   len(filtered),
-		"total":   len(vulnStore),
+		"total":   len(vulnCache),
 		"summary": summary,
 	})
 }
@@ -122,18 +196,23 @@ func handleCreateVuln(w http.ResponseWriter, r *http.Request) {
 		body.SLADeadline = time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
 	}
 
-	vulnStoreMu.Lock()
-	vulnStore = append(vulnStore, body)
-	vulnStoreMu.Unlock()
+	// Persist to Postgres first
+	if err := dbInsertVuln(&body); err != nil {
+		log.Printf("[VULNS] DB insert failed (caching in-memory only): %v", err)
+	}
+
+	vulnCacheMu.Lock()
+	vulnCache = append(vulnCache, body)
+	vulnCacheMu.Unlock()
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "vuln": body})
 }
 
 // GET /api/vulns/{id} — get a single vulnerability with all evidence
 func handleGetVuln(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	vulnStoreMu.RLock()
-	defer vulnStoreMu.RUnlock()
-	for _, v := range vulnStore {
+	vulnCacheMu.RLock()
+	defer vulnCacheMu.RUnlock()
+	for _, v := range vulnCache {
 		if v.ID == id {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vuln": v})
 			return
@@ -151,24 +230,24 @@ func handleUpdateVuln(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vulnStoreMu.Lock()
-	defer vulnStoreMu.Unlock()
-	for i, v := range vulnStore {
+	vulnCacheMu.Lock()
+	defer vulnCacheMu.Unlock()
+	for i, v := range vulnCache {
 		if v.ID == id {
 			if status, ok := body["status"].(string); ok {
-				vulnStore[i].Status = status
+				vulnCache[i].Status = status
 			}
 			if remediation, ok := body["remediation"].(string); ok {
-				vulnStore[i].Remediation = remediation
+				vulnCache[i].Remediation = remediation
 			}
 			if description, ok := body["description"].(string); ok {
-				vulnStore[i].Description = description
+				vulnCache[i].Description = description
 			}
 			if impact, ok := body["impact"].(string); ok {
-				vulnStore[i].Impact = impact
+				vulnCache[i].Impact = impact
 			}
-			vulnStore[i].UpdatedAt = time.Now().Format(time.RFC3339)
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vuln": vulnStore[i]})
+			vulnCache[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vuln": vulnCache[i]})
 			return
 		}
 	}
@@ -178,11 +257,11 @@ func handleUpdateVuln(w http.ResponseWriter, r *http.Request) {
 // DELETE /api/vulns/{id} — delete a vulnerability
 func handleDeleteVuln(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	vulnStoreMu.Lock()
-	defer vulnStoreMu.Unlock()
-	for i, v := range vulnStore {
+	vulnCacheMu.Lock()
+	defer vulnCacheMu.Unlock()
+	for i, v := range vulnCache {
 		if v.ID == id {
-			vulnStore = append(vulnStore[:i], vulnStore[i+1:]...)
+			vulnCache = append(vulnCache[:i], vulnCache[i+1:]...)
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 			return
 		}
@@ -201,12 +280,12 @@ func handleAddEvidence(w http.ResponseWriter, r *http.Request) {
 	body.ID = fmt.Sprintf("ev-%d", time.Now().UnixMilli())
 	body.CreatedAt = time.Now().Format(time.RFC3339)
 
-	vulnStoreMu.Lock()
-	defer vulnStoreMu.Unlock()
-	for i, v := range vulnStore {
+	vulnCacheMu.Lock()
+	defer vulnCacheMu.Unlock()
+	for i, v := range vulnCache {
 		if v.ID == id {
-			vulnStore[i].Evidence = append(vulnStore[i].Evidence, body)
-			vulnStore[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			vulnCache[i].Evidence = append(vulnCache[i].Evidence, body)
+			vulnCache[i].UpdatedAt = time.Now().Format(time.RFC3339)
 			writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "evidence": body})
 			return
 		}

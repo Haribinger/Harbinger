@@ -95,6 +95,10 @@ export interface SecretsState {
   setActiveProvider: (id: Provider) => void
   setOllamaUrl: (url: string) => void
   fetchOllamaModels: () => Promise<void>
+  fetchLocalProviderModels: (providerId: Provider) => Promise<void>
+  fetchAllProviderModels: () => Promise<void>
+  getModelsForProvider: (id: Provider) => string[]
+  getAllAvailableModels: () => Array<{ provider: Provider; model: string }>
   exportToEnv: () => string
 
   // Bug bounty key actions
@@ -189,6 +193,64 @@ export const useSecretsStore = create<SecretsState>()(
         } catch {
           set({ ollamaModels: [], isOllamaConnected: false })
         }
+      },
+
+      fetchLocalProviderModels: async (providerId: Provider) => {
+        const provider = get().providers[providerId]
+        if (!provider?.baseUrl) return
+        try {
+          // OpenAI-compatible /v1/models endpoint (works for lmstudio, gpt4all, custom)
+          const baseUrl = provider.baseUrl.replace(/\/v1\/?$/, '')
+          const res = await fetch(`${baseUrl}/v1/models`, { signal: AbortSignal.timeout(5000) })
+          if (!res.ok) return
+          const data = await res.json()
+          const models: string[] = (data.data || []).map((m: { id: string }) => m.id).filter(Boolean)
+          if (models.length > 0) {
+            PROVIDER_MODELS[providerId] = models
+            set((state) => ({
+              providers: {
+                ...state.providers,
+                [providerId]: { ...state.providers[providerId], models },
+              },
+            }))
+          }
+        } catch {
+          // Provider not reachable — keep existing static list
+        }
+      },
+
+      fetchAllProviderModels: async () => {
+        // Fetch Ollama models
+        await get().fetchOllamaModels()
+
+        // Fetch models from other local/self-hosted providers
+        const localProviders: Provider[] = ['lmstudio', 'gpt4all', 'custom']
+        for (const pid of localProviders) {
+          const p = get().providers[pid]
+          if (p?.enabled && p?.baseUrl) {
+            await get().fetchLocalProviderModels(pid)
+          }
+        }
+      },
+
+      getModelsForProvider: (id: Provider) => {
+        // Runtime-detected models take priority, then fall back to static list
+        const provider = get().providers[id]
+        if (provider?.models && provider.models.length > 0) return provider.models
+        if (PROVIDER_MODELS[id]?.length > 0) return PROVIDER_MODELS[id]
+        return []
+      },
+
+      getAllAvailableModels: () => {
+        const result: Array<{ provider: Provider; model: string }> = []
+        const allProviders: Provider[] = ['ollama', 'lmstudio', 'gpt4all', 'anthropic', 'openai', 'google', 'gemini', 'mistral', 'groq', 'custom']
+        for (const pid of allProviders) {
+          const models = get().getModelsForProvider(pid)
+          for (const model of models) {
+            result.push({ provider: pid, model })
+          }
+        }
+        return result
       },
 
       exportToEnv: () => {

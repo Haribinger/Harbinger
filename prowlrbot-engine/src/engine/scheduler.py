@@ -311,6 +311,7 @@ class MissionScheduler:
                     elif result.get("status") == "done":
                         completed.add(tid)
                         await self._save_task_result(tid, result)
+                        await self._bridge_findings(tid, mission_id, task_map[tid], result)
                         await self._update_task_status(tid, mission_id, "finished")
                     elif result.get("status") == "waiting":
                         # Task is waiting for user input — leave as waiting
@@ -376,6 +377,20 @@ class MissionScheduler:
                     "tokens": result.get("tokens", {}),
                 }
                 await session.commit()
+
+    async def _bridge_findings(
+        self, task_id: int, mission_id: int, task: Task, result: dict
+    ) -> None:
+        """Forward findings from task results to Go backend for UI display."""
+        try:
+            from src.hub.findings_bridge import bridge_task_result
+            agent = task.agent_codename or "UNKNOWN"
+            count = await bridge_task_result(task_id, mission_id, agent, result)
+            if count:
+                logger.info("bridged %d findings from task %d to Go backend", count, task_id)
+        except Exception as exc:
+            # Bridge failure is non-fatal — task still completed
+            logger.warning("findings bridge failed for task %d: %s", task_id, exc)
 
     async def _set_mission_status(self, mission_id: int, status: str) -> None:
         """Set final mission status."""
