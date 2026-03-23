@@ -35,6 +35,18 @@ async def lifespan(app: FastAPI):
         async with _db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+    # Register built-in mission templates in the template registry
+    from src.engine.templates import MISSION_TEMPLATES
+    from src.registry.templates import template_registry, MissionTemplate
+    for tid, tmpl in MISSION_TEMPLATES.items():
+        template_registry.register_builtin(MissionTemplate(
+            id=tid, name=tmpl["name"], description=tmpl.get("description", ""),
+            default_autonomy=tmpl.get("default_autonomy", "supervised"),
+            continuous=tmpl.get("continuous", False),
+            scan_interval=tmpl.get("scan_interval", 3600),
+            tasks=tmpl.get("tasks", []),
+        ))
+
     yield
     # Shutdown
     await close_db()
