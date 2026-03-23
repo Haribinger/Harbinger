@@ -7,18 +7,20 @@
 |_| |_/_/   \_\_| \_\____/___|_| \_|\____|_____|_| \_\
 ```
 
-**Autonomous Offensive Security Framework — Local-First, MCP-Powered, Swarm Intelligence**
+**Autonomous Security Operating System — Local-First, MCP-Powered, Swarm Intelligence**
 
 [![CI](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml/badge.svg)](https://github.com/Haribinger/Harbinger/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8.svg)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose)
-[![Agents](https://img.shields.io/badge/Agents-11-f0c040.svg)](#agent-roster)
-[![Pages](https://img.shields.io/badge/Pages-23-f0c040.svg)](#pages)
-[![Stores](https://img.shields.io/badge/Stores-21-f0c040.svg)](#features)
+[![Agents](https://img.shields.io/badge/Agents-12-f0c040.svg)](#agent-roster)
+[![Pages](https://img.shields.io/badge/Pages-27-f0c040.svg)](#pages)
+[![Stores](https://img.shields.io/badge/Stores-32-f0c040.svg)](#features)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://python.org)
+[![Tools](https://img.shields.io/badge/Tools-68-f0c040.svg)](#docker-agent-images)
 
-> **11 agents. 150+ tools. 23 pages. Zero API key dependencies. One command center.**
+> **12 agents. 68 tools. 27 pages. Mission-driven execution. One command center.**
 
 ---
 
@@ -29,6 +31,41 @@ Harbinger is a **command center for autonomous offensive security agents**. It i
 **[Getting Started](docs/getting-started.md)** | **[Quickstart](QUICKSTART.md)** | **[Architecture](ARCHITECTURE.md)** | **[CI/CD](docs/github-actions/README.md)** | **[Contributing](CONTRIBUTING.md)**
 
 > **First time?** [Getting Started](docs/getting-started.md) is the full guide (Docker + local dev, UI walkthrough, troubleshooting). [Quickstart](QUICKSTART.md) is the 5-minute path.
+
+---
+
+## What's New in v2.0
+
+**Harbinger v2.0 is an autonomous security operating system.** Agents don't just think — they execute. Real tools, real containers, real results.
+
+### Execution Engine
+- **Mission → Task → SubTask → Action** hierarchy with ReAct (Reason-Act-Observe) loops
+- **DAG scheduler** runs independent tasks in parallel across Docker containers
+- **27 built-in tools** — terminal, browser, 5 search engines, 8 memory tools, 6 delegation tools
+- **Competitive mode** — run 2-3 agents on same task, consensus verification reduces false positives
+
+### Agent System
+- **12 specialized agents** with role-specific prompts, tools, and Docker images
+- **ORCHESTRATOR** decomposes missions and delegates to specialists
+- **Persistent learning** — agents remember what worked, track false positives, learn strategies
+
+### Infrastructure
+- **5 Docker agent images** with 68 pre-installed security tools (ProjectDiscovery, Kali, OSINT)
+- **Self-healing** — detects container failures, diagnoses with LLM, auto-restarts
+- **Plugin registry** — nothing hardcoded, users configure agents/tools/templates/settings via API
+
+### Knowledge
+- **pgvector** semantic memory with 10 built-in knowledge sources (HowToHunt, PayloadsAllTheThings, HackTricks)
+- **Neo4j** knowledge graph with entity extraction (hosts, services, vulnerabilities, techniques)
+- **GraphRAG** — combined vector + graph retrieval for intelligent agent context
+
+### CLI
+```bash
+harbinger mission start "pentest example.com"    # Create and execute mission
+harbinger agents watch --agent BREACH             # Live agent activity stream
+harbinger doctor                                   # Health check all dependencies
+harbinger train finetune training.jsonl            # Fine-tune local models
+```
 
 ---
 
@@ -115,7 +152,10 @@ Harbinger is a **command center for autonomous offensive security agents**. It i
 └─────────┘ └─────────┘ └──────────┘ └──────────┘ └───────────┘
 ```
 
-**Stack:** React 19 + Vite 6 + TypeScript | Go 1.24 | PostgreSQL 17 | Redis 7.4 | Neo4j 2025 | Docker Compose | MCP
+**Stack:** React 19 + Vite 6 + TypeScript | Go 1.24 | Python 3.12 + FastAPI + litellm + asyncpg | PostgreSQL 17 | Redis 7.4 | Neo4j 2025 | Docker Compose | MCP
+
+| Execution Engine | Python 3.12 + FastAPI + litellm + asyncpg |
+| Agent Images | Docker (pd-tools, kali-tools, dev-tools, osint-tools, base) |
 
 Full architecture docs: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 

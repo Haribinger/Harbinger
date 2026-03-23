@@ -1,3 +1,87 @@
+## [2.0.0] - 2026-03-22
+
+### Added — Autonomous Security Operating System
+
+#### Execution Engine (`prowlrbot-engine/`)
+- **Mission→Task→SubTask→Action** execution hierarchy with ReAct agent loops
+- **DAG scheduler** — parallel task execution respecting dependencies
+- **Mission planner** — LLM-powered task decomposition or template-based
+- **27 tools** — terminal, file, browser, 5 search engines, 8 memory, 6 delegation, subtasks
+- **Execution monitor** — loop detection, adviser intervention, graceful shutdown
+- **Summarization engine** — large output truncation + chain compression
+- **Mission templates** — full_pentest, bug_bounty, red_team, code_audit, continuous_monitor
+
+#### Agent System
+- **12 agents** with role-specific configs, prompts, LLM adapter (litellm)
+- **Agent delegation** — ORCHESTRATOR delegates to specialists via tool calls
+- **Competitive agents** — multi-agent consensus verification for false positive reduction
+- **Persistent learning** — episodic, semantic, strategic memory per agent
+- **Plugin SDK** — install plugins that add tools, agents, knowledge sources, templates
+
+#### Infrastructure
+- **FastAPI sidecar** on :8000 alongside Go backend on :8080 (Strangler Fig pattern)
+- **5 Docker agent images** — 68 security tools (ProjectDiscovery, Kali, OSINT, dev)
+- **Nginx routing** — `/api/v2/*` → FastAPI, `/api/*` → Go
+- **Kill switch** — global, per-mission, per-agent emergency halt
+- **Approval gates** — async pause/resume with operator approval
+- **Self-healing monitor** — container failure detection, LLM diagnosis, auto-restart
+
+#### Safety & Observability
+- **Scope validation** — RFC 1918 blocking, cloud metadata protection, wildcard rules
+- **Autonomy levels** — manual, supervised, autonomous, full_auto
+- **Audit trail** — 10K-entry ring buffer for every agent action
+- **Langfuse integration** — trace per mission, span per task, tool call logging
+- **Metrics** — real-time mission stats via `/api/v2/missions/{id}/metrics`
+
+#### Knowledge & Memory
+- **pgvector memory store** — semantic search across guides, answers, code, findings
+- **Neo4j knowledge graph** — hosts, services, vulnerabilities, techniques, credentials
+- **GraphRAG** — combined vector + graph retrieval
+- **10 built-in knowledge sources** — HowToHunt, PayloadsAllTheThings, HackTricks, etc.
+- **Training system** — export memory → QLoRA fine-tune → deploy to Ollama
+
+#### CVE Monitor (Enhanced)
+- **3 real sources** — CISA KEV, NVD 2.0 API, GitHub Security Advisories
+- **User-addable sources** — POST /api/cve/sources
+- **CVSS scores** on every CVE, search by ID/product/vendor/severity
+- **Auto-triage** — P0-P3 scoring based on CVSS + exploit availability + ransomware
+
+#### CLI
+- **12 command groups** — mission, agents, warroom, findings, attach, ingest, train, doctor, onboard, configure, healing, memory
+- **harbinger doctor** — 7 health checks (Docker, PostgreSQL, Redis, Neo4j, Ollama, images, API keys)
+- **harbinger train** — export training data, QLoRA fine-tune, deploy to Ollama, benchmark
+
+#### Frontend
+- **MissionControl** page with TaskGraph DAG visualization (@xyflow/react)
+- **WarRoom** page with SSE event stream and command injection
+- **KnowledgeGraph** page with Neo4j entity explorer
+- **FindingsFeed** page with real-time severity-colored stream
+- **AgentShell** page with container terminal access
+- **Settings** — 14 sections including Registry, Channel Marketplace, Plugin Marketplace
+- **27 sidebar entries** (up from 23)
+
+#### Plugin Registry
+- **Settings** — 26 configurable values, all changeable at runtime via API
+- **Agents** — 12 built-in + unlimited custom agents via API
+- **Templates** — 5 built-in + user-addable mission templates
+- **Tools** — 27 built-in + user-addable CLI tools
+- **Knowledge sources** — 10 built-in + user-addable
+
+### Fixed
+- `async_session` import-time capture bug (all routers now use `get_session()`)
+- SQL injection in memory store LIMIT parameter
+- Container name length overflow (truncated to 63 chars)
+- Container cleanup error swallowing (now logs warnings)
+- MockHunter audit: 0 real issues in 90+ source files
+
+### Technical
+- 302 Python tests, 8 Go test packages
+- 90+ Python source files, 30+ test files
+- 54 commits in single session across 7 parallel terminals
+- Full E2E pipeline verified: mission → planner → scheduler → executor → performer → LLM → done
+
+---
+
 ## [1.2.0] - 2026-02-27
 
 ### Added — Chat System
