@@ -8,19 +8,14 @@ name encodes the mission/task IDs so it's easy to track in Docker logs.
 
 import logging
 
-from src.agents.config import get_agent_config
 from src.agents.llm import LLMAdapter
 from src.agents.prompts import build_system_prompt
 from src.docker.client import DockerClient
 from src.engine.performer import perform_agent_chain
 from src.engine.tools.registry import ToolExecutor
+from src.registry.agents import agent_registry
 
 logger = logging.getLogger(__name__)
-
-# Agent configuration is the authoritative source from src.agents.config.
-# Re-exported here so DelegationTool (delegation.py) can import without a cycle —
-# it uses: from src.engine.executor import AGENT_CONFIG, DEFAULT_CONFIG
-from src.agents.config import AGENT_CONFIG, DEFAULT_CONFIG  # noqa: E402 (re-export)
 
 
 async def execute_task(
@@ -44,7 +39,7 @@ async def execute_task(
         {"status": "done"|"waiting"|"failed", "result": str,
          "chain": list, "tokens": dict}
     """
-    config = get_agent_config(agent_codename)
+    config = agent_registry.get_config(agent_codename)
     effective_image = docker_image or config["docker_image"]
 
     # Ensure we always have an LLM — fall back to default adapter if the caller

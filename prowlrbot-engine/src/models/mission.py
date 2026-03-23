@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -19,7 +18,7 @@ class Mission(Base):
     mission_type: Mapped[str] = mapped_column(String(50), nullable=False, default="custom")
     target: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # {"include": [...], "exclude": [...], "wildcards": [...]}
-    scope: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    scope: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 0=manual, 1=semi-auto, 2=full-auto
     autonomy_level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # distributed tracing — links all agent actions for this mission

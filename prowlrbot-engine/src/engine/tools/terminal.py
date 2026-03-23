@@ -1,8 +1,21 @@
 from src.docker.client import DockerClient
+from src.registry.settings import settings_registry
 
 RESULT_SIZE_LIMIT = 16384  # 16KB
-HARD_TIMEOUT = 1200  # 20 minutes
-DEFAULT_TIMEOUT = 60  # 1 minute
+
+
+def _get_timeout(requested: int | None) -> int:
+    """Resolve the effective timeout for a terminal command.
+
+    Reads live values from settings_registry so runtime changes take effect
+    without restarting the engine. Falls back to sane constants if the
+    registry is somehow unavailable.
+    """
+    default = settings_registry.get("tools.terminal.default_timeout", 60)
+    maximum = settings_registry.get("tools.terminal.max_timeout", 1200)
+    if requested is None:
+        return default
+    return min(requested, maximum)
 
 
 class TerminalTool:
@@ -14,7 +27,7 @@ class TerminalTool:
 
     async def execute(self, args: dict) -> str:
         command = args["command"]
-        timeout = min(args.get("timeout", DEFAULT_TIMEOUT), HARD_TIMEOUT)
+        timeout = _get_timeout(args.get("timeout"))
 
         result = await self.docker.exec_command(
             self.container_id, ["sh", "-c", command], timeout=timeout

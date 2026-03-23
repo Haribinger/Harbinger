@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -25,15 +24,15 @@ class Task(Base):
     # Running container ID once spawned
     container_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # List of task IDs this task depends on before it can run
-    depends_on: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    depends_on: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # Whether a human must approve this task before execution
     approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Higher = runs sooner when tasks are unblocked
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Freeform input passed to the agent at task start
-    input: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    input: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Structured result returned by the agent on completion
-    result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Visual ordering within the mission's task list
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

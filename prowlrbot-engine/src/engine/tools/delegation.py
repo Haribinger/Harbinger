@@ -189,7 +189,14 @@ class DelegationTool:
             raise ValueError(f"Unknown delegation tool: {tool_name}")
         self.tool_name = tool_name
         self.agent_codename = DELEGATION_AGENTS[tool_name]
-        self.max_iterations = SPECIALIST_MAX_ITERATIONS.get(tool_name, 20)
+        # Specialists get the smaller of the hardcoded limit and half the agent's
+        # configured max — so a user bumping an agent's max_iterations doesn't
+        # accidentally let sub-agents run wild.
+        from src.registry.agents import agent_registry
+        agent_config = agent_registry.get_config(DELEGATION_AGENTS[tool_name])
+        base_limit = SPECIALIST_MAX_ITERATIONS.get(tool_name, 20)
+        registry_limit = agent_config.get("max_iterations", 100) // 2
+        self.max_iterations = min(base_limit, registry_limit) if registry_limit > 0 else base_limit
         self._container_id = container_id
         self._docker_client = docker_client
         self._llm = llm
@@ -225,10 +232,10 @@ class DelegationTool:
             {"role": "user", "content": task_desc},
         ]
 
-        # Specialist gets environment tools from the AGENT_CONFIG
-        from src.engine.executor import AGENT_CONFIG, DEFAULT_CONFIG
+        # Specialist gets environment tools from the agent registry
+        from src.registry.agents import agent_registry
 
-        config = AGENT_CONFIG.get(self.agent_codename, DEFAULT_CONFIG)
+        config = agent_registry.get_config(self.agent_codename)
 
         # Build a ToolExecutor for the specialist — no delegation tools
         # to prevent recursive delegation chains

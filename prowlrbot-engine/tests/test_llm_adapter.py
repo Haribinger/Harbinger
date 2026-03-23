@@ -161,14 +161,13 @@ class TestPromptLoading:
         assert "done" in prompt.lower()
 
     def test_all_agents_have_prompts(self):
-        """Every agent in AGENT_CONFIG should have a prompt file."""
+        """Every agent in the registry should have a prompt file."""
         from src.agents.prompts import load_prompt
-        from src.engine.executor import AGENT_CONFIG
+        from src.registry.agents import agent_registry
 
-        for codename in AGENT_CONFIG:
+        for agent in agent_registry.list_all():
+            codename = agent["codename"]
             prompt = load_prompt(codename)
-            # CIPHER, SAGE, BRIEF don't have prompts yet — skip
-            if codename in ("CIPHER", "SAGE"):
-                continue
+            # All standard agents should have prompts; user-added agents may not
             if prompt:
                 assert len(prompt) > 50, f"{codename} prompt is too short"

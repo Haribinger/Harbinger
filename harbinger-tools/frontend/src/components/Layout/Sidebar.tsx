@@ -23,6 +23,8 @@ import {
   Brain,
   ShieldAlert,
   Bug,
+  Share2,
+  Radar,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 
@@ -55,6 +57,9 @@ const navItems: NavItem[] = [
   { path: '/pentest-dashboard', label: 'Pentest', icon: ShieldAlert },
   { path: '/cve-monitor', label: 'CVE Monitor', icon: Bug },
   { path: '/agent-shell', label: 'Agent Shell', icon: Cpu },
+  { path: '/war-room', label: 'War Room', icon: Radar },
+  { path: '/findings', label: 'Findings', icon: Bug },
+  { path: '/knowledge-graph', label: 'Knowledge Graph', icon: Share2 },
 ]
 
 const bottomNavItems: NavItem[] = [

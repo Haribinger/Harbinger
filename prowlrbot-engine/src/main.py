@@ -6,8 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.db import close_db, engine, init_db
 from src.routers.barriers import router as barriers_router
 from src.routers.channels import router as channels_router
+from src.routers.compat import router as compat_router
 from src.routers.health import router as health_router
 from src.routers.healing import router as healing_router
+from src.routers.migration_status import router as migration_status_router
 from src.routers.missions import router as missions_router
 from src.routers.tasks import router as tasks_router
 from src.routers.warroom import router as warroom_router
@@ -54,8 +56,13 @@ def create_app() -> FastAPI:
 
     app.include_router(barriers_router)
     app.include_router(channels_router)
+    # compat_router must be included BEFORE the canonical v2 routers so that
+    # FastAPI's OpenAPI schema lists the /api/ paths separately.  Route
+    # resolution is still correct because each path is unique.
+    app.include_router(compat_router)
     app.include_router(health_router)
     app.include_router(healing_router)
+    app.include_router(migration_status_router)
     app.include_router(missions_router)
     app.include_router(tasks_router)
     app.include_router(warroom_router)

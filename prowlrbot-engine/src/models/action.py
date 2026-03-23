@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -19,9 +18,9 @@ class Action(Base):
     # Name of the MCP/tool invoked (e.g. "run_command", "http_request")
     tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
     # Arguments passed to the tool
-    args: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    args: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Raw output returned by the tool
-    result: Mapped[str | None] = mapped_column(JSONB, nullable=True)
+    result: Mapped[str | None] = mapped_column(JSON, nullable=True)
     # "text", "json", "binary", "error"
     result_format: Mapped[str] = mapped_column(String(32), nullable=False, default="text")
     # pending, running, completed, failed, timeout
