@@ -21,6 +21,8 @@ from src.routers.registry import router as registry_router
 from src.routers.nuclei_ide import router as nuclei_ide_router
 from src.routers.community import router as community_router
 from src.routers.workflows import router as workflows_router
+from src.routers.hub import router as hub_router
+from src.routers.license import router as license_router
 from src.channels.setup import setup_channel_bridge
 
 
@@ -37,6 +39,11 @@ async def lifespan(app: FastAPI):
 
         async with _db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+    # Kick off a best-effort registry sync — don't block startup if Go is unreachable
+    import asyncio
+    from src.hub.sync import sync_registries
+    asyncio.create_task(sync_registries())
 
     # Register built-in mission templates in the template registry
     from src.engine.templates import MISSION_TEMPLATES
@@ -89,6 +96,8 @@ def create_app() -> FastAPI:
     app.include_router(nuclei_ide_router)
     app.include_router(community_router)
     app.include_router(workflows_router)
+    app.include_router(hub_router)
+    app.include_router(license_router)
 
     return app
 

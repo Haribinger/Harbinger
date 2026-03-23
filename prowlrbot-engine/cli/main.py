@@ -553,6 +553,35 @@ def configure(
     console.print("[dim]Run 'harbinger configure --show' to review. 'harbinger doctor' to verify.[/dim]")
 
 
+@app.command("license")
+def license_cmd(
+    key: str = typer.Option("", "--key", "-k", help="License key to activate"),
+):
+    """Check or activate a Harbinger license."""
+    if key:
+        from src.license import validate_key, save_license
+        result = validate_key(key)
+        if result.valid:
+            save_license(key)
+            console.print(f"[green]License activated: {result.tier}[/green]")
+            console.print(f"  Agents: {result.limits.get('agents', '?')}")
+            console.print(f"  Missions/day: {result.limits.get('missions_per_day', '?')}")
+            console.print(f"  Tools: {result.limits.get('tools', '?')}")
+        else:
+            console.print("[red]Invalid license key[/red]")
+            raise typer.Exit(1)
+    else:
+        from src.license import get_current_license
+        info = get_current_license()
+        valid_str = "[green]Yes[/green]" if info["valid"] else "[red]No[/red]"
+        console.print(f"Tier: [bold]{info['tier']}[/bold] -- {info.get('description', '')}")
+        console.print(f"Valid: {valid_str}")
+        if info.get("limits"):
+            console.print(f"  Agents: {info['limits'].get('agents', '?')}")
+            console.print(f"  Missions/day: {info['limits'].get('missions_per_day', '?')}")
+            console.print(f"  Tools: {info['limits'].get('tools', '?')}")
+
+
 def main():
     app()
 
