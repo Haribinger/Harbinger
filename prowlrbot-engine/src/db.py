@@ -37,3 +37,12 @@ async def close_db():
 
 def db_available() -> bool:
     return engine is not None
+
+
+def get_session() -> async_sessionmaker | None:
+    """Get the current async_session factory. Use this instead of importing async_session directly.
+
+    Direct import (`from src.db import async_session`) captures None at import time.
+    This function returns the live value after init_db() has run.
+    """
+    return async_session

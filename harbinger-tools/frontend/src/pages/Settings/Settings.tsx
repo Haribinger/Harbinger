@@ -34,6 +34,9 @@ import {
   Type,
   Lock,
   Router,
+  Layers,
+  Store,
+  Package,
 } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useSecretsStore, PROVIDER_MODELS } from '../../store/secretsStore'
@@ -56,6 +59,9 @@ const sections = [
   { id: 'api-keys', label: 'API Keys', icon: Key },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'model-router', label: 'Model Router', icon: Router },
+  { id: 'registry', label: 'Registry', icon: Layers },
+  { id: 'channel-market', label: 'Channels Market', icon: Store },
+  { id: 'plugin-market', label: 'Plugins', icon: Package },
   { id: 'advanced', label: 'Advanced', icon: Database },
 ]
 
@@ -887,6 +893,21 @@ function Settings() {
           {/* Model Router */}
           {activeSection === 'model-router' && (
             <ModelRouterSection />
+          )}
+
+          {/* Registry */}
+          {activeSection === 'registry' && (
+            <RegistrySection />
+          )}
+
+          {/* Channel Marketplace */}
+          {activeSection === 'channel-market' && (
+            <ChannelMarketplaceSection />
+          )}
+
+          {/* Plugin Marketplace */}
+          {activeSection === 'plugin-market' && (
+            <PluginMarketplaceSection />
           )}
 
           {/* Advanced */}
@@ -2209,5 +2230,226 @@ function ModelRouterSection() {
     </Section>
   )
 }
+
+// ── Registry Section ────────────────────────────────────────────────────────
+
+function RegistrySection() {
+  const [overview, setOverview] = useState<Record<string, unknown> | null>(null)
+  const [agents, setAgents] = useState<Array<Record<string, unknown>>>([])
+  const [settings, setSettings] = useState<Record<string, unknown>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      fetch('/api/v2/registry/overview').then(r => r.json()).catch(() => null),
+      fetch('/api/v2/registry/agents').then(r => r.json()).catch(() => ({ agents: [] })),
+      fetch('/api/v2/registry/settings').then(r => r.json()).catch(() => ({ settings: {} })),
+    ]).then(([ov, ag, st]) => {
+      setOverview(ov)
+      setAgents(Array.isArray(ag?.agents) ? ag.agents : [])
+      setSettings(st?.settings || {})
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) return <Section title="Registry" description="Loading..."><div className="text-gray-500 font-mono text-sm">Loading registry...</div></Section>
+
+  return (
+    <Section title="Registry" description="Unified configuration for agents, tools, templates, and settings">
+      {/* Overview stats */}
+      {overview && (
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: 'Agents', value: (overview.agents as Record<string, number>)?.total || 0, sub: `${(overview.agents as Record<string, number>)?.enabled || 0} enabled` },
+            { label: 'Built-in Tools', value: (overview.tools as Record<string, number>)?.builtin || 0 },
+            { label: 'User Tools', value: (overview.tools as Record<string, number>)?.user || 0 },
+            { label: 'Templates', value: (overview.templates as Record<string, number>)?.total || 0 },
+          ].map(stat => (
+            <div key={stat.label} className="bg-[#0d0d15] border border-[#1a1a2e] rounded-lg p-3 text-center">
+              <div className="text-2xl font-mono font-bold text-[#f0c040]">{stat.value}</div>
+              <div className="text-xs text-gray-500 font-mono">{stat.label}</div>
+              {stat.sub && <div className="text-[10px] text-gray-600">{stat.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Agent list */}
+      <div className="bg-[#0d0d15] border border-[#1a1a2e] rounded-xl p-4">
+        <h3 className="font-mono font-bold text-sm mb-3">Agent Registry</h3>
+        <div className="space-y-2">
+          {agents.map((agent) => (
+            <div key={String(agent.codename)} className="flex items-center justify-between py-2 px-3 border border-[#1a1a2e] rounded-lg hover:border-[#f0c040]/30 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${agent.enabled ? 'bg-[#22c55e]' : 'bg-gray-600'}`} />
+                <div>
+                  <div className="text-sm font-mono font-bold text-white">{String(agent.codename)}</div>
+                  <div className="text-xs text-gray-500">{String(agent.display_name || agent.description || '')}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-mono text-gray-600">
+                <span>{String(agent.docker_image || 'base')}</span>
+                <span>•</span>
+                <span>{String(agent.model || 'default')}</span>
+                <span>•</span>
+                <span>{String((agent.tools as string[])?.length || 0)} tools</span>
+              </div>
+            </div>
+          ))}
+          {agents.length === 0 && <div className="text-gray-600 text-sm font-mono py-2">No agents registered</div>}
+        </div>
+      </div>
+
+      {/* Settings preview */}
+      <div className="bg-[#0d0d15] border border-[#1a1a2e] rounded-xl p-4">
+        <h3 className="font-mono font-bold text-sm mb-3">Engine Settings</h3>
+        <div className="space-y-1 max-h-[200px] overflow-y-auto">
+          {Object.entries(settings).map(([key, val]) => (
+            <div key={key} className="flex items-center justify-between py-1 text-xs font-mono">
+              <span className="text-gray-400">{key}</span>
+              <span className="text-[#f0c040]">{JSON.stringify(typeof val === 'object' && val !== null && 'value' in (val as Record<string, unknown>) ? (val as Record<string, unknown>).value : val)}</span>
+            </div>
+          ))}
+          {Object.keys(settings).length === 0 && <div className="text-gray-600 text-sm py-2">No settings configured</div>}
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+
+// ── Channel Marketplace Section ─────────────────────────────────────────────
+
+const CHANNEL_CATALOG: Array<{
+  id: string; name: string; type: string; description: string; icon: string; status: 'available' | 'installed' | 'coming'
+}> = [
+  { id: 'discord', name: 'Discord', type: 'discord', description: 'Bot gateway + slash commands. Real-time agent notifications and operator commands.', icon: '🎮', status: 'installed' },
+  { id: 'telegram', name: 'Telegram', type: 'telegram', description: 'Bot API with webhook support. Mission alerts, finding notifications, operator approval.', icon: '✈️', status: 'installed' },
+  { id: 'slack', name: 'Slack', type: 'slack', description: 'Socket Mode adapter. Rich message blocks, thread-based findings, interactive approvals.', icon: '💬', status: 'installed' },
+  { id: 'teams', name: 'Microsoft Teams', type: 'teams', description: 'Adaptive Cards, Teams bot framework. Enterprise notification channel.', icon: '🏢', status: 'available' },
+  { id: 'email', name: 'Email (SMTP)', type: 'email', description: 'SMTP/IMAP adapter for report delivery and finding digests.', icon: '📧', status: 'available' },
+  { id: 'webhook', name: 'Custom Webhook', type: 'webhook', description: 'Send events to any HTTP endpoint. Integrate with Jira, PagerDuty, OpsGenie.', icon: '🔗', status: 'available' },
+  { id: 'matrix', name: 'Matrix', type: 'matrix', description: 'End-to-end encrypted messaging. Self-hosted option for sensitive operations.', icon: '🔒', status: 'coming' },
+  { id: 'signal', name: 'Signal', type: 'signal', description: 'Ultra-secure channel for red team operations. Signal Bot API.', icon: '🛡️', status: 'coming' },
+]
+
+function ChannelMarketplaceSection() {
+  return (
+    <Section title="Channel Marketplace" description="Browse and install notification channel adapters">
+      <div className="grid grid-cols-2 gap-3">
+        {CHANNEL_CATALOG.map(ch => (
+          <div key={ch.id} className="bg-[#0d0d15] border border-[#1a1a2e] rounded-xl p-4 hover:border-[#f0c040]/30 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{ch.icon}</span>
+                <span className="font-mono font-bold text-sm text-white">{ch.name}</span>
+              </div>
+              {ch.status === 'installed' && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30">INSTALLED</span>
+              )}
+              {ch.status === 'available' && (
+                <button className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30 hover:bg-[#f0c040]/20 transition-colors">
+                  INSTALL
+                </button>
+              )}
+              {ch.status === 'coming' && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e]">COMING SOON</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">{ch.description}</p>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
+
+// ── Plugin Marketplace Section ──────────────────────────────────────────────
+
+const PLUGIN_CATALOG: Array<{
+  id: string; name: string; type: string; description: string; version: string; status: 'installed' | 'available' | 'coming'
+}> = [
+  { id: 'hexstrike', name: 'HexStrike AI', type: 'mcp', description: '150+ security tools via MCP. Nmap, Burp, Metasploit, custom scripts.', version: '2.1.0', status: 'installed' },
+  { id: 'pentagi', name: 'PentAGI', type: 'mcp', description: 'Autonomous pentesting agent framework. Flow-based task execution.', version: '1.5.0', status: 'installed' },
+  { id: 'redteam', name: 'RedTeam MCP', type: 'mcp', description: 'Red team operations — C2, lateral movement, persistence, exfiltration.', version: '1.2.0', status: 'installed' },
+  { id: 'mockhunter', name: 'MockHunter', type: 'tool', description: 'AI slop detector. Scans for mock data, stubs, hardcoded secrets, vibe code.', version: '1.0.0', status: 'installed' },
+  { id: 'nuclei-templates', name: 'Nuclei Templates', type: 'skill', description: 'Auto-update ProjectDiscovery nuclei templates. 8000+ vulnerability checks.', version: '10.1.0', status: 'available' },
+  { id: 'wordlists', name: 'SecLists Pack', type: 'skill', description: 'SecLists, PayloadAllTheThings, FuzzDB — bundled wordlists for fuzzing.', version: '2024.1', status: 'available' },
+  { id: 'cve-intel', name: 'CVE Intelligence', type: 'agent', description: 'Specialized agent for CVE research, exploit PoC discovery, patch analysis.', version: '0.9.0', status: 'available' },
+  { id: 'report-templates', name: 'Report Templates', type: 'skill', description: 'Professional pentest report templates. PDF, HTML, Markdown. HackerOne/Bugcrowd format.', version: '3.0.0', status: 'available' },
+  { id: 'cloud-enum', name: 'Cloud Enumerator', type: 'agent', description: 'AWS/GCP/Azure resource enumeration. S3 buckets, storage blobs, IAM analysis.', version: '1.0.0', status: 'coming' },
+  { id: 'ai-deobfuscator', name: 'AI Deobfuscator', type: 'tool', description: 'LLM-powered JavaScript/Python deobfuscation and malware analysis.', version: '0.5.0', status: 'coming' },
+]
+
+const PLUGIN_TYPE_COLORS: Record<string, string> = {
+  mcp: '#00d4ff',
+  tool: '#f0c040',
+  agent: '#22c55e',
+  skill: '#a855f7',
+}
+
+function PluginMarketplaceSection() {
+  const [filter, setFilter] = useState<string>('all')
+
+  const filtered = filter === 'all' ? PLUGIN_CATALOG : PLUGIN_CATALOG.filter(p => p.type === filter || p.status === filter)
+
+  return (
+    <Section title="Plugin Marketplace" description="Extend Harbinger with MCP servers, tools, agents, and skill packs">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2">
+        {['all', 'mcp', 'tool', 'agent', 'skill', 'installed'].map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1 rounded text-xs font-mono transition-colors ${
+              filter === f
+                ? 'bg-[#1a1a2e] text-[#f0c040] border border-[#f0c040]/30'
+                : 'text-gray-500 hover:text-gray-300 border border-transparent'
+            }`}
+          >
+            {f.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {/* Plugin grid */}
+      <div className="grid grid-cols-2 gap-3">
+        {filtered.map(plugin => (
+          <div key={plugin.id} className="bg-[#0d0d15] border border-[#1a1a2e] rounded-xl p-4 hover:border-[#f0c040]/30 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-sm text-white">{plugin.name}</span>
+                <span
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                  style={{ color: PLUGIN_TYPE_COLORS[plugin.type] || '#9ca3af', backgroundColor: `${PLUGIN_TYPE_COLORS[plugin.type] || '#9ca3af'}15` }}
+                >
+                  {plugin.type}
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-600 font-mono">v{plugin.version}</span>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed mb-3">{plugin.description}</p>
+            <div className="flex justify-end">
+              {plugin.status === 'installed' && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30">INSTALLED</span>
+              )}
+              {plugin.status === 'available' && (
+                <button className="text-[10px] font-mono px-3 py-1 rounded bg-[#f0c040]/10 text-[#f0c040] border border-[#f0c040]/30 hover:bg-[#f0c040]/20 transition-colors">
+                  INSTALL
+                </button>
+              )}
+              {plugin.status === 'coming' && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1a1a2e] text-gray-500 border border-[#1a1a2e]">COMING SOON</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 
 export default Settings

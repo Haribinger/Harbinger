@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.db import close_db, engine, init_db
+import src.db as _db
+from src.db import close_db, init_db
 from src.routers.barriers import router as barriers_router
 from src.routers.channels import router as channels_router
 from src.routers.compat import router as compat_router
@@ -28,10 +29,10 @@ async def lifespan(app: FastAPI):
 
     # Create all SQLAlchemy-managed tables when the DB is reachable.
     # Safe to call repeatedly — CREATE TABLE IF NOT EXISTS semantics.
-    if engine:
+    if _db.engine:
         from src.models import Base  # local import avoids circular deps at module load
 
-        async with engine.begin() as conn:
+        async with _db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
     yield
