@@ -1,6 +1,6 @@
 """Mission metrics — real-time stats for dashboard."""
 from sqlalchemy import select, func
-from src.db import async_session, db_available
+from src.db import db_available, get_session
 from src.models.action import Action
 from src.models.task import Task
 from src.models.subtask import SubTask
@@ -10,7 +10,11 @@ async def get_mission_metrics(mission_id: int) -> dict:
     if not db_available():
         return {"error": "db_unavailable"}
 
-    async with async_session() as session:
+    session_factory = get_session()
+    if session_factory is None:
+        return {"error": "db_unavailable"}
+
+    async with session_factory() as session:
         # Task counts by status
         task_rows = await session.execute(
             select(Task.status, func.count()).where(Task.mission_id == mission_id).group_by(Task.status)

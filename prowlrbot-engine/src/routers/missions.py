@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.db import async_session, db_available
+import src.db as db
 from src.engine.scheduler import MissionScheduler, approval_gate
 from src.models.mission import Mission
 from src.models.task import Task
@@ -84,10 +84,10 @@ class TaskOut(BaseModel):
 
 @router.post("/api/v2/missions", response_model=MissionOut, status_code=201)
 async def create_mission(payload: MissionCreate):
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         mission = Mission(**payload.model_dump())
         session.add(mission)
         await session.commit()
@@ -97,10 +97,10 @@ async def create_mission(payload: MissionCreate):
 
 @router.get("/api/v2/missions", response_model=list[MissionOut])
 async def list_missions():
-    if not db_available():
+    if not db.db_available():
         return []
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         result = await session.execute(
             select(Mission).order_by(Mission.created_at.desc()).limit(100)
         )
@@ -109,10 +109,10 @@ async def list_missions():
 
 @router.get("/api/v2/missions/{mission_id}", response_model=MissionOut)
 async def get_mission(mission_id: int):
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         mission = await session.get(Mission, mission_id)
         if mission is None:
             raise HTTPException(status_code=404, detail="mission not found")
@@ -127,10 +127,10 @@ async def get_mission(mission_id: int):
 @router.get("/api/v2/missions/{mission_id}/tasks", response_model=list[TaskOut])
 async def list_tasks(mission_id: int):
     """List all tasks for a mission, ordered by position."""
-    if not db_available():
+    if not db.db_available():
         return []
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         result = await session.execute(
             select(Task)
             .where(Task.mission_id == mission_id)
@@ -146,10 +146,10 @@ async def list_tasks(mission_id: int):
 )
 async def create_task(mission_id: int, payload: TaskCreate):
     """Add a task to a mission's DAG."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         mission = await session.get(Mission, mission_id)
         if mission is None:
             raise HTTPException(status_code=404, detail="mission not found")
@@ -169,10 +169,10 @@ async def create_task(mission_id: int, payload: TaskCreate):
 @router.get("/api/v2/tasks/{task_id}", response_model=TaskOut)
 async def get_task(task_id: int):
     """Get a single task by ID."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         task = await session.get(Task, task_id)
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
@@ -182,10 +182,10 @@ async def get_task(task_id: int):
 @router.patch("/api/v2/tasks/{task_id}", response_model=TaskOut)
 async def update_task(task_id: int, payload: dict):
     """Update task fields (status, description, priority, etc.)."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         task = await session.get(Task, task_id)
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
@@ -207,10 +207,10 @@ async def update_task(task_id: int, payload: dict):
 @router.delete("/api/v2/tasks/{task_id}", status_code=204)
 async def delete_task(task_id: int):
     """Remove a task from the mission DAG."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         task = await session.get(Task, task_id)
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
@@ -272,10 +272,10 @@ async def get_mission_template(template_name: str):
 @router.post("/api/v2/missions/{mission_id}/execute", status_code=202)
 async def execute_mission(mission_id: int, background_tasks: BackgroundTasks):
     """Start executing a mission via the DAG scheduler. Returns immediately."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(status_code=503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         mission = await session.get(Mission, mission_id)
         if mission is None:
             raise HTTPException(status_code=404, detail="mission not found")
@@ -302,7 +302,7 @@ async def _run_mission_scheduler(mission_id: int):
         await scheduler.execute(mission_id)
     except Exception as exc:
         logger.exception("mission %d scheduler crashed: %s", mission_id, exc)
-        async with async_session() as session:
+        async with db.get_session()() as session:
             mission = await session.get(Mission, mission_id)
             if mission:
                 mission.status = "failed"

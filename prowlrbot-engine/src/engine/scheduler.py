@@ -13,7 +13,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from src.db import async_session, db_available
+import src.db as db
 from src.engine.executor import execute_task
 from src.models.mission import Mission
 from src.models.task import Task
@@ -231,10 +231,10 @@ class MissionScheduler:
 
         Returns the final mission status: "finished" or "failed".
         """
-        if not db_available():
+        if not db.db_available():
             return "failed"
 
-        async with async_session() as session:
+        async with db.get_session()() as session:
             mission = await session.get(Mission, mission_id)
             if not mission:
                 return "failed"
@@ -248,7 +248,7 @@ class MissionScheduler:
             )
 
         # Load tasks
-        async with async_session() as session:
+        async with db.get_session()() as session:
             from sqlalchemy import select
             result = await session.execute(
                 select(Task).where(Task.mission_id == mission_id).order_by(Task.position)
@@ -351,8 +351,8 @@ class MissionScheduler:
         self, task_id: int, mission_id: int, status: str
     ) -> None:
         """Update task status in DB and publish to event bus."""
-        if db_available():
-            async with async_session() as session:
+        if db.db_available():
+            async with db.get_session()() as session:
                 task = await session.get(Task, task_id)
                 if task:
                     task.status = status
@@ -365,9 +365,9 @@ class MissionScheduler:
 
     async def _save_task_result(self, task_id: int, result: dict) -> None:
         """Persist task result to DB."""
-        if not db_available():
+        if not db.db_available():
             return
-        async with async_session() as session:
+        async with db.get_session()() as session:
             task = await session.get(Task, task_id)
             if task:
                 task.result = {
@@ -379,8 +379,8 @@ class MissionScheduler:
 
     async def _set_mission_status(self, mission_id: int, status: str) -> None:
         """Set final mission status."""
-        if db_available():
-            async with async_session() as session:
+        if db.db_available():
+            async with db.get_session()() as session:
                 mission = await session.get(Mission, mission_id)
                 if mission:
                     mission.status = status

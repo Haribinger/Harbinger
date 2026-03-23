@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.db import async_session, db_available
+import src.db as db
 from src.models.task import Task
 from src.models.subtask import SubTask
 
@@ -23,9 +23,9 @@ class TaskResponse(BaseModel):
 
 @router.get("/mission/{mission_id}", response_model=list[TaskResponse])
 async def list_mission_tasks(mission_id: int):
-    if not db_available():
+    if not db.db_available():
         return []
-    async with async_session() as session:
+    async with db.get_session()() as session:
         result = await session.execute(
             select(Task).where(Task.mission_id == mission_id).order_by(Task.position)
         )
@@ -34,9 +34,9 @@ async def list_mission_tasks(mission_id: int):
 
 @router.get("/{task_id}")
 async def get_task(task_id: int):
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(503)
-    async with async_session() as session:
+    async with db.get_session()() as session:
         task = await session.get(Task, task_id)
         if not task:
             raise HTTPException(404, "Task not found")

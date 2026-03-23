@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.db import async_session, db_available
+import src.db as db
 from src.models.mission import Mission
 from src.models.task import Task
 from src.warroom.bus import (
@@ -80,10 +80,10 @@ class MissionStateOut(BaseModel):
 @router.get("/{mission_id}/state", response_model=MissionStateOut)
 async def get_mission_state(mission_id: int):
     """Get the full War Room state: task DAG and agent statuses."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         mission = await session.get(Mission, mission_id)
         if not mission:
             raise HTTPException(404, detail=f"mission {mission_id} not found")
@@ -184,10 +184,10 @@ async def inject_command(mission_id: int, body: InjectCommand):
 @router.post("/{mission_id}/reassign")
 async def reassign_task(mission_id: int, body: ReassignTask):
     """Reassign a task to a different agent."""
-    if not db_available():
+    if not db.db_available():
         raise HTTPException(503, detail="database not available")
 
-    async with async_session() as session:
+    async with db.get_session()() as session:
         task = await session.get(Task, body.task_id)
         if not task:
             raise HTTPException(404, detail=f"task {body.task_id} not found")
