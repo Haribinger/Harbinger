@@ -6,7 +6,7 @@
 
 Harbinger is an **autonomous offensive security framework** — a local-first, MCP-powered, multi-agent platform for bug bounty hunters, red teams, and security researchers. It is NOT a chatbot. It is NOT a toy. It is a professional command center for a swarm of AI security agents.
 
-**Current version:** v1.1.0 — Autonomous Intelligence
+**Current version:** v2.0.0 — Autonomous Security Operating System
 **Website:** https://harbinger-website.onrender.com/
 **GitHub:** https://github.com/Haribinger/Harbinger
 
@@ -50,6 +50,31 @@ HARBINGER COMMAND CENTER v1.1
      └──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
+## v2.0 Execution Engine (NEW — prowlrbot-engine/)
+
+The v2.0 execution engine is a **FastAPI sidecar** at `prowlrbot-engine/` running on :8000. Nginx routes `/api/v2/*` to it. The Go backend still serves `/api/*`.
+
+**Execution hierarchy:** Mission → Task → SubTask → Action (tool call)
+**Agent loop:** ReAct (Reason-Act-Observe) with execution monitor + summarizer
+**Parallel execution:** DAG scheduler runs independent tasks concurrently in Docker containers
+**27 tools:** terminal, file, browser, 5 search engines, 8 memory tools, 6 delegation tools, subtask management
+**Plugin registry:** Nothing hardcoded — users configure agents, tools, templates, settings via API
+**CLI:** `harbinger mission start`, `harbinger doctor`, `harbinger train`, 12 command groups total
+
+**Key Python files:**
+- `src/engine/performer.py` — Core ReAct loop (the hot path)
+- `src/engine/scheduler.py` — Parallel DAG task execution
+- `src/engine/tools/registry.py` — Tool discovery + execution
+- `src/agents/config.py` → DEPRECATED, use `src/registry/agents.py` instead
+- `src/registry/settings.py` — All configurable settings (replaces hardcoded constants)
+- `src/memory/store.py` — pgvector semantic search
+- `src/memory/graph.py` — Neo4j knowledge graph
+
+**Build + test:**
+```bash
+cd prowlrbot-engine && python -m pytest tests/ -v  # 302 tests
+```
+
 ## Directory Structure
 
 ```
@@ -62,6 +87,24 @@ HARBINGER COMMAND CENTER v1.1
 ├── TOOLS.md                     # Global tool configurations
 ├── CHANGELOG.md                 # Version changelog
 ├── README.md                    # Project README
+│
+├── prowlrbot-engine/            # v2.0 FastAPI execution engine (Python)
+│   ├── src/engine/              # ReAct performer, scheduler, planner, tools
+│   ├── src/agents/              # 12 agent configs, prompts, LLM adapter
+│   ├── src/memory/              # pgvector, Neo4j, GraphRAG, learning
+│   ├── src/registry/            # Plugin registry (settings, agents, templates, SDK)
+│   ├── src/safety/              # Scope, autonomy, audit trail
+│   ├── src/healing/             # Self-healing monitor
+│   ├── src/routers/             # FastAPI endpoints (12 routers)
+│   ├── cli/                     # CLI commands (typer)
+│   └── tests/                   # 302 pytest tests
+│
+├── docker/                      # Agent Docker images (5 images, 68 tools)
+│   ├── pd-tools/                # ProjectDiscovery suite
+│   ├── kali-tools/              # Exploitation tools
+│   ├── dev-tools/               # Development tools
+│   ├── osint-tools/             # OSINT tools
+│   └── base/                    # Lightweight base
 ├── package.json                 # Root pnpm package
 ├── pnpm-lock.yaml               # DO NOT EDIT MANUALLY
 ├── docker-compose.yml           # Full stack compose
