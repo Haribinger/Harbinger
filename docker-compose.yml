@@ -118,7 +118,7 @@ services:
 
   # ==== NEO4J KNOWLEDGE GRAPH ====
   neo4j:
-    image: neo4j:2026.02-community
+    image: neo4j:2026.04-community
     container_name: harbinger-neo4j
     restart: unless-stopped
     environment:
